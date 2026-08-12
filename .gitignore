@@ -1,0 +1,31 @@
+# 환경변수 — 카카오 API 키가 들어간다. 절대 커밋 금지 (PRD §13.7)
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+
+# Java / Gradle
+build/
+!**/src/**/build/
+.gradle/
+out/
+*.class
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# Node / React
+node_modules/
+dist/
+.vite/
+*.log
+npm-debug.log*
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
