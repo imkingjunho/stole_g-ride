@@ -12,7 +12,7 @@ build/
 out/
 *.class
 *.jar
-!gradle/wrapper/gradle-wrapper.jar
+!**/gradle/wrapper/gradle-wrapper.jar
 
 # Node / React
 node_modules/

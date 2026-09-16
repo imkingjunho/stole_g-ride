@@ -1,0 +1,2 @@
+// 프로젝트 식별자. 패키지 루트는 com.gachiga (PRD §9.2)
+rootProject.name = 'gachiga'
