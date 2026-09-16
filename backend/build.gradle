@@ -1,0 +1,67 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.2.5'
+    id 'io.spring.dependency-management' version '1.1.4'
+}
+
+group = 'com.gachiga'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    // PRD §9.1 — Java 17 고정
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+ext {
+    // Spring Boot 3.2 계열과 호환되는 springdoc 버전
+    springdocVersion = '2.3.0'
+}
+
+dependencies {
+    // --- 웹 / 영속 / 검증 ---
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // --- 보안 ---
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+
+    // --- 실시간 (STOMP over WebSocket) ---
+    implementation 'org.springframework.boot:spring-boot-starter-websocket'
+
+    // --- 캐시 / 대기열 ---
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+
+    // --- API 문서 (Swagger UI) ---
+    implementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:${springdocVersion}"
+
+    // --- DB 드라이버 ---
+    runtimeOnly 'com.mysql:mysql-connector-j'
+
+    // --- Lombok ---
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+    testCompileOnly 'org.projectlombok:lombok'
+    testAnnotationProcessor 'org.projectlombok:lombok'
+
+    // --- 테스트 ---
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.security:spring-security-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
