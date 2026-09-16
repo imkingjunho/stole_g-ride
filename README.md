@@ -76,7 +76,8 @@ cp .env.example .env      # 설정 파일 복사 (Windows: copy .env.example .en
 `.env` 파일을 열어서 카카오 키를 넣습니다. **키는 팀 단톡방이 아니라 별도 채널로 받으세요.**
 
 ```bash
-docker compose up -d      # DB 실행 (Docker Desktop이 켜져 있어야 함)
+docker compose up -d --wait   # DB 실행 (Docker Desktop이 켜져 있어야 함)
+                              # --wait: DB가 준비될 때까지 기다립니다. 빼면 다음 단계에서 연결 실패할 수 있어요
 ```
 
 **백엔드 실행**

@@ -1,0 +1,66 @@
+# 로컬 개발 인프라 (PRD §13.7)
+#   docker compose up -d --wait  →  MySQL 8.0 + Redis 7 기동 (준비될 때까지 기다림)
+#   docker compose down          →  중지 (데이터는 볼륨에 남음)
+#   docker compose down -v       →  데이터까지 삭제하고 초기화
+#
+# --wait 를 빼면 컨테이너 '시작'만 기다린다. MySQL 첫 기동은 초기화에 수십 초가 걸려
+# 바로 ./gradlew bootRun 을 하면 연결에 실패할 수 있다. 아래 healthcheck 가 그 판단 기준이다.
+# (Compose v2.1.1 미만이면 docker compose ps 에서 (healthy) 를 확인한 뒤 실행한다)
+#
+# restart: unless-stopped 이므로 한 번 띄우면 Docker Desktop 을 켤 때마다 자동 기동된다.
+# 완전히 끄려면 docker compose down 을 쓴다.
+#
+# 백엔드는 컨테이너가 아니라 로컬에서 ./gradlew bootRun 으로 띄운다.
+# 여기 기본값은 backend/src/main/resources/application-local.yml 기본값과 일치시킨다.
+# 값을 바꾸려면 .env 를 만들어 덮어쓴다 (.env.example 참고).
+name: gachiga
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: gachiga-mysql
+    restart: unless-stopped
+    ports:
+      # 127.0.0.1 로 한정: 공용 와이파이에서 남이 붙지 못하게 한다
+      - "127.0.0.1:${DB_PORT:-3306}:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${DB_NAME:-gachiga}
+      MYSQL_USER: ${DB_USERNAME:-gachiga}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-gachiga}
+      TZ: Asia/Seoul
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=+09:00
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      # $$ 는 컴포즈 치환을 피해 컨테이너 안에서 환경변수를 읽게 한다
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: gachiga-redis
+    restart: unless-stopped
+    ports:
+      # Redis 는 로컬에서 무인증으로 뜨므로 반드시 루프백에만 연다
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    # 대기열이 재시작에 살아남도록 AOF 를 켠다
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+volumes:
+  mysql-data:
+  redis-data:
