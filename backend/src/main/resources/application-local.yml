@@ -1,13 +1,17 @@
 # 로컬 개발 프로파일. docker compose up -d 로 띄운 MySQL/Redis 를 기본값으로 가정한다.
+#
+# 기본 호스트는 'localhost' 가 아니라 '127.0.0.1' 이다. docker-compose.yml 이 127.0.0.1 에만
+# 포트를 여는데, macOS 에서 'localhost' 는 IPv6(::1) 로 먼저 해석되어 연결이 거부되거나
+# 타임아웃되기 때문이다. 두 파일의 주소를 같은 문자열로 맞춰 둔다.
 spring:
   datasource:
-    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:gachiga}?connectionTimeZone=Asia/Seoul&forceConnectionTimeZoneToSession=true&characterEncoding=UTF-8&rewriteBatchedStatements=true
+    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:gachiga}?connectionTimeZone=Asia/Seoul&forceConnectionTimeZoneToSession=true&characterEncoding=UTF-8&rewriteBatchedStatements=true
     username: ${DB_USERNAME:gachiga}
     password: ${DB_PASSWORD:gachiga}
     driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     redis:
-      host: ${REDIS_HOST:localhost}
+      host: ${REDIS_HOST:127.0.0.1}
       port: ${REDIS_PORT:6379}
   jpa:
     show-sql: true
