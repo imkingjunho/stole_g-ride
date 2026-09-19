@@ -236,7 +236,7 @@ docker compose down -v && docker compose up -d --wait     # DB 초기화
 
 | 이름 | 파트 | 내 폴더 (여기만 수정) |
 |---|---|---|
-| **이승민** | ① 플랫폼·요청 | `backend/…/common/ config/ contract/ ride/`, `application*.yml`, `domain/ride.yml`, 루트 파일(`build.gradle` `docker-compose.yml` `.env.example` `.github/`), `docs/PRD.md` `docs/api-spec.yaml` `README.md` `CLAUDE.md` |
+| **이승민** | ① 플랫폼·요청 | `backend/…/common/ config/ contract/ ride/`, `application*.yml`, `domain/ride.yml`, 루트 파일(`build.gradle` `docker-compose.yml` `.env.example` `.github/` `.claude/`), `docs/PRD.md` `docs/api-spec.yaml` `README.md` `CLAUDE.md` |
 | **서준** | ② 매칭·정산·통계 | `backend/…/matching/ fare/ stats/`, `domain/matching.yml` |
 | **임승현** | ③ 계정·실시간 | `backend/…/auth/ user/ realtime/`, `domain/auth.yml` |
 | **송준호** | ④ 경로·지도·요청 화면 | `backend/…/route/`, `domain/route.yml`, `frontend/src/features/request/`, `frontend/src/features/map/` |
@@ -277,7 +277,7 @@ docker compose down -v && docker compose up -d --wait     # DB 초기화
 | `README.md` | 이 문서 | 막힐 때마다 |
 | `docs/PRD.md` | 제품 명세 + 파트 분배(§12) + 협업 방식(§13) + 모듈 간 계약(§14) + 로드맵(§15) | "이 기능 뭐 만드는 거지?", "이건 누구 담당?" |
 | `docs/roles/내이름.md` | **내 작업 체크리스트** | 매번 작업 시작할 때 |
-| `docs/api-spec.yaml` | API 계약 (Phase 0 이후) | 프론트-백엔드 연동할 때 |
+| `docs/api-spec.yaml` | API 계약 (OpenAPI) | 프론트-백엔드 연동할 때. 프론트는 `npm run gen:api`로 타입 생성 |
 | `CLAUDE.md` | AI 규칙 | 볼 일 없음 (AI가 알아서 읽음) |
 
 ---
@@ -308,6 +308,7 @@ docker compose down -v && docker compose up -d --wait     # DB 초기화
 □ 1단계 프로그램 전부 설치
 □ git config로 내 이름 등록 (docs/roles/ 파일명과 동일하게)
 □ clone → docker compose up → 백엔드 실행 성공 (Swagger 확인)
+□ cd frontend → cp .env.example .env → npm install → npm run dev → 6개 화면 클릭 (백엔드 없이도 됩니다)
 □ docs/PRD.md §12(내 파트)·§13(올리는 법)·§14(계약) 읽기
 □ docs/roles/내이름.md 읽고 Phase 0 항목 진행
 □ 첫 push 연습: docs/roles/내이름.md 의 "환경 세팅 완료" 체크박스를 [x]로 바꿔 2단계 ⑤ 순서대로 main에 올려 보기

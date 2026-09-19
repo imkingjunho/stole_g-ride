@@ -46,7 +46,7 @@ frontend/
 └── 그 외 전체 (package.json 포함)      오승원
 frontend/src/generated/                 자동 생성 — 손으로 수정 금지
 
-루트: build.gradle, docker-compose.yml, .env.example, .gitignore, .github/   이승민
+루트: build.gradle, docker-compose.yml, .env.example, .gitignore, .github/, .claude/   이승민
 docs/PRD.md, docs/api-spec.yaml, README.md, CLAUDE.md                          이승민
 docs/roles/{이름}.md                                                            본인
 ```
