@@ -728,7 +728,7 @@ git pull --rebase origin main
 
 # ③ 올리기 전 — 빌드가 초록이어야만 다음으로
 cd backend  && ./gradlew build        # 백엔드 담당자 (Windows: gradlew.bat build)
-cd frontend && npm run build          # 프론트 담당자 (송준호는 둘 다)
+cd frontend && npm run lint && npm run build   # 프론트 담당자 (송준호는 둘 다)
 
 # ④ 올리기
 git add -A

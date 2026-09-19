@@ -1,0 +1,127 @@
+# 가치가(WE-Meet) CI — PRD §9.4·§13.2, docs/roles/이승민.md T0-1
+#
+# main 에 push 될 때마다 백엔드·프론트를 빌드한다.
+# 빌드를 확인하지 않고 올린 커밋은 여기서 빨간 X 로 드러난다 (깨뜨린 사람이 30분 안에 복구 — README 3단계).
+#
+#   backend  : cd backend  && ./gradlew build                      (테스트 포함, T0-6 이후 ArchUnit 도 함께. test 프로파일이라 DB 없이 돈다)
+#   frontend : cd frontend && npm ci && npm run lint && npm run build
+#              frontend/ 가 생기기 전(T0-8 이전)에는 자동으로 건너뛴다.
+#
+# 문서(docs/roles 체크박스)만 바꾼 커밋도 빌드가 돈다. 첫 push 연습에서 초록 체크를 눈으로 확인하는 것이 목적이다 (PRD §15.2).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  # Actions 탭 "Run workflow" 버튼으로 수동 실행 (빨간 X 복구 후 재확인용)
+  workflow_dispatch:
+
+# 코드를 읽기만 하면 된다. GITHUB_TOKEN 권한을 최소로 둔다.
+permissions:
+  contents: read
+
+jobs:
+  # ──────────────────────────────────────────────────────────────
+  # 백엔드: 컴파일 + 단위 테스트 (+ T0-6 이후 ArchUnit 모듈 경계 검사)
+  # ──────────────────────────────────────────────────────────────
+  backend:
+    name: backend (gradle build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: 소스 체크아웃
+        uses: actions/checkout@v7
+
+      - name: JDK 17 설치 (PRD §9.1 — Java 17 고정)
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # 의존성 캐시 + gradle-wrapper.jar 위변조 검증(validate-wrappers 기본 on)을 함께 해 준다.
+      # cache-provider: v6 기본값 'enhanced' 는 Gradle 사의 상용 캐시 컴포넌트(약관 동의 전제)라서
+      #                 actions/cache 기반의 오픈소스 구현 'basic' 을 명시한다 (약관·토큰 불필요, 캐시 저장·복원은 동일).
+      - name: Gradle 설정·캐시
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+
+      - name: 빌드 (컴파일 + 테스트)
+        run: ./gradlew build
+
+      # 실패 원인을 Actions 화면에서 바로 내려받아 볼 수 있게 한다
+      - name: 테스트 리포트 업로드 (실패 시에만)
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: backend-test-report
+          path: backend/build/reports/tests/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # ──────────────────────────────────────────────────────────────
+  # frontend/ 존재 여부 판정
+  # job 레벨 `if` 에는 hashFiles() 를 쓸 수 없다 — GitHub 문서 "컨텍스트 사용 가능 범위"에서 jobs.<job_id>.if 가 허용하는
+  # 함수는 always/cancelled/success/failure 뿐이라 워크플로 자체가 검증 오류로 거부된다. (step 레벨 if 에서만 hashFiles 사용 가능)
+  # 그래서 체크아웃 후 파일 존재를 확인하는 작은 job 을 앞에 두고 그 출력으로 프론트 job 을 켠다.
+  # T0-8 에서 frontend/ 가 생기면 이 job 과 아래 needs/if 를 지워도 된다.
+  # ──────────────────────────────────────────────────────────────
+  detect-frontend:
+    name: frontend 존재 확인
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      exists: ${{ steps.check.outputs.exists }}
+    steps:
+      - name: 소스 체크아웃
+        uses: actions/checkout@v7
+
+      - name: frontend/package.json 확인
+        id: check
+        run: |
+          if [ -f frontend/package.json ]; then
+            if [ ! -f frontend/package-lock.json ]; then
+              echo "::error::frontend/package.json 은 있는데 package-lock.json 이 없습니다. npm ci 는 lockfile 이 필수이므로 package-lock.json 을 함께 커밋하세요."
+              exit 1
+            fi
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "frontend/package.json 발견 → 프론트 빌드를 실행합니다"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "frontend/package.json 이 없어 프론트 빌드를 건너뜁니다 (T0-8 이후 자동 활성화)"
+          fi
+
+  # ──────────────────────────────────────────────────────────────
+  # 프론트엔드: 의존성 설치 + ESLint + Vite 빌드
+  # ──────────────────────────────────────────────────────────────
+  frontend:
+    name: frontend (lint + build)
+    needs: detect-frontend
+    if: needs.detect-frontend.outputs.exists == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: 소스 체크아웃
+        uses: actions/checkout@v7
+
+      - name: Node.js 24 설치 (README 1-1 과 같은 버전)
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 의존성 설치
+        run: npm ci
+
+      - name: 린트
+        run: npm run lint
+
+      - name: 빌드
+        run: npm run build

@@ -4,8 +4,9 @@
 > **코딩이 처음이어도 괜찮습니다. 이 문서 순서대로만 따라 하세요.**
 > 무엇을 만드는지는 `docs/PRD.md`, 내가 오늘 할 일은 `docs/roles/내이름.md`.
 
-<!-- CI 배지: Phase 0 T0-1에서 이승민이 실제 링크로 교체 -->
-![CI](https://github.com/imkingjunho/stole_g-ride/actions/workflows/ci.yml/badge.svg)
+[![CI](https://github.com/imkingjunho/stole_g-ride/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/imkingjunho/stole_g-ride/actions/workflows/ci.yml)
+
+> 위 배지가 **빨간색**이면 `main`이 깨진 상태입니다 → 3단계 "GitHub에 빨간 X가 떴어요". 배지를 누르면 어떤 커밋이 깨졌는지 보입니다.
 
 ---
 
@@ -16,7 +17,7 @@
 ```
 1. 최신 코드 받기        →  git pull --rebase origin main
 2. 내 폴더에서 작업       →  AI에게: "나는 OOO이야. docs/roles/OOO.md 읽고 다음 작업 진행해줘."
-3. 빌드 확인             →  ./gradlew build  또는  npm run build   (초록이어야 다음으로)
+3. 빌드 확인             →  ./gradlew build  또는  npm run lint && npm run build   (초록이어야 다음으로)
 4. 올리기                →  git add -A → git status(내 폴더만인지 확인) → git commit → git pull --rebase → git push
 ```
 
@@ -38,7 +39,7 @@
 |---|---|---|
 | **Git** | 코드 버전 관리 | git-scm.com |
 | **JDK 17** | 백엔드 실행 (Java) | Temurin 17 검색 |
-| **Node.js 20** | 프론트엔드 실행 | nodejs.org (LTS) |
+| **Node.js 24** | 프론트엔드 실행 | nodejs.org (LTS) |
 | **Docker Desktop** | DB 실행 | docker.com |
 | **IntelliJ IDEA** (Community) | 백엔드 코딩 | jetbrains.com |
 | **VS Code** | 프론트엔드 코딩 | code.visualstudio.com |
@@ -53,7 +54,7 @@
 ```bash
 git --version      # git version 2.x
 java -version      # 17
-node -v            # v20.x
+node -v            # v24.x
 docker -v          # 버전 나오면 OK
 ```
 
@@ -149,7 +150,7 @@ IntelliJ / VS Code에서 AI 어시스턴트를 열고 **이렇게 복붙**하세
 
 ```bash
 cd backend  && ./gradlew build       # 백엔드 담당자 (Windows: gradlew.bat build)
-cd frontend && npm run build         # 프론트 담당자
+cd frontend && npm run lint && npm run build   # 프론트 담당자 (CI 도 lint → build 순서로 돈다)
 ```
 
 `BUILD SUCCESSFUL` / 빌드 완료 메시지가 나와야 합니다. **빨간 글씨면 올리지 마세요.** AI에게 에러를 붙여 물어보세요.
