@@ -1,0 +1,1557 @@
+# 가치가(WE-Meet) REST API 계약 — OpenAPI 3.0.3
+#
+# ⚠️ 이 파일이 API 의 단일 진실 공급원(SSOT)이다 (PRD §14.4).
+#    - 프론트: npm run gen:api → src/generated/api.d.ts 를 만든다. 손으로 타입을 중복 정의하지 않는다.
+#    - 백엔드: 구현한 뒤 Swagger(/v3/api-docs)와 대조한다. 스펙과 구현이 다르면 구현이 틀린 것이다.
+#
+# ⚠️ 수정은 이승민만 한다. 필요하면 단톡방에 [계약 변경 요청] 한 줄 (PRD §14.8).
+#    추가는 쉽고(기존 코드를 안 깨뜨림) 이름 변경·삭제는 어렵다.
+#
+# 모든 응답은 ApiResponse 로 감싼다. 성공이든 실패든 success·data·error 세 필드가 모두 나간다.
+openapi: 3.0.3
+
+info:
+  title: 가치가(WE-Meet) API
+  version: "1.0.0"
+  description: |
+    전남대 재학생 택시 동승 매칭 서비스.
+
+    **우선순위(PRD §2.3)** — 각 엔드포인트 설명 앞에 붙어 있다.
+    - `P0` 없으면 서비스가 성립하지 않음. Phase 1 구현
+    - `P1` 있어야 쓸 만함. Phase 2 구현
+    - `P2` 있으면 좋음. Phase 2 이후
+
+    **인증** — 표시된 엔드포인트는 `Authorization: Bearer {accessToken}` 이 필요하다.
+    Phase 0 에는 인증이 꺼져 있고 `X-Dev-User` 헤더로 사용자를 고른다(기본 1번).
+
+    **에러 처리** — 실패 응답의 `error.code` 로 분기한다. HTTP 상태만 보고 판단하지 않는다.
+    같은 401 이라도 `UNAUTHORIZED`(로그인 필요)와 `INVALID_TOKEN`(갱신 필요)은 대응이 다르다.
+
+servers:
+  - url: http://localhost:8080
+    description: 로컬 개발
+  - url: https://api.gachiga.example
+    description: 베타 (Phase 3 에서 실제 주소로 교체)
+
+tags:
+  - name: auth
+    description: 회원가입·로그인·토큰 (임승현)
+  - name: users
+    description: 프로필·신고 (임승현)
+  - name: hubs
+    description: 출발 거점 (송준호)
+  - name: places
+    description: 목적지 검색 (송준호)
+  - name: requests
+    description: 매칭 요청·대기열 (이승민)
+  - name: groups
+    description: 매칭 그룹·정산·채팅 이력 (서준, 채팅 조회는 임승현)
+  - name: history
+    description: 이력·통계 (서준)
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ─────────────────────────────────────────────────────────────
+  # auth — 임승현
+  # ─────────────────────────────────────────────────────────────
+  /api/auth/signup:
+    post:
+      operationId: postAuthSignup
+      tags: [auth]
+      summary: "[P0] 웹메일 인증 코드 발송"
+      description: |
+        `@jnu.ac.kr` 주소로만 가입할 수 있다 (FR-01). 6자리 코드를 메일로 보내고 10분간 유효하다.
+        이미 가입된 주소면 `INVALID_INPUT` 으로 거절한다.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignupRequest"
+      responses:
+        "200":
+          description: 코드 발송됨
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/SignupResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/auth/verify:
+    post:
+      operationId: postAuthVerify
+      tags: [auth]
+      summary: "[P0] 인증 코드 검증 및 가입 완료"
+      description: |
+        코드가 맞으면 비밀번호·프로필과 함께 계정을 만들고 토큰을 발급한다 (FR-01·FR-03).
+        5회 틀리면 30분 잠기며 `VERIFY_LOCKED` 가 나온다.
+        **성별은 가입 후 변경할 수 없다** — 동성 매칭의 근거이기 때문이다.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyRequest"
+      responses:
+        "200":
+          description: 가입 완료
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/TokenResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "429":
+          description: 인증 시도 횟수 초과 (`VERIFY_LOCKED`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/auth/login:
+    post:
+      operationId: postAuthLogin
+      tags: [auth]
+      summary: "[P0] 로그인"
+      description: "Access 30분 / Refresh 14일 (FR-02)."
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: 로그인 성공
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/TokenResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: 이용이 제한된 계정 (`USER_SUSPENDED`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/auth/refresh:
+    post:
+      operationId: postAuthRefresh
+      tags: [auth]
+      summary: "[P0] 토큰 재발급 (회전)"
+      description: |
+        Refresh 토큰을 새 쌍으로 바꾼다. 쓴 토큰은 즉시 폐기된다 (FR-02).
+        프론트 인터셉터가 401 `INVALID_TOKEN` 을 받으면 여기로 갱신을 시도한다 (E-09).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+      responses:
+        "200":
+          description: 재발급 성공
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/TokenResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/auth/logout:
+    post:
+      operationId: postAuthLogout
+      tags: [auth]
+      summary: "[P1] 로그아웃"
+      description: "보유한 Refresh 토큰을 폐기한다. Access 토큰은 만료까지 유효하다."
+      responses:
+        "200":
+          $ref: "#/components/responses/NoContentSuccess"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ─────────────────────────────────────────────────────────────
+  # users — 임승현
+  # ─────────────────────────────────────────────────────────────
+  /api/users/me:
+    get:
+      operationId: getUsersMe
+      tags: [users]
+      summary: "[P0] 내 프로필"
+      responses:
+        "200":
+          description: 프로필
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/UserProfile"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    patch:
+      operationId: patchUsersMe
+      tags: [users]
+      summary: "[P1] 프로필 수정"
+      description: "닉네임·학과·학년만 바꿀 수 있다. **성별은 바꿀 수 없다** (FR-03)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProfileRequest"
+      responses:
+        "200":
+          description: 수정된 프로필
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/UserProfile"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/reports:
+    post:
+      operationId: postReports
+      tags: [users]
+      summary: "[P2] 신고"
+      description: |
+        같은 그룹이었던 사람만 신고할 수 있다 (FR-04). 누적 3회면 7일 이용이 제한된다.
+        그룹 구성원이 아니면 `GROUP_NOT_MEMBER` 가 나온다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReportRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/NoContentSuccess"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ─────────────────────────────────────────────────────────────
+  # hubs · places — 송준호
+  # ─────────────────────────────────────────────────────────────
+  /api/hubs:
+    get:
+      operationId: getHubs
+      tags: [hubs]
+      summary: "[P0] 거점 목록"
+      description: |
+        출발 거점 프리셋 (FR-05). 전남대 정문·후문·예대 삼거리, 경신여고, 유스퀘어, 광주송정역 6개.
+        좌표는 서버가 보유하며 프론트는 이 목록으로 버튼을 만든다.
+      responses:
+        "200":
+          description: 거점 목록
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Hub"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/places/search:
+    get:
+      operationId: getPlacesSearch
+      tags: [places]
+      summary: "[P0] 목적지 검색"
+      description: |
+        카카오 로컬 키워드 검색을 서버가 대신 호출한다 (FR-06).
+        **REST 키는 서버에만 있으므로 프론트가 카카오를 직접 부르지 않는다** (PRD §6.3).
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: 검색어. 예 `광주송정역`
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 50
+        - name: lat
+          in: query
+          required: false
+          description: 기준 위도. 주면 가까운 순으로 정렬한다
+          schema:
+            type: number
+            format: double
+        - name: lng
+          in: query
+          required: false
+          description: 기준 경도
+          schema:
+            type: number
+            format: double
+      responses:
+        "200":
+          description: 검색 결과. 없으면 빈 배열
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Place"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "502":
+          description: 카카오 호출 실패 (`ROUTE_API_FAILED`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ─────────────────────────────────────────────────────────────
+  # requests — 이승민
+  # ─────────────────────────────────────────────────────────────
+  /api/requests:
+    post:
+      operationId: postRequests
+      tags: [requests]
+      summary: "[P0] 매칭 요청 생성 (대기열 등록)"
+      description: |
+        대기열에 들어간다 (FR-07·FR-08). 거절되는 경우는 세 가지다.
+
+        - 진행 중인 요청이 이미 있음 → `ALREADY_IN_QUEUE` (1인 1건)
+        - 거점에서 목적지까지 500m 미만 → `REQUEST_TOO_SHORT` (E-08)
+        - 이용이 제한된 계정 → `USER_SUSPENDED`
+
+        생성 시점에 단독 거리·요금을 계산해 저장한다. 절감액의 기준선이 되므로 나중에 바뀌지 않는다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRideRequest"
+      responses:
+        "201":
+          description: 대기열 등록됨
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/RideRequestDetail"
+        "400":
+          description: 입력 오류 또는 거리 미달 (`INVALID_INPUT`, `REQUEST_TOO_SHORT`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: 이용이 제한된 계정 (`USER_SUSPENDED`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "404":
+          description: 거점을 찾을 수 없음 (`NOT_FOUND`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "409":
+          description: 진행 중인 요청이 이미 있음 (`ALREADY_IN_QUEUE`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/requests/me:
+    get:
+      operationId: getRequestsMe
+      tags: [requests]
+      summary: "[P0] 내 진행 중 요청 조회"
+      description: |
+        대기 화면이 쓰는 엔드포인트다. 남은 시간과 같은 거점 후보 수가 함께 나온다 (FR-09).
+        진행 중인 요청이 없으면 `data` 가 `null` 이다 — 404 가 아니다.
+        실시간 갱신은 WebSocket `/user/queue/status` 가 맡고, 이 엔드포인트는 첫 진입과 폴백용이다.
+      responses:
+        "200":
+          description: 진행 중인 요청. 없으면 data 가 null
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        # 진행 중인 요청이 없으면 null 이다 (404 가 아니다)
+                        type: object
+                        nullable: true
+                        allOf:
+                          - $ref: "#/components/schemas/RideRequestDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/requests/{requestId}:
+    delete:
+      operationId: deleteRequestsByRequestId
+      tags: [requests]
+      summary: "[P0] 요청 취소"
+      description: |
+        본인 요청만 취소할 수 있다 (FR-08). 대기열에서 즉시 제거된다.
+        이미 매칭돼 확정된 요청은 취소할 수 없다 — 그룹 이탈은 `POST /api/groups/{groupId}/reject` 다.
+      parameters:
+        - $ref: "#/components/parameters/RequestId"
+      responses:
+        "200":
+          $ref: "#/components/responses/NoContentSuccess"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: 남의 요청 (`FORBIDDEN`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: 취소할 수 없는 상태 (`INVALID_INPUT`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ─────────────────────────────────────────────────────────────
+  # groups — 서준 (채팅 이력 조회는 임승현)
+  # ─────────────────────────────────────────────────────────────
+  /api/groups/{groupId}:
+    get:
+      operationId: getGroupsByGroupId
+      tags: [groups]
+      summary: "[P0] 그룹 상세 (경로·순서·분담액·절감액)"
+      description: |
+        매칭 성사 화면과 정산 상세 화면이 쓰는 핵심 응답이다 (PRD §14.4).
+        `members[].shareAmount` 는 구간 분할 정산 결과이고(PRD §5.2), 그 합은 `totalFare` 와 같다.
+        `estimated` 가 true 면 카카오 대신 추정치를 쓴 것이므로 화면에 "추정치" 배지를 띄운다 (E-03).
+      parameters:
+        - $ref: "#/components/parameters/GroupId"
+      responses:
+        "200":
+          description: 그룹 상세
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/GroupDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: 그룹 구성원이 아님 (`GROUP_NOT_MEMBER`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/groups/{groupId}/accept:
+    post:
+      operationId: postGroupsByGroupIdAccept
+      tags: [groups]
+      summary: "[P1] 매칭 수락"
+      description: |
+        확정 후 60초 안에 전원이 수락해야 성사된다 (FR-13).
+        P0 에서는 이 단계를 생략하고 그룹 확정이 곧 성사다 (PRD §3.2).
+        시간이 지났으면 `MATCH_EXPIRED` 가 나온다.
+      parameters:
+        - $ref: "#/components/parameters/GroupId"
+      responses:
+        "200":
+          description: 수락 반영. 전원 수락이면 status 가 CONFIRMED 가 된다
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/GroupDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: 그룹 구성원이 아님 (`GROUP_NOT_MEMBER`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "410":
+          description: 수락 시간이 지남 (`MATCH_EXPIRED`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/groups/{groupId}/reject:
+    post:
+      operationId: postGroupsByGroupIdReject
+      tags: [groups]
+      summary: "[P1] 매칭 거절 / 그룹 이탈"
+      description: |
+        한 명이라도 거절하면 그룹이 해체되고 나머지는 재대기열로 돌아간다 (FR-13).
+        남은 인원이 2명 이상이면 경로·요금을 다시 계산해 재동의를 받는다 (E-01).
+      parameters:
+        - $ref: "#/components/parameters/GroupId"
+      responses:
+        "200":
+          $ref: "#/components/responses/NoContentSuccess"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: 그룹 구성원이 아님 (`GROUP_NOT_MEMBER`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/groups/{groupId}/complete:
+    post:
+      operationId: postGroupsByGroupIdComplete
+      tags: [groups]
+      summary: "[P0] 탑승 완료 처리"
+      description: |
+        이력이 저장되고 채팅방이 정리된다 (FR-14·FR-21). 구성원 누구나 호출할 수 있다.
+      parameters:
+        - $ref: "#/components/parameters/GroupId"
+      responses:
+        "200":
+          $ref: "#/components/responses/NoContentSuccess"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: 그룹 구성원이 아님 (`GROUP_NOT_MEMBER`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/groups/{groupId}/messages:
+    get:
+      operationId: getGroupsByGroupIdMessages
+      tags: [groups]
+      summary: "[P0] 채팅 이전 메시지 조회 (재접속용)"
+      description: |
+        실시간 수신은 WebSocket `/topic/chat/{groupId}` 이 맡는다 (PRD §14.5).
+        이 엔드포인트는 방에 다시 들어왔을 때 지난 메시지를 채우는 용도다.
+        메시지는 탑승 완료 또는 3시간 경과 시 물리 삭제되므로 빈 배열이 정상일 수 있다 (FR-21).
+      parameters:
+        - $ref: "#/components/parameters/GroupId"
+        - name: before
+          in: query
+          required: false
+          description: 이 시각보다 이전 메시지만. 위로 스크롤할 때 쓴다
+          schema:
+            type: string
+            format: date-time
+        - name: size
+          in: query
+          required: false
+          description: 가져올 개수
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        "200":
+          description: 오래된 것부터 시간순. 삭제됐으면 빈 배열
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/ChatMessage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: 그룹 구성원이 아님 (`GROUP_NOT_MEMBER`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  # ─────────────────────────────────────────────────────────────
+  # history · stats — 서준
+  # ─────────────────────────────────────────────────────────────
+  /api/history:
+    get:
+      operationId: getHistory
+      tags: [history]
+      summary: "[P1] 내 매칭 이력"
+      description: "날짜·경로·동승 인원·분담액·절감액 (FR-24). 최근 것부터."
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        "200":
+          description: 이력 목록
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/HistoryPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/stats/me:
+    get:
+      operationId: getStatsMe
+      tags: [history]
+      summary: "[P2] 누적 절감 리포트"
+      description: "개인 누적 절감액·이용 횟수 대시보드 (FR-25)."
+      responses:
+        "200":
+          description: 누적 통계
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/MyStats"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/admin/stats:
+    get:
+      operationId: getAdminStats
+      tags: [history]
+      summary: "[P2] 관리자 통계"
+      description: "거점별·시간대별 매칭 성사율과 평균 절감률 (FR-26). 관리자만."
+      responses:
+        "200":
+          description: 관리자 통계
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AdminStats"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "로그인 응답의 accessToken. Phase 0 에는 검사하지 않는다."
+
+  parameters:
+    RequestId:
+      name: requestId
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+    GroupId:
+      name: groupId
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+
+  responses:
+    NoContentSuccess:
+      description: 성공. 돌려줄 본문이 없다
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/ApiResponse"
+              - type: object
+                properties:
+                  data:
+                    type: object
+                    nullable: true
+                    description: 언제나 null
+    BadRequest:
+      description: 입력값 오류 (`INVALID_INPUT` 등)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorResponse"
+    Unauthorized:
+      description: "로그인 필요(`UNAUTHORIZED`) 또는 토큰 무효(`INVALID_TOKEN` — 프론트는 refresh 를 시도한다)"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorResponse"
+    Forbidden:
+      description: 권한 없음 (`FORBIDDEN`, `GROUP_NOT_MEMBER`, `USER_SUSPENDED`)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorResponse"
+    NotFound:
+      description: 대상을 찾을 수 없음 (`NOT_FOUND`)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorResponse"
+    InternalError:
+      description: 서버 오류 (`INTERNAL_ERROR`)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorResponse"
+
+  schemas:
+    # ── 공통 껍데기 (PRD §8·§14.3) ────────────────────────────
+    ApiResponse:
+      type: object
+      description: |
+        모든 응답의 공통 형태. 성공이든 실패든 세 필드가 모두 나간다(값이 null 이어도 키는 남는다).
+        **`error` 키의 존재 여부가 아니라 `success` 값으로 분기한다.**
+      required: [success, data, error]
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          nullable: true
+          description: |
+            성공 시 본문. 실패 시 null. 실제 타입은 엔드포인트마다 다르다 —
+            각 응답에서 allOf 로 덮어쓴다.
+        error:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/ApiError"
+
+    ApiError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          $ref: "#/components/schemas/ErrorCode"
+        message:
+          type: string
+          description: 사용자에게 그대로 보여 줄 한국어 설명
+          example: 이미 진행 중인 매칭 요청이 있습니다.
+
+    ApiErrorResponse:
+      type: object
+      description: 실패 응답
+      required: [success, data, error]
+      properties:
+        success:
+          type: boolean
+          enum: [false]
+        data:
+          type: object
+          nullable: true
+          description: 언제나 null
+        error:
+          $ref: "#/components/schemas/ApiError"
+
+    ErrorCode:
+      type: string
+      description: |
+        에러 코드 (PRD §8). **이 값으로 분기한다.** 목록에 없는 코드가 필요하면
+        단톡방에 `[에러코드 요청]` 을 보낸다 — 직접 추가하지 않는다.
+      enum:
+        - INVALID_INPUT
+        - UNAUTHORIZED
+        - FORBIDDEN
+        - NOT_FOUND
+        - EMAIL_DOMAIN_NOT_ALLOWED
+        - VERIFY_CODE_MISMATCH
+        - VERIFY_LOCKED
+        - INVALID_TOKEN
+        - ALREADY_IN_QUEUE
+        - REQUEST_TOO_SHORT
+        - MATCH_EXPIRED
+        - GROUP_NOT_MEMBER
+        - ROUTE_API_FAILED
+        - USER_SUSPENDED
+        - INTERNAL_ERROR
+
+    # ── 공용 값 ──────────────────────────────────────────────
+    Coordinate:
+      type: object
+      required: [lat, lng]
+      properties:
+        lat:
+          type: number
+          format: double
+          example: 35.1763
+        lng:
+          type: number
+          format: double
+          example: 126.9123
+
+    Gender:
+      type: string
+      enum: [M, F]
+      description: 가입 후 변경할 수 없다
+
+    RideRequestStatus:
+      type: string
+      enum: [WAITING, MATCHED, CONFIRMED, CANCELLED, EXPIRED, COMPLETED]
+
+    GroupStatus:
+      type: string
+      enum: [PENDING, CONFIRMED, COMPLETED, DISSOLVED]
+
+    HubType:
+      type: string
+      enum: [CAMPUS, STATION, TERMINAL, SCHOOL]
+
+    # ── auth ─────────────────────────────────────────────────
+    SignupRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+          description: "`@jnu.ac.kr` 만 허용 (FR-01)"
+          example: hong@jnu.ac.kr
+
+    SignupResponse:
+      type: object
+      required: [email, expiresInSeconds]
+      properties:
+        email:
+          type: string
+          format: email
+        expiresInSeconds:
+          type: integer
+          description: 인증 코드 유효 시간(초)
+          example: 600
+
+    VerifyRequest:
+      type: object
+      required: [email, code, password, nickname, gender]
+      properties:
+        email:
+          type: string
+          format: email
+        code:
+          type: string
+          description: 메일로 받은 6자리 숫자
+          pattern: "^[0-9]{6}$"
+          example: "482913"
+        password:
+          type: string
+          minLength: 8
+          maxLength: 64
+          format: password
+        nickname:
+          type: string
+          minLength: 2
+          maxLength: 20
+          example: 후문호랑이
+        gender:
+          $ref: "#/components/schemas/Gender"
+        department:
+          type: string
+          maxLength: 50
+          nullable: true
+        grade:
+          type: integer
+          minimum: 1
+          maximum: 6
+          nullable: true
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken:
+          type: string
+
+    TokenResponse:
+      type: object
+      required: [accessToken, refreshToken, accessTokenExpiresIn, user]
+      properties:
+        accessToken:
+          type: string
+          description: 유효 30분
+        refreshToken:
+          type: string
+          description: 유효 14일. 재발급 때마다 새것으로 바뀐다(회전)
+        accessTokenExpiresIn:
+          type: integer
+          description: access 토큰 남은 시간(초)
+          example: 1800
+        user:
+          $ref: "#/components/schemas/UserProfile"
+
+    # ── users ────────────────────────────────────────────────
+    UserProfile:
+      type: object
+      description: 실명·전화번호는 수집하지 않는다 (PRD §2.2)
+      required: [id, email, nickname, gender, status]
+      properties:
+        id:
+          type: integer
+          format: int64
+        email:
+          type: string
+          format: email
+        nickname:
+          type: string
+        gender:
+          $ref: "#/components/schemas/Gender"
+        department:
+          type: string
+          nullable: true
+        grade:
+          type: integer
+          nullable: true
+        status:
+          type: string
+          enum: [ACTIVE, SUSPENDED]
+        suspendedUntil:
+          type: string
+          format: date-time
+          nullable: true
+          description: SUSPENDED 일 때만 값이 있다
+
+    UpdateProfileRequest:
+      type: object
+      description: 성별은 바꿀 수 없어 필드 자체가 없다
+      properties:
+        nickname:
+          type: string
+          minLength: 2
+          maxLength: 20
+        department:
+          type: string
+          maxLength: 50
+          nullable: true
+        grade:
+          type: integer
+          minimum: 1
+          maximum: 6
+          nullable: true
+
+    ReportRequest:
+      type: object
+      required: [groupId, reportedUserId, reason]
+      properties:
+        groupId:
+          type: integer
+          format: int64
+          description: 같은 그룹이었던 이력이 있어야 한다
+        reportedUserId:
+          type: integer
+          format: int64
+        reason:
+          type: string
+          enum: [NO_SHOW, RUDE, UNSAFE, PAYMENT, OTHER]
+        detail:
+          type: string
+          maxLength: 500
+          nullable: true
+
+    # ── hubs · places ────────────────────────────────────────
+    Hub:
+      type: object
+      required: [id, name, lat, lng, type]
+      properties:
+        id:
+          type: integer
+          format: int64
+          example: 2
+        name:
+          type: string
+          example: 전남대 후문
+        lat:
+          type: number
+          format: double
+          example: 35.1763
+        lng:
+          type: number
+          format: double
+          example: 126.9123
+        type:
+          $ref: "#/components/schemas/HubType"
+
+    Place:
+      type: object
+      required: [name, lat, lng]
+      properties:
+        name:
+          type: string
+          example: 광주송정역
+        address:
+          type: string
+          nullable: true
+          example: 광주 광산구 상무대로 201
+        lat:
+          type: number
+          format: double
+        lng:
+          type: number
+          format: double
+        categoryName:
+          type: string
+          nullable: true
+          example: 교통,수송 > 기차,철도 > 기차역
+
+    # ── requests (이승민) ────────────────────────────────────
+    CreateRideRequest:
+      type: object
+      required: [hubId, destName, destLat, destLng, departAt, maxWaitMin, sameGenderOnly, maxDetourRatio]
+      properties:
+        hubId:
+          type: integer
+          format: int64
+          description: "`GET /api/hubs` 에서 고른 거점"
+          example: 2
+        destName:
+          type: string
+          maxLength: 100
+          example: 광주송정역
+        destLat:
+          type: number
+          format: double
+          example: 35.1378
+        destLng:
+          type: number
+          format: double
+          example: 126.7902
+        departAt:
+          type: string
+          format: date-time
+          description: 희망 출발 시각. 대기열 정렬 기준이다
+          example: "2026-10-20T08:30:00+09:00"
+        maxWaitMin:
+          type: integer
+          description: 최대 대기시간(분). 이 시간이 지나면 자동 만료된다 (FR-07)
+          enum: [5, 10, 15, 20]
+          example: 10
+        sameGenderOnly:
+          type: boolean
+          description: 그룹에 한 명이라도 true 면 전원 동성이어야 한다 (E-06)
+        maxDetourRatio:
+          type: number
+          format: double
+          description: 허용 최대 우회율 (FR-07)
+          enum: [0.1, 0.2, 0.3]
+          example: 0.2
+
+    RideRequestDetail:
+      type: object
+      description: |
+        내 요청의 현재 상태. 대기 화면이 이 값으로 카운트다운과 후보 수를 그린다 (FR-09).
+      required:
+        [requestId, userId, hub, destName, destLat, destLng, departAt, expiresAt,
+         maxWaitMin, sameGenderOnly, maxDetourRatio, soloDistance, soloFare, status,
+         remainingSeconds, candidateCount, estimated, createdAt]
+      properties:
+        requestId:
+          type: integer
+          format: int64
+        userId:
+          type: integer
+          format: int64
+        hub:
+          $ref: "#/components/schemas/Hub"
+        destName:
+          type: string
+        destLat:
+          type: number
+          format: double
+        destLng:
+          type: number
+          format: double
+        departAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        maxWaitMin:
+          type: integer
+        sameGenderOnly:
+          type: boolean
+        maxDetourRatio:
+          type: number
+          format: double
+        soloDistance:
+          type: integer
+          description: 혼자 갈 때 거리(m). 요청 생성 시점에 계산해 고정한다
+          example: 10591
+        soloFare:
+          type: integer
+          description: 혼자 갈 때 요금(원). 절감액의 기준선
+          example: 12400
+        status:
+          $ref: "#/components/schemas/RideRequestStatus"
+        remainingSeconds:
+          type: integer
+          description: 만료까지 남은 시간(초). 이미 지났으면 0
+          example: 540
+        candidateCount:
+          type: integer
+          description: 같은 거점에서 함께 기다리는 사람 수(나 자신 제외)
+          example: 3
+        estimated:
+          type: boolean
+          description: soloFare 가 카카오가 아닌 추정치면 true (E-03)
+        groupId:
+          type: integer
+          format: int64
+          nullable: true
+          description: 매칭된 뒤에만 값이 있다. 대기 화면은 이 값이 생기면 그룹 화면으로 넘어간다
+        createdAt:
+          type: string
+          format: date-time
+
+    # ── groups (서준) ────────────────────────────────────────
+    GroupDetail:
+      type: object
+      description: |
+        매칭 성사·정산 상세 화면의 데이터 (PRD §14.4).
+        `members[].shareAmount` 의 합은 `totalFare` 와 같다 (PRD §5.2 검증 조건).
+      required:
+        [groupId, status, estimated, hub, totalFare, totalDistance, totalDuration, route, members]
+      properties:
+        groupId:
+          type: integer
+          format: int64
+          example: 17
+        status:
+          $ref: "#/components/schemas/GroupStatus"
+        estimated:
+          type: boolean
+          description: true 면 카카오 대신 추정치. 화면에 "추정치" 배지를 띄운다 (E-03)
+        hub:
+          $ref: "#/components/schemas/Hub"
+        totalFare:
+          type: integer
+          description: 총 택시 요금(원)
+          example: 15000
+        totalDistance:
+          type: integer
+          description: 총 이동 거리(m)
+          example: 10000
+        totalDuration:
+          type: integer
+          description: 총 소요 시간(초)
+          example: 1320
+        route:
+          $ref: "#/components/schemas/Route"
+        members:
+          type: array
+          description: 탑승 순서대로
+          items:
+            $ref: "#/components/schemas/GroupMember"
+        acceptDeadline:
+          type: string
+          format: date-time
+          nullable: true
+          description: P1 수락 마감 시각. P0 에서는 null (FR-13)
+        createdAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    Route:
+      type: object
+      description: 지도에 그릴 경로. 경유지가 N개면 sections 는 N+1개다
+      required: [sections]
+      properties:
+        sections:
+          type: array
+          items:
+            $ref: "#/components/schemas/RouteSection"
+
+    RouteSection:
+      type: object
+      description: 한 정차 지점에서 다음 지점까지. 정산에서 요금을 나누는 단위다 (PRD §5.2)
+      required: [distance, duration, path]
+      properties:
+        distance:
+          type: integer
+          description: 구간 거리(m). 모든 구간의 합은 totalDistance 와 같다
+          example: 3000
+        duration:
+          type: integer
+          description: 구간 소요 시간(초)
+          example: 400
+        path:
+          type: array
+          description: 지도에 그릴 좌표들. 추정치일 때는 시작·끝 두 점만 올 수 있다
+          items:
+            $ref: "#/components/schemas/Coordinate"
+
+    GroupMember:
+      type: object
+      description: |
+        `shareAmount` 는 구간 분할 정산 결과다 (PRD §5.2). 먼저 내리는 사람이 적게 낸다 —
+        단순 1/N 이 아니라는 점이 이 서비스의 핵심이므로 화면에서 그 차이를 보여 준다.
+      required:
+        [userId, nickname, isMe, boardingOrder, dropoffOrder, destName,
+         shareAmount, soloFare, savingAmount, detourRatio, accepted]
+      properties:
+        userId:
+          type: integer
+          format: int64
+        nickname:
+          type: string
+          description: 실명이 아니라 닉네임만 노출한다 (FR-23)
+          example: 후문호랑이
+        isMe:
+          type: boolean
+          description: 지금 조회한 사람인지. 화면에서 "나"를 강조하는 데 쓴다
+        boardingOrder:
+          type: integer
+          description: 탑승 순서. 거점에서 함께 타므로 P0 에서는 전원 1이다
+          example: 1
+        dropoffOrder:
+          type: integer
+          description: 하차 순서. 1이 가장 먼저 내린다
+          example: 1
+        destName:
+          type: string
+          example: 경신여고
+        shareAmount:
+          type: integer
+          description: 최종 분담액(원). 100원 단위
+          example: 1500
+        soloFare:
+          type: integer
+          description: 혼자 갔을 때 요금(원)
+          example: 5600
+        savingAmount:
+          type: integer
+          description: "절감액(원) = soloFare - shareAmount"
+          example: 4100
+        detourRatio:
+          type: number
+          format: double
+          description: 우회율. 0.02 = 2%
+          example: 0.02
+        accepted:
+          type: boolean
+          description: P1 수락 여부. P0 에서는 항상 true (FR-13)
+
+    ChatMessage:
+      type: object
+      required: [id, groupId, senderId, senderNickname, type, content, createdAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+        groupId:
+          type: integer
+          format: int64
+        senderId:
+          type: integer
+          format: int64
+          description: 시스템 메시지면 0
+        senderNickname:
+          type: string
+          example: 후문호랑이
+        type:
+          type: string
+          enum: [TEXT, QUICK, SYSTEM]
+        content:
+          type: string
+          maxLength: 500
+          description: 전화번호·이메일 패턴은 서버가 마스킹한다 (FR-23)
+        createdAt:
+          type: string
+          format: date-time
+
+    # ── history · stats (서준) ───────────────────────────────
+    HistoryPage:
+      type: object
+      required: [content, page, size, totalElements, totalPages, last]
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/HistoryItem"
+        page:
+          type: integer
+          example: 0
+        size:
+          type: integer
+          example: 20
+        totalElements:
+          type: integer
+          format: int64
+          example: 37
+        totalPages:
+          type: integer
+          example: 2
+        last:
+          type: boolean
+          description: 마지막 페이지면 true
+
+    HistoryItem:
+      type: object
+      required:
+        [groupId, ridedAt, hubName, destName, memberCount, shareAmount, soloFare, savingAmount]
+      properties:
+        groupId:
+          type: integer
+          format: int64
+        ridedAt:
+          type: string
+          format: date-time
+          description: 탑승 완료 시각
+        hubName:
+          type: string
+          example: 전남대 후문
+        destName:
+          type: string
+          example: 광주송정역
+        memberCount:
+          type: integer
+          description: 동승 인원(나 포함)
+          example: 3
+        shareAmount:
+          type: integer
+          description: 내가 낸 금액(원)
+        soloFare:
+          type: integer
+          description: 혼자 갔을 때 요금(원)
+        savingAmount:
+          type: integer
+          description: 절감액(원)
+
+    MyStats:
+      type: object
+      required: [totalRides, totalSaving, averageSavingRate]
+      properties:
+        totalRides:
+          type: integer
+          description: 누적 이용 횟수
+          example: 12
+        totalSaving:
+          type: integer
+          description: 누적 절감액(원)
+          example: 48200
+        averageSavingRate:
+          type: number
+          format: double
+          description: 평균 절감률. 0.55 = 55%
+          example: 0.55
+        mostUsedHubName:
+          type: string
+          nullable: true
+          example: 전남대 후문
+
+    AdminStats:
+      type: object
+      required: [byHub, byHour]
+      properties:
+        byHub:
+          type: array
+          items:
+            $ref: "#/components/schemas/HubStat"
+        byHour:
+          type: array
+          items:
+            $ref: "#/components/schemas/HourStat"
+
+    HubStat:
+      type: object
+      required: [hubId, hubName, requestCount, matchedCount, matchRate, averageSavingRate]
+      properties:
+        hubId:
+          type: integer
+          format: int64
+        hubName:
+          type: string
+        requestCount:
+          type: integer
+        matchedCount:
+          type: integer
+        matchRate:
+          type: number
+          format: double
+          description: 성사율. 0.62 = 62%
+        averageSavingRate:
+          type: number
+          format: double
+
+    HourStat:
+      type: object
+      required: [hour, requestCount, matchedCount, matchRate]
+      properties:
+        hour:
+          type: integer
+          minimum: 0
+          maximum: 23
+          description: 0~23시
+        requestCount:
+          type: integer
+        matchedCount:
+          type: integer
+        matchRate:
+          type: number
+          format: double
