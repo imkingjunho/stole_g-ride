@@ -96,13 +96,16 @@ cd backend
 ```
 → `http://localhost:8080/swagger-ui.html` 열리면 성공 ✅
 
-**프론트엔드** (Phase 0 이후)
+**프론트엔드**
 ```bash
 cd frontend
+cp .env.example .env          # 처음 한 번만 (Windows: copy .env.example .env)
 npm install                   # 처음 한 번만
 npm run dev
 ```
-→ `http://localhost:5173` 열리면 성공 ✅ (기본은 가짜 서버(MSW) 모드. 실서버 연결은 `.env`의 `VITE_API_MODE=real`)
+→ `http://localhost:5173` 열리면 성공 ✅
+
+기본은 **가짜 서버(MSW) 모드**라 백엔드를 켜지 않아도 모든 화면이 돕니다. 실서버에 붙이려면 `frontend/.env`의 `VITE_API_MODE=real`로 바꾸세요. (루트 `.env`는 Docker용이라 다른 파일입니다.)
 
 ---
 
