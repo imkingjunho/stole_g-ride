@@ -1,4 +1,5 @@
 import { HttpResponse, http } from 'msw';
+import type { components, operations } from '@/generated/api';
 import {
   mockGroup,
   mockHistory,
@@ -12,7 +13,12 @@ import {
 
 const BASE = 'http://localhost:8080';
 
-/** 성공 응답 껍데기 (PRD §8). 실패 시에도 세 필드가 모두 나간다. */
+/**
+ * 성공 응답 껍데기 (PRD §8). 실패 시에도 세 필드가 모두 나간다.
+ *
+ * 반환 타입을 생성 타입에 묶어 두면, 스펙이 바뀌었는데 목 데이터를 안 고쳤을 때
+ * `npm run build` 가 잡아 준다. 아래 openapi 헬퍼가 그 역할을 한다.
+ */
 function ok<T>(data: T) {
   return HttpResponse.json({ success: true, data, error: null });
 }
@@ -21,12 +27,29 @@ function fail(code: string, message: string, status: number) {
   return HttpResponse.json({ success: false, data: null, error: { code, message } }, { status });
 }
 
-const tokens = {
+const tokens: components['schemas']['TokenResponse'] = {
   accessToken: 'mock-access-token',
   refreshToken: 'mock-refresh-token',
   accessTokenExpiresIn: 1800,
   user: mockUser,
 };
+
+/**
+ * 스펙이 바뀌면 여기가 먼저 깨지도록 두는 컴파일 시점 검사.
+ *
+ * 각 엔드포인트의 성공 응답 타입으로 목 데이터를 한 번 조립해 본다. 스펙에서 필드가
+ * 사라지거나 타입이 바뀌면 `npm run build` 가 실패해 목 서버가 조용히 낡는 일을 막는다.
+ */
+const _responseShapeCheck: {
+  hubs: operations['getHubs']['responses']['200']['content']['application/json'];
+  group: operations['getGroupsByGroupId']['responses']['200']['content']['application/json'];
+  request: operations['getRequestsMe']['responses']['200']['content']['application/json'];
+} = {
+  hubs: { success: true, data: mockHubs, error: null },
+  group: { success: true, data: mockGroup, error: null },
+  request: { success: true, data: mockRideRequest, error: null },
+};
+void _responseShapeCheck;
 
 /**
  * MSW 핸들러 — `docs/api-spec.yaml` 전체의 happy path (PRD §14.7).

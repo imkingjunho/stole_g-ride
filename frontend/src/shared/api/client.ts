@@ -38,17 +38,20 @@ api.use({
 /** 백엔드 공통 응답 껍데기 (PRD §8). 성공이면 data, 실패면 error 가 채워진다. */
 export interface ApiEnvelope<T> {
   success: boolean;
-  data: T | null;
-  error: { code: string; message: string } | null;
+  data?: T | null;
+  error?: { code: string; message: string } | null;
 }
 
 /**
  * 껍데기를 벗겨 data 만 돌려준다. 실패면 예외를 던진다.
  *
  * TanStack Query 의 queryFn 안에서 쓰면 에러가 자동으로 error 상태로 넘어간다.
+ *
+ * `== null` 은 null 과 undefined 를 함께 거른다. 생성된 타입에서 data 가 선택적으로 나오기
+ * 때문이다 — 서버는 항상 보내지만 타입상으로는 없을 수 있다.
  */
 export function unwrap<T>(envelope: ApiEnvelope<T> | undefined): T {
-  if (!envelope || !envelope.success || envelope.data === null) {
+  if (!envelope || !envelope.success || envelope.data == null) {
     const code = envelope?.error?.code ?? 'INTERNAL_ERROR';
     const message = envelope?.error?.message ?? '알 수 없는 오류가 발생했습니다.';
     throw new ApiError(code, message);

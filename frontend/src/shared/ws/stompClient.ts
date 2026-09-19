@@ -1,8 +1,18 @@
 import { Client, type IMessage } from '@stomp/stompjs';
+import type { components } from '@/generated/api';
 import { isMockMode } from '@/shared/api/client';
 import { useAuthStore } from '@/shared/stores/authStore';
 
 type MessageHandler = (body: unknown) => void;
+
+/**
+ * 구독 주소별 본문 타입 (PRD §14.5). `docs/api-spec.yaml` 에서 생성된 것을 쓴다 —
+ * 손으로 만들지 않는다 (CLAUDE.md §5).
+ */
+export type QueueStatusPayload = components['schemas']['QueueStatus'];
+export type MatchNotification = components['schemas']['MatchNotification'];
+export type ChatMessagePayload = components['schemas']['ChatMessage'];
+export type ChatSendBody = components['schemas']['ChatSendRequest'];
 
 /**
  * STOMP over WebSocket 래퍼 (PRD §14.5).
@@ -105,16 +115,18 @@ class MockStompClient implements StompClient {
       // 그 밖의 주소는 조용히 둔다. 필요해지면 여기에 시나리오를 추가한다
       return () => {};
     }
-    // 대기 화면이 카운트다운을 그릴 수 있도록 남은 시간을 줄여 가며 보낸다
+    // 대기 화면이 카운트다운을 그릴 수 있도록 남은 시간을 줄여 가며 보낸다.
+    // 타입을 붙여 두면 스펙이 바뀌었을 때 빌드가 잡아 준다.
     let remainingSeconds = 600;
     const timer = setInterval(() => {
       remainingSeconds = Math.max(0, remainingSeconds - 5);
-      handler({
+      const payload: QueueStatusPayload = {
         requestId: 1,
         status: 'WAITING',
         remainingSeconds,
         candidateCount: 2,
-      });
+      };
+      handler(payload);
     }, 5_000);
     this.timers.add(timer);
     return () => {

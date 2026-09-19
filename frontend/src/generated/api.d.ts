@@ -442,7 +442,7 @@ export interface components {
              * @description 성공 시 본문. 실패 시 null. 실제 타입은 엔드포인트마다 다르다 —
              *     각 응답에서 allOf 로 덮어쓴다.
              */
-            data: Record<string, never> | null;
+            data: unknown;
             error: components["schemas"]["ApiError"] | null;
         };
         ApiError: {
@@ -633,8 +633,10 @@ export interface components {
             destLng: number;
             /**
              * Format: date-time
-             * @description 희망 출발 시각. 대기열 정렬 기준이다
-             * @example 2026-10-20T08:30:00+09:00
+             * @description 희망 출발 시각. 대기열 정렬 기준이다 (PRD §7.1 `ride_requests.depart_at`).
+             *     요청 화면에 따로 입력란을 두지 않는다면 "지금"(현재 시각)을 그대로 보낸다.
+             *     **오프셋을 붙이지 않는다** — `2026-10-20T08:30:00+09:00` 은 400 이 난다.
+             * @example 2026-10-20T08:30:00
              */
             departAt: string;
             /**
@@ -734,7 +736,10 @@ export interface components {
              */
             totalDuration: number;
             route: components["schemas"]["Route"];
-            /** @description 탑승 순서대로 */
+            /**
+             * @description 하차 순서(`dropoffOrder`) 오름차순. 먼저 내리는 사람이 앞에 온다.
+             *     거점에서 다 같이 타므로 `boardingOrder` 는 P0 에서 전원 1이라 정렬 기준이 되지 못한다.
+             */
             members: components["schemas"]["GroupMember"][];
             /**
              * Format: date-time
@@ -812,6 +817,30 @@ export interface components {
             detourRatio: number;
             /** @description P1 수락 여부. P0 에서는 항상 true (FR-13) */
             accepted: boolean;
+        };
+        /** @description 구독 `/user/queue/status` 의 본문. 5초마다 + 변경 즉시 */
+        QueueStatus: {
+            /** Format: int64 */
+            requestId: number;
+            status: components["schemas"]["RideRequestStatus"];
+            /** @description 만료까지 남은 시간(초). 이미 지났으면 0 */
+            remainingSeconds: number;
+            /** @description 같은 거점에서 함께 기다리는 사람 수(나 자신 제외) */
+            candidateCount: number;
+        };
+        /** @description 구독 `/user/queue/match` 의 본문 */
+        MatchNotification: {
+            /** @enum {string} */
+            type: "PROPOSED" | "CONFIRMED" | "RECALCULATED" | "DISSOLVED" | "COMPLETED";
+            /** Format: int64 */
+            groupId: number;
+            message: string;
+        };
+        /** @description 발신 `/app/chat/{groupId}` 의 본문 */
+        ChatSendRequest: {
+            /** @enum {string} */
+            type: "TEXT" | "QUICK";
+            content: string;
         };
         ChatMessage: {
             /** Format: int64 */
@@ -1012,7 +1041,18 @@ export interface operations {
                     };
                 };
             };
-            400: components["responses"]["BadRequest"];
+            /**
+             * @description 전남대 웹메일이 아님 (`EMAIL_DOMAIN_NOT_ALLOWED`) 또는 형식 오류·이미 가입된 주소
+             *     (`INVALID_INPUT`)
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
             500: components["responses"]["InternalError"];
         };
     };
@@ -1040,7 +1080,18 @@ export interface operations {
                     };
                 };
             };
-            400: components["responses"]["BadRequest"];
+            /**
+             * @description 인증 코드가 틀리거나 만료됨 (`VERIFY_CODE_MISMATCH`), 또는 입력값 오류·닉네임 중복
+             *     (`INVALID_INPUT`)
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
             /** @description 인증 시도 횟수 초과 (`VERIFY_LOCKED`) */
             429: {
                 headers: {
@@ -1372,6 +1423,19 @@ export interface operations {
         requestBody?: never;
         responses: {
             200: components["responses"]["NoContentSuccess"];
+            /**
+             * @description 이미 매칭·확정되어 취소할 수 없는 상태 (`INVALID_INPUT`).
+             *     상태 충돌이라 409 가 어울리지만 `INVALID_INPUT` 은 400 에 묶여 있다
+             *     (PRD §8 에러 코드 동결 — 코드마다 HTTP 상태가 하나로 정해져 있다).
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
             401: components["responses"]["Unauthorized"];
             /** @description 남의 요청 (`FORBIDDEN`) */
             403: {
@@ -1383,15 +1447,6 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
-            /** @description 취소할 수 없는 상태 (`INVALID_INPUT`) */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiErrorResponse"];
-                };
-            };
             500: components["responses"]["InternalError"];
         };
     };
