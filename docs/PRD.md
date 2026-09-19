@@ -1,22 +1,28 @@
-# WE-Meet PRD — 전남대 기반 택시 동승 매칭 서비스 「가치가」
+# 가치가(WE-Meet) PRD v2.0 — 전남대 택시 동승 매칭 서비스
 
 | 항목 | 내용 |
 |---|---|
-| 문서 버전 | v1.0 |
-| 작성일 | 2026-08-12 |
-| 팀 | 가치가 (전남대학교 인공지능학부) |
-| 인원 | 5명 |
-| 개발 기간 | 2026.08 ~ 2026.12 (5개월) |
+| 문서 버전 | **v2.0** (v1.0: 2026-08-12) |
+| 작성일 | 2026-09-19 |
+| 팀 | 가치가 (전남대학교 인공지능학부) · 5명 |
+| 저장소 | `github.com/imkingjunho/stole_g-ride` |
+| 개발 기간 | 2026.09.21 ~ 2026.12 중순 (약 12주) |
+| v2 변경 요지 | ① 협업 방식 전환: `develop`/PR/리뷰 → **`main` 하나에 각자 직접 push + 폴더 소유제** ② 5인 파트를 **작업량 20%씩** 재분배 ③ 모듈 간 **계약(contract)·스텁**을 먼저 깔아 "각자 올려도 항상 작동" ④ 로드맵을 9/21 기준으로 재편 |
 
 ---
 
-## 0. 이 문서 사용법
+## 0. 이 문서 읽는 법
 
-이 문서는 **AI 코딩 어시스턴트에게 그대로 입력하기 위한 명세서**입니다.
+**팀원은 세 군데만 먼저 읽으세요.**
 
-- 모든 기능 요구사항에는 `FR-XX` 식별자가 붙어 있습니다. 작업 지시 시 `FR-03 구현해줘`처럼 참조하세요.
-- §5(알고리즘)와 §7(데이터 모델)은 구현의 근거이므로, 코드 생성 요청 시 반드시 함께 전달하세요.
-- §12~13(역할·협업 규칙)은 사람이 지키는 규약입니다. AI에게 코드를 요청할 때는 §13.4 코딩 컨벤션만 함께 넘기면 충분합니다.
+| 알고 싶은 것 | 볼 곳 |
+|---|---|
+| 우리가 뭘 만드는지 | §1~§3 |
+| 내 파트가 뭔지, 어느 폴더가 내 것인지 | **§12** |
+| 코드를 어떻게 올리는지 (git) | **§13** |
+| 오늘 내가 할 일 | `docs/roles/내이름.md` |
+
+**AI 코딩 어시스턴트에게는 이 문서 전체가 근거 자료입니다.** 특히 §5(알고리즘), §6(카카오 API), §7(데이터 모델), §14(모듈 간 계약)은 구현의 유일한 기준이므로 AI가 임의로 다른 설계를 만들지 않도록 함께 전달합니다. 모든 기능에는 `FR-XX` 식별자가 있고, 작업 지시 시 `FR-08 구현해줘`처럼 참조합니다.
 
 ---
 
@@ -41,7 +47,7 @@
 
 ### 1.4 서비스 대상 거점
 
-전남대학교(정문 · 후문 · 예대 삼거리), 경신여고, 유스퀘어, 광주송정역 — 4대 허브.
+전남대학교(정문 · 후문 · 예대 삼거리), 경신여고, 유스퀘어, 광주송정역 — 4대 허브(6개 지점).
 
 ---
 
@@ -68,6 +74,16 @@
 
 > ⚠️ **법적 고지 문구를 UI에 반드시 노출할 것:** "본 서비스는 동승자 매칭 및 요금 분담 계산만 제공하며, 택시 호출·운송·결제를 중개하지 않습니다."
 
+### 2.3 우선순위 정의 (v2에서 명확화)
+
+| 등급 | 의미 | 기한 |
+|---|---|---|
+| **P0** | 12월 시연에서 **이게 없으면 시연이 안 되는** 기능. 핵심 시나리오(§3.2) 한 바퀴 | Phase 1 (10/25) |
+| **P1** | 시연 품질을 결정하는 기능. 있어야 "서비스"로 보임 | Phase 2 (11/22) |
+| **P2** | 여유가 있을 때. 없어도 시연 가능 | Phase 3 (선택) |
+
+**P0 시연 시나리오가 실제 서버로 한 바퀴 돌아가는 것(10/25, §15 M1)이 이 프로젝트의 1차 목표다.** P1·P2는 그 위에 쌓는다.
+
 ---
 
 ## 3. 사용자 및 시나리오
@@ -80,7 +96,7 @@
 | B. 귀향생 (1학년) | 금요일 17:00 정문 → 광주송정역. 짐이 많음 | 버스 대신 택시, 비용 분담 |
 | C. 야간 귀가생 | 23:00 유스퀘어 → 전남대 | 안전 + 비용 |
 
-### 3.2 핵심 시나리오 (Happy Path)
+### 3.2 핵심 시나리오 (Happy Path) — 이것이 P0 전체다
 
 ```
 1. 로그인 (학교 웹메일 인증 완료 계정)
@@ -96,71 +112,75 @@
 8. [탑승 완료] 버튼 → 채팅방 종료, 이력 저장
 ```
 
+> P0에서는 6번의 "수락/거절 60초"(FR-13)를 생략하고 **그룹 확정 = 즉시 성사**로 처리한다. 수락 단계는 P1에서 추가한다.
+
 ---
 
 ## 4. 기능 요구사항
 
+> **담당** 열은 §12 파트 분배를 기능 단위로 풀어 쓴 것이다. `백`은 백엔드 API·로직, `프`는 화면. 한 기능이 두 사람에게 걸치면 둘 사이의 약속은 `docs/api-spec.yaml`(§14.4)이다.
+
 ### 4.1 인증 (Auth)
 
-| ID | 기능 | 상세 | 우선순위 |
-|---|---|---|---|
-| FR-01 | 웹메일 회원가입 | `@jnu.ac.kr` 도메인만 허용. 인증 코드(6자리) 메일 발송, 유효시간 10분, 5회 실패 시 30분 잠금 | P0 |
-| FR-02 | 로그인 / 토큰 | JWT (Access 30분, Refresh 14일). Refresh 토큰은 DB 저장 및 회전(rotation) | P0 |
-| FR-03 | 프로필 등록 | 닉네임, 성별(변경 불가), 학과·학년(선택). 실명·연락처 미수집 | P0 |
-| FR-04 | 신고 및 차단 | 매칭 이력 기준 신고 접수. 누적 3회 시 7일 이용 제한 | P2 |
+| ID | 기능 | 상세 | 우선순위 | 담당 |
+|---|---|---|---|---|
+| FR-01 | 웹메일 회원가입 | `@jnu.ac.kr` 도메인만 허용. 인증 코드(6자리) 메일 발송, 유효시간 10분, 5회 실패 시 30분 잠금 | P0 | 백 임승현 / 프 오승원 |
+| FR-02 | 로그인 / 토큰 | JWT (Access 30분, Refresh 14일). Refresh 토큰은 DB 저장 및 회전(rotation) | P0 | 백 임승현 / 프 오승원 |
+| FR-03 | 프로필 등록 | 닉네임, 성별(변경 불가), 학과·학년(선택). 실명·연락처 미수집 | P0 | 백 임승현 / 프 오승원 |
+| FR-04 | 신고 및 차단 | 매칭 이력 기준 신고 접수. 누적 3회 시 7일 이용 제한 | P2 | 백 임승현 / 프 오승원 |
 
 ### 4.2 매칭 요청 (Ride Request)
 
-| ID | 기능 | 상세 | 우선순위 |
-|---|---|---|---|
-| FR-05 | 출발 거점 선택 | 사전 등록된 허브 프리셋 버튼. 좌표는 서버가 보유 | P0 |
-| FR-06 | 목적지 검색 | 카카오 로컬 키워드 검색 API. 자동완성 + 지도 핀 확인 | P0 |
-| FR-07 | 매칭 조건 설정 | 최대 대기시간(5/10/15/20분), 동성 매칭 여부, 최대 허용 우회율(10/20/30%) | P0 |
-| FR-08 | 대기열 등록 / 취소 | 1인 1건 동시 요청 제한. 취소 시 즉시 대기열 제거 | P0 |
-| FR-09 | 대기 상태 표시 | 남은 대기시간, 현재 후보 인원 수 실시간 표시 (WebSocket) | P1 |
-| FR-10 | 대기시간 만료 처리 | 만료 시 자동 취소 + "매칭 실패" 안내 + 재시도 버튼 | P0 |
+| ID | 기능 | 상세 | 우선순위 | 담당 |
+|---|---|---|---|---|
+| FR-05 | 출발 거점 선택 | 사전 등록된 허브 프리셋 버튼. 좌표는 서버가 보유 (`GET /api/hubs`) | P0 | 백 송준호 / 프 송준호 |
+| FR-06 | 목적지 검색 | 카카오 로컬 키워드 검색 API. 자동완성 + 지도 핀 확인 | P0 | 백 송준호 / 프 송준호 |
+| FR-07 | 매칭 조건 설정 | 최대 대기시간(5/10/15/20분), 동성 매칭 여부, 최대 허용 우회율(10/20/30%) | P0 | 백 이승민(요청 필드) / 프 송준호 |
+| FR-08 | 대기열 등록 / 취소 | 1인 1건 동시 요청 제한. 취소 시 즉시 대기열 제거 | P0 | 백 이승민 / 프 송준호 |
+| FR-09 | 대기 상태 표시 | 남은 대기시간, 현재 후보 인원 수 실시간 표시 (WebSocket) | P1 | 백 이승민(데이터)·임승현(push) / 프 송준호 |
+| FR-10 | 대기시간 만료 처리 | 만료 시 자동 취소 + "매칭 실패" 안내 + 재시도 버튼 | P0 | 백 이승민 / 프 송준호 |
 
 ### 4.3 매칭 엔진 (Matching)
 
-| ID | 기능 | 상세 | 우선순위 |
-|---|---|---|---|
-| FR-11 | 배치 매칭 실행 | 30초 주기 tick. §5.1 알고리즘 수행 | P0 |
-| FR-12 | 그룹 확정 | 최대 4인(택시 정원). 확정 시 전원에게 푸시/WebSocket 알림 | P0 |
-| FR-13 | 매칭 수락·거절 | 확정 후 60초 내 전원 수락해야 성사. 1명이라도 거절/타임아웃 시 그룹 해체 후 재대기열 투입 | P1 |
-| FR-14 | 그룹 해체 | 전원 하차 완료 또는 성사 전 이탈 시 그룹 종료 | P0 |
+| ID | 기능 | 상세 | 우선순위 | 담당 |
+|---|---|---|---|---|
+| FR-11 | 배치 매칭 실행 | 30초 주기 tick. §5.1 알고리즘 수행 | P0 | 백 서준 |
+| FR-12 | 그룹 확정 | 최대 4인(택시 정원). 확정 시 전원에게 WebSocket 알림 | P0 | 백 서준(확정)·임승현(push) / 프 오승원 |
+| FR-13 | 매칭 수락·거절 | 확정 후 60초 내 전원 수락해야 성사. 1명이라도 거절/타임아웃 시 그룹 해체 후 재대기열 투입 | P1 | 백 서준 / 프 오승원 |
+| FR-14 | 그룹 해체 | 전원 하차 완료 또는 성사 전 이탈 시 그룹 종료 | P0 | 백 서준 |
 
 ### 4.4 경로 및 요금 (Route & Fare)
 
-| ID | 기능 | 상세 | 우선순위 |
-|---|---|---|---|
-| FR-15 | 합승 경로 산출 | 카카오모빌리티 다중 경유지 길찾기 호출 (§6.2) | P0 |
-| FR-16 | 구간 분할 정산 | §5.2 공식으로 1인당 분담액 산출. 100원 단위 올림 | P0 |
-| FR-17 | 절감액 표시 | 단독 탑승 요금 대비 절감액·절감률 표시 | P0 |
-| FR-18 | 우회 보상 할인 | 우회율이 임계치를 넘는 사용자에게 §5.3 할인 계수 적용 | P1 |
-| FR-19 | 경로 시각화 | 카카오맵 JS SDK Polyline. 탑승/하차 지점 순서 마커 | P0 |
+| ID | 기능 | 상세 | 우선순위 | 담당 |
+|---|---|---|---|---|
+| FR-15 | 합승 경로 산출 | 카카오모빌리티 다중 경유지 길찾기 호출 (§6.2). 실패 시 추정치 fallback | P0 | 백 송준호 |
+| FR-16 | 구간 분할 정산 | §5.2 공식으로 1인당 분담액 산출. 100원 단위 올림 | P0 | 백 서준 |
+| FR-17 | 절감액 표시 | 단독 탑승 요금 대비 절감액·절감률 표시 | P0 | 백 서준 / 프 오승원 |
+| FR-18 | 우회 보상 할인 | 우회율이 임계치를 넘는 사용자에게 §5.3 할인 계수 적용 | P1 | 백 서준 |
+| FR-19 | 경로 시각화 | 카카오맵 JS SDK Polyline. 탑승/하차 지점 순서 마커 | P0 | 프 송준호 |
 
 ### 4.5 채팅 (Chat)
 
-| ID | 기능 | 상세 | 우선순위 |
-|---|---|---|---|
-| FR-20 | 그룹 채팅방 | WebSocket(STOMP). 매칭 성사 시 자동 개설 | P0 |
-| FR-21 | 휘발성 처리 | 탑승 완료 또는 개설 후 3시간 경과 시 메시지 전량 삭제 | P0 |
-| FR-22 | 정형 메시지 | "도착했어요", "5분 늦어요", "출발합니다" 퀵 버튼 | P1 |
-| FR-23 | 연락처 보호 | 닉네임만 노출. 전화번호·이메일 패턴 자동 마스킹 | P1 |
+| ID | 기능 | 상세 | 우선순위 | 담당 |
+|---|---|---|---|---|
+| FR-20 | 그룹 채팅방 | WebSocket(STOMP). 매칭 성사 시 자동 개설 | P0 | 백 임승현 / 프 오승원 |
+| FR-21 | 휘발성 처리 | 탑승 완료 또는 개설 후 3시간 경과 시 메시지 전량 삭제 | P0 | 백 임승현 |
+| FR-22 | 정형 메시지 | "도착했어요", "5분 늦어요", "출발합니다" 퀵 버튼 | P1 | 백 임승현 / 프 오승원 |
+| FR-23 | 연락처 보호 | 닉네임만 노출. 전화번호·이메일 패턴 자동 마스킹 | P1 | 백 임승현 |
 
 ### 4.6 이력 및 통계
 
-| ID | 기능 | 상세 | 우선순위 |
-|---|---|---|---|
-| FR-24 | 매칭 이력 | 날짜, 경로, 동승 인원, 분담액, 절감액 | P1 |
-| FR-25 | 누적 절감 리포트 | 개인 누적 절감액 및 이용 횟수 대시보드 | P2 |
-| FR-26 | 관리자 통계 | 거점별·시간대별 매칭 성사율, 평균 절감률 | P2 |
+| ID | 기능 | 상세 | 우선순위 | 담당 |
+|---|---|---|---|---|
+| FR-24 | 매칭 이력 | 날짜, 경로, 동승 인원, 분담액, 절감액 | P1 | 백 서준 / 프 오승원 |
+| FR-25 | 누적 절감 리포트 | 개인 누적 절감액 및 이용 횟수 대시보드 | P2 | 백 서준 / 프 오승원 |
+| FR-26 | 관리자 통계 | 거점별·시간대별 매칭 성사율, 평균 절감률 | P2 | 백 서준 |
 
 ---
 
 ## 5. 핵심 알고리즘 명세
 
-> 이 장은 프로젝트의 기술적 핵심입니다. AI에게 구현을 맡길 때 반드시 전체를 전달하세요.
+> 이 장은 프로젝트의 기술적 핵심입니다. AI에게 구현을 맡길 때 반드시 전체를 전달하세요. (v1과 동일)
 
 ### 5.1 매칭 알고리즘
 
@@ -308,7 +328,7 @@ Content-Type: application/json
 | `routes[0].summary.distance` | 총 거리(m) | 총 거리 D |
 | `routes[0].summary.duration` | 총 소요시간(초) | 예상 도착 시간 |
 | `routes[0].sections[k].distance` | 구간 거리(m) | **구간 분할 정산의 d_k** |
-| `routes[0].sections[k].roads[].vertexes` | 좌표 배열 | 지도 Polyline |
+| `routes[0].sections[k].roads[].vertexes` | 좌표 배열 `[x, y, x, y, ...]` | 지도 Polyline |
 | `routes[0].result_code` | 0이면 성공 | 실패 처리 분기 |
 
 **제약 및 대응:**
@@ -318,34 +338,47 @@ Content-Type: application/json
 | 경유지 최대 30개 | 정원 4인이므로 문제없음 |
 | REST 키는 서버 전용 | **절대 프론트엔드에 노출 금지.** 백엔드가 프록시 |
 | 무료 호출량 한도 존재 | 동일 (출발지, 목적지 조합) 결과를 Redis에 10분 캐싱. 매칭 tick당 호출 수 상한 설정 |
-| API 장애 | Haversine 직선거리 × 보정계수(1.3) + 광주시 택시 요금표로 fallback 추정. UI에 "추정치" 배지 표시 |
+| API 장애 | Haversine 직선거리 × 보정계수(1.3) + 광주시 택시 요금표로 fallback 추정. 응답에 `estimated=true`, UI에 "추정치" 배지 표시 |
 
 ### 6.3 카카오 로컬 API
 
-키워드 장소 검색(`/v2/local/search/keyword.json`)으로 목적지 자동완성 및 좌표 획득. 백엔드 프록시 경유.
+키워드 장소 검색(`/v2/local/search/keyword.json`)으로 목적지 자동완성 및 좌표 획득. 백엔드 프록시 경유(`GET /api/places/search`). 광주 지역으로 위치 편향 적용.
 
 ---
 
 ## 7. 데이터 모델
 
+### 7.1 테이블
+
+> **소유 모듈** 열이 v2에서 추가됐다. 테이블은 소유 모듈만 엔티티로 매핑하고, 다른 모듈은 **ID 값만 저장**한다(§7.2).
+
 ```
-users
+users                                 -- 소유: user (임승현)
   id BIGINT PK
   email VARCHAR(100) UNIQUE          -- @jnu.ac.kr
+  password_hash VARCHAR(100)         -- BCrypt
   nickname VARCHAR(20) UNIQUE
   gender ENUM('M','F')
+  department VARCHAR(50), grade INT  -- 선택
   verified_at DATETIME
   report_count INT DEFAULT 0
   status ENUM('ACTIVE','SUSPENDED')
+  suspended_until DATETIME
   created_at DATETIME
 
-hubs                                  -- 거점 프리셋
+refresh_tokens                        -- 소유: auth (임승현)
+  id, user_id BIGINT, token_hash, expires_at, revoked BOOLEAN
+
+reports                               -- 소유: user (임승현)
+  id, reporter_id BIGINT, reported_id BIGINT, group_id BIGINT, reason, created_at
+
+hubs                                  -- 소유: route (송준호). 거점 프리셋
   id, name, lat DOUBLE, lng DOUBLE, type ENUM('CAMPUS','STATION','TERMINAL','SCHOOL')
 
-ride_requests
+ride_requests                         -- 소유: ride (이승민)
   id BIGINT PK
-  user_id BIGINT FK
-  hub_id BIGINT FK
+  user_id BIGINT                      -- users.id (ID만 저장)
+  hub_id BIGINT                       -- hubs.id (ID만 저장)
   dest_name VARCHAR(100), dest_lat DOUBLE, dest_lng DOUBLE
   depart_at DATETIME                  -- 희망 출발 시각
   max_wait_min INT
@@ -354,20 +387,21 @@ ride_requests
   solo_distance INT                   -- 단독 직행 거리(m), 캐시
   solo_fare INT                       -- 단독 예상 요금(원), 캐시
   status ENUM('WAITING','MATCHED','CONFIRMED','CANCELLED','EXPIRED','COMPLETED')
-  version INT                         -- 낙관적 락
+  version INT                         -- 낙관적 락 (@Version)
   created_at, expires_at DATETIME
 
-match_groups
+match_groups                          -- 소유: matching (서준)
   id BIGINT PK
-  hub_id BIGINT FK
+  hub_id BIGINT
   total_fare INT, total_distance INT, total_duration INT
-  route_json JSON                     -- 카카오 응답 원본(sections 포함)
+  route_json JSON                     -- RouteResult 원본(sections 포함)
+  estimated BOOLEAN                   -- fallback 추정치 여부
   status ENUM('PENDING','CONFIRMED','COMPLETED','DISSOLVED')
   created_at, confirmed_at, closed_at DATETIME
 
-match_members
+match_members                         -- 소유: matching (서준)
   id BIGINT PK
-  group_id BIGINT FK, request_id BIGINT FK, user_id BIGINT FK
+  group_id BIGINT, request_id BIGINT, user_id BIGINT
   boarding_order INT, dropoff_order INT
   shared_distance INT                 -- 합승 경로 내 실제 이동 거리
   detour_ratio DECIMAL(4,3)
@@ -376,470 +410,748 @@ match_members
   accepted BOOLEAN DEFAULT FALSE
   UNIQUE(group_id, user_id)
 
-chat_messages
+chat_messages                         -- 소유: realtime (임승현)
   id BIGINT PK
-  group_id BIGINT FK, sender_id BIGINT FK
+  group_id BIGINT, sender_id BIGINT
   content VARCHAR(500)
   type ENUM('TEXT','SYSTEM','QUICK')
   created_at DATETIME
   -- 그룹 종료 또는 3시간 경과 시 스케줄러가 물리 삭제
-
-refresh_tokens
-  id, user_id FK, token_hash, expires_at, revoked BOOLEAN
-
-reports
-  id, reporter_id FK, reported_id FK, group_id FK, reason, created_at
 ```
 
-**인덱스:** `ride_requests(status, hub_id, depart_at)`, `match_members(user_id)`, `chat_messages(group_id, created_at)`
+**인덱스:** `ride_requests(status, hub_id, depart_at)`, `match_members(user_id)`, `chat_messages(group_id, created_at)`, `refresh_tokens(user_id)`
+
+**Redis 키:** `queue:{hubId}` (Sorted Set, score=희망 출발 시각), `route:{좌표해시}` (경로 캐시, TTL 10분), `verify:{email}` (인증 코드, TTL 10분), `verify:fail:{email}` (실패 횟수, TTL 30분)
+
+### 7.2 모듈 간 참조 원칙 — ID만 저장한다
+
+```java
+// ❌ 금지: 다른 모듈의 엔티티를 JPA 관계로 참조
+@ManyToOne private User user;          // matching 모듈이 user 모듈 엔티티를 import
+
+// ✅ 허용: ID 값만 저장. 사용자 정보가 필요하면 contract의 UserPort로 조회
+private Long userId;
+```
+
+이 원칙 덕분에 **서준이 `MatchMember`를 만들 때 임승현의 `User` 클래스가 아직 없어도 컴파일된다.** 5명이 각자 올려도 빌드가 깨지지 않는 첫 번째 장치다. DB 레벨 FK는 두지 않는다(엔티티 관계가 없으면 Hibernate가 만들지 않음).
+
+### 7.3 스키마 관리 방식 (v2 변경)
+
+| 환경 | 방식 |
+|---|---|
+| 로컬 · 테스트 | `spring.jpa.hibernate.ddl-auto: update` — **엔티티가 곧 스키마.** 각자 자기 모듈 엔티티만 만들면 테이블은 자동 생성된다 |
+| 베타/운영 | Phase 3에서 로컬 스키마를 `docs/schema.sql`로 추출해 적용하고 `validate`로 전환 |
+
+Flyway 같은 마이그레이션 도구는 **쓰지 않는다.** 5명이 마이그레이션 파일을 나눠 쓰면 버전 번호 충돌과 "누가 먼저 올렸나" 문제가 가장 흔한 사고 원인이 되기 때문이다.
+
+**주의 — `update`가 못 하는 것:** 컬럼 삭제·이름 변경·타입 변경은 반영되지 않는다. 이런 변경을 한 사람은 팀 단톡방에 공지하고, 각자 `docker compose down -v && docker compose up -d --wait`로 DB를 초기화한다. 컬럼 **추가**는 자동 반영되므로 공지가 필요 없다.
+
+**초기 데이터(거점 6개):** route 모듈의 `ApplicationRunner`가 `hubs`가 비어 있을 때만 insert 한다(송준호).
 
 ---
 
 ## 8. API 명세 (요약)
 
-> 상세 스펙은 Swagger(springdoc-openapi)로 자동 생성하며, **`/docs/api-spec.yaml`을 단일 진실 공급원(SSOT)으로 삼는다.** 프론트/백엔드는 이 스펙 확정 후 병렬 개발한다.
+> 상세 스펙은 **`docs/api-spec.yaml`(OpenAPI 3)이 단일 진실 공급원(SSOT)**이다. Phase 0에서 이승민이 이 표를 기준으로 전체 엔드포인트의 요청·응답 스키마를 확정하고, 이후 프론트는 여기서 타입을 자동 생성(`npm run gen:api`)하며 백엔드는 이 스펙과 Swagger 결과를 대조한다. 변경 절차는 §14.8.
 
-| Method | Endpoint | 설명 | 인증 |
-|---|---|---|---|
-| POST | `/api/auth/signup` | 웹메일 인증 코드 발송 | — |
-| POST | `/api/auth/verify` | 코드 검증 및 가입 완료 | — |
-| POST | `/api/auth/login` | 로그인 (JWT 발급) | — |
-| POST | `/api/auth/refresh` | 토큰 재발급 | Refresh |
-| GET | `/api/hubs` | 거점 목록 | ✔ |
-| GET | `/api/places/search?q=` | 목적지 검색 (카카오 프록시) | ✔ |
-| POST | `/api/requests` | 매칭 요청 생성 | ✔ |
-| DELETE | `/api/requests/{id}` | 요청 취소 | ✔ |
-| GET | `/api/requests/me` | 내 진행 중 요청 조회 | ✔ |
-| POST | `/api/groups/{id}/accept` | 매칭 수락 | ✔ |
-| POST | `/api/groups/{id}/reject` | 매칭 거절 | ✔ |
-| GET | `/api/groups/{id}` | 그룹 상세 (경로·분담액) | ✔ |
-| POST | `/api/groups/{id}/complete` | 탑승 완료 처리 | ✔ |
-| GET | `/api/history` | 매칭 이력 | ✔ |
-| POST | `/api/reports` | 신고 | ✔ |
-| WS | `/ws/queue` | 대기 상태 실시간 수신 | ✔ |
-| WS | `/ws/chat/{groupId}` | 그룹 채팅 (STOMP) | ✔ |
+| Method | Endpoint | 설명 | 인증 | 우선순위 | 백엔드 담당 |
+|---|---|---|---|---|---|
+| POST | `/api/auth/signup` | 웹메일 인증 코드 발송 | — | P0 | 임승현 |
+| POST | `/api/auth/verify` | 코드 검증 및 가입 완료(비밀번호·프로필 포함) | — | P0 | 임승현 |
+| POST | `/api/auth/login` | 로그인 (JWT 발급) | — | P0 | 임승현 |
+| POST | `/api/auth/refresh` | 토큰 재발급 (회전) | Refresh | P0 | 임승현 |
+| POST | `/api/auth/logout` | Refresh 토큰 폐기 | ✔ | P1 | 임승현 |
+| GET | `/api/users/me` | 내 프로필 | ✔ | P0 | 임승현 |
+| PATCH | `/api/users/me` | 프로필 수정 (성별 제외) | ✔ | P1 | 임승현 |
+| POST | `/api/reports` | 신고 | ✔ | P2 | 임승현 |
+| GET | `/api/hubs` | 거점 목록 | ✔ | P0 | 송준호 |
+| GET | `/api/places/search?q=` | 목적지 검색 (카카오 프록시) | ✔ | P0 | 송준호 |
+| POST | `/api/requests` | 매칭 요청 생성 | ✔ | P0 | 이승민 |
+| DELETE | `/api/requests/{id}` | 요청 취소 | ✔ | P0 | 이승민 |
+| GET | `/api/requests/me` | 내 진행 중 요청 조회 (대기 상태 포함) | ✔ | P0 | 이승민 |
+| GET | `/api/groups/{id}` | 그룹 상세 (경로·순서·분담액·절감액) | ✔ | P0 | 서준 |
+| POST | `/api/groups/{id}/accept` | 매칭 수락 | ✔ | P1 | 서준 |
+| POST | `/api/groups/{id}/reject` | 매칭 거절 | ✔ | P1 | 서준 |
+| POST | `/api/groups/{id}/complete` | 탑승 완료 처리 | ✔ | P0 | 서준 |
+| GET | `/api/groups/{id}/messages` | 채팅 이전 메시지 조회 (재접속용) | ✔ | P0 | 임승현 |
+| GET | `/api/history` | 내 매칭 이력 | ✔ | P1 | 서준 |
+| GET | `/api/stats/me` | 누적 절감 리포트 | ✔ | P2 | 서준 |
+| GET | `/api/admin/stats` | 관리자 통계 | ✔ | P2 | 서준 |
+| WS | `/ws` | STOMP 엔드포인트 (대기 상태·매칭 알림·채팅 — §14.5) | ✔ | P0 | 임승현 |
 
-**공통 응답 포맷:**
+**공통 응답 포맷** (`common/response/ApiResponse`, 이승민):
 
 ```json
-{ "success": true, "data": { }, "error": null }
-{ "success": false, "data": null, "error": { "code": "MATCH_EXPIRED", "message": "..." } }
+{ "success": true,  "data": { },   "error": null }
+{ "success": false, "data": null,  "error": { "code": "MATCH_EXPIRED", "message": "..." } }
 ```
+
+**에러 코드**(`common/exception/ErrorCode`, 이승민이 관리. 추가가 필요하면 카톡으로 요청): `INVALID_INPUT`, `UNAUTHORIZED`, `FORBIDDEN`, `NOT_FOUND`, `EMAIL_DOMAIN_NOT_ALLOWED`, `VERIFY_CODE_MISMATCH`, `VERIFY_LOCKED`, `INVALID_TOKEN`, `ALREADY_IN_QUEUE`, `REQUEST_TOO_SHORT`, `MATCH_EXPIRED`, `GROUP_NOT_MEMBER`, `ROUTE_API_FAILED`, `USER_SUSPENDED`, `INTERNAL_ERROR`
 
 ---
 
 ## 9. 기술 스택 및 아키텍처
 
-### 9.1 스택 확정
-
-> ⚠️ **기존 계획서의 스택 충돌 해소 안내**
-> 원 계획서 4.4항은 Java/Spring Boot, 일정표와 역할 배분은 FastAPI로 서로 다르게 기재되어 있었습니다. FastAPI를 담당하던 서동연 팀원의 이탈에 따라 **Java 17 + Spring Boot 3.x 단일 스택으로 통일**합니다. 이는 원 계획서의 도구 표(4.4)와 결론(8.1) 기재와도 일치합니다.
+### 9.1 스택 (변경 금지)
 
 | 레이어 | 기술 | 비고 |
 |---|---|---|
-| Backend | Java 17, Spring Boot 3.2 | Web, Security, Data JPA, Validation, WebSocket |
-| DB | MySQL 8.0 | |
-| Cache / Queue | Redis 7 | 매칭 대기열, 카카오 응답 캐시, 토큰 블랙리스트 |
+| Backend | Java 17, Spring Boot 3.2 | Web, Security, Data JPA, Validation, WebSocket, Mail |
+| DB | MySQL 8.0 | `ddl-auto: update` (§7.3) |
+| Cache / Queue | Redis 7 | 매칭 대기열, 카카오 응답 캐시, 인증 코드 |
 | Frontend | React 18 + Vite + TypeScript | |
-| 지도 | 카카오맵 JS SDK | |
+| 지도 | 카카오맵 JS SDK (`react-kakao-maps-sdk`) | |
 | 상태관리 | TanStack Query + Zustand | |
 | 스타일 | Tailwind CSS | |
-| API 문서 | springdoc-openapi (Swagger UI) | |
-| 개발 환경 | Docker Compose (MySQL + Redis) | 전원 동일 환경 보장 |
-| CI | GitHub Actions | PR 시 build + test 자동 실행 |
-| 형상관리 | GitHub (monorepo) | |
+| API 문서 | springdoc-openapi (Swagger UI) + `docs/api-spec.yaml` | |
+| 목 서버 | MSW (Mock Service Worker) | 프론트가 백엔드 없이 개발 |
+| 아키텍처 검사 | ArchUnit | 모듈 경계 위반 시 **빌드 실패** (§9.3) |
+| 개발 환경 | Docker Compose (MySQL + Redis) | 전원 동일 환경 |
+| CI | GitHub Actions | `main` push 시 백엔드·프론트 빌드. 깨지면 커밋한 사람에게 메일 |
+| 형상관리 | GitHub monorepo, **브랜치는 `main` 하나** | §13 |
 
 ### 9.2 아키텍처
 
 ```
-[React SPA] ──HTTPS──> [Spring Boot API]
+[React SPA] ──HTTPS──> [Spring Boot API]  (모듈러 모놀리스: 앱 1개, 모듈 8개, 모듈 1개 = 사람 1명)
      │                        │
      │  WebSocket(STOMP)      ├── MySQL      (영속 데이터)
      └────────────────────────┤── Redis      (대기열, 캐시)
                               │
-                              └──> 카카오모빌리티 길찾기 API
-                                   카카오 로컬 API
+                              └──> 카카오모빌리티 길찾기 API / 카카오 로컬 API
                                    (REST 키는 서버에만 존재)
 
-[Scheduler] 30초 tick → MatchingService.executeTick()
+[matching 모듈 스케줄러] 30초 tick → executeTick()
+[ride 모듈 스케줄러]     30초     → 만료 처리
+[realtime 모듈 스케줄러] 5초      → 대기 상태 push / 1분 → 채팅 물리 삭제
 ```
 
-**패키지 구조 (도메인형)**
+**패키지 구조 (v2) — 패키지 1개 = 소유자 1명**
 
 ```
 backend/src/main/java/com/gachiga/
-├── auth/          # 인증, JWT              → 임승현
-├── user/          # 회원, 프로필           → 임승현
-├── ride/          # 요청, 대기열           → 이승민
-├── matching/      # 매칭 엔진 (핵심)       → 서준
-├── fare/          # 구간 분할 정산         → 서준 / 이승민
-├── route/         # 카카오 API 클라이언트  → 송준호
-├── chat/          # WebSocket 채팅         → 이승민
-├── stats/         # 이력, 통계             → 송준호
-└── common/        # 예외, 응답, 설정
+├── GachigaApplication.java
+├── common/      이승민   ApiResponse, ErrorCode, BusinessException, 전역 예외 처리, 공용 유틸(Haversine)
+├── config/      이승민   Jackson, Redis, Swagger, CORS, 스케줄링
+├── contract/    이승민   ⚠️ 동결. 모듈 간 port 인터페이스·DTO·이벤트·@CurrentUser  (§14)
+├── ride/        이승민   RideRequest, 요청 API, Redis 대기열, 만료 스케줄러, RideRequestPort·QueueStatusPort 구현
+├── matching/    서준     매칭 엔진·tick 스케줄러, MatchGroup·MatchMember, 그룹 API, MatchHistoryPort 구현
+├── fare/        서준     구간 분할 정산, 우회 보상 할인
+├── stats/       서준     이력·통계 API
+├── auth/        임승현   Security 설정, JWT, 웹메일 인증, @CurrentUser 리졸버
+├── user/        임승현   User, 프로필, 신고, UserPort 구현
+├── realtime/    임승현   STOMP 설정·핸드셰이크 인증, 대기 상태 push, 매칭 알림 push, 채팅(저장·삭제·마스킹)
+└── route/       송준호   카카오 클라이언트, 캐시, fallback, 호출량 제어, 장소 검색, Hub, RouteProvider·HubPort 구현
+
+backend/src/main/resources/
+├── application.yml           이승민   (spring.config.import 로 아래 domain/*.yml 을 읽는다)
+├── application-local.yml     이승민
+├── application-prod.yml      이승민
+└── domain/                   ← 설정도 사람별 파일. 서로 안 겹친다
+    ├── ride.yml              이승민   gachiga.ride.*
+    ├── matching.yml          서준     gachiga.matching.* (가중치 w1~w3), gachiga.fare.*
+    ├── auth.yml              임승현   gachiga.auth.*, spring.mail.*, gachiga.chat.*
+    └── route.yml             송준호   gachiga.route.* (카카오 URL·타임아웃·tick당 호출 상한·캐시 TTL)
+
+backend/src/test/java/com/gachiga/{패키지}/   → 그 패키지 소유자
+
+frontend/src/
+├── app/            오승원   라우터, Provider, 레이아웃
+├── shared/         오승원   ui 컴포넌트(디자인 시스템), api 클라이언트, stores, ws 클라이언트, mocks(MSW)
+├── generated/      (자동 생성) api-spec.yaml → api.d.ts. 손으로 수정 금지
+├── features/
+│   ├── auth/       오승원   회원가입·인증·프로필·로그인 화면
+│   ├── request/    송준호   매칭 요청 화면, 대기 화면
+│   ├── map/        송준호   RouteMap, DestinationPicker, useKakaoMap
+│   ├── group/      오승원   매칭 성사·정산 상세 화면
+│   ├── chat/       오승원   채팅 화면
+│   └── history/    오승원   이력·누적 절감 대시보드
+└── (package.json, vite.config.ts, tailwind.config.js 등 루트 설정)   오승원
 ```
 
-> **도메인별 패키지 분리는 협업을 위한 필수 결정입니다.** 각자 자기 패키지 안에서만 작업하므로 머지 충돌이 구조적으로 최소화됩니다.
+### 9.3 모듈 경계 3원칙 — "각자 올려도 빌드가 안 깨지는" 이유
+
+| # | 원칙 | 어기면 |
+|---|---|---|
+| 1 | **다른 모듈의 클래스를 import 하지 않는다.** 허용되는 것은 `contract.*`와 `common.*`만 | 상대가 클래스명을 바꾸면 내 코드가 깨진다. **ArchUnit 테스트가 빌드 단계에서 잡아낸다** |
+| 2 | **다른 모듈의 테이블은 ID로만 참조한다** (§7.2) | 상대 엔티티가 아직 없으면 컴파일이 안 된다 |
+| 3 | **다른 모듈에 알릴 일은 이벤트로, 물어볼 일은 port 인터페이스로** (§14) | 직접 호출은 순환 의존과 순서 문제를 만든다 |
+
+`common/ArchitectureTest.java`(이승민, Phase 0)가 위 1번을 자동 검사한다. 예컨대 `matching` 패키지가 `com.gachiga.ride.RideRequest`를 import 하면 `./gradlew build`가 실패하므로, 규칙을 잊어도 main에 올라가기 전에 걸린다.
+
+### 9.4 항상 켜져 있는 안전망
+
+| 장치 | 무엇을 막나 | 누가 만드나 |
+|---|---|---|
+| 올리기 전 `./gradlew build` / `npm run build` (§13.3) | 컴파일 오류·테스트 실패가 main에 올라가는 것 | 각자 (습관) |
+| GitHub Actions CI | 빌드 안 하고 올린 커밋. 빨간 X + 메일로 알림 | 이승민 (Phase 0) |
+| ArchUnit 모듈 경계 테스트 | 남의 패키지 import | 이승민 (Phase 0) |
+| Phase 0 스텁 (§14.7) | 남이 안 끝나서 내 것이 안 도는 상황 | 이승민 (Phase 0) → 각자 교체 |
+| MSW 목 서버 | 프론트가 백엔드를 기다리는 상황 | 이승민 (Phase 0) → 오승원 유지 |
 
 ---
 
 ## 10. 비기능 요구사항
 
-| 항목 | 목표치 | 검증 방법 |
-|---|---|---|
-| 매칭 API 응답 | P95 < 500ms | k6 부하 테스트 |
-| 매칭 tick 처리 | 대기 100건 기준 < 2초 | 단위 테스트 |
-| 동시 접속 | 200명 (피크 8~9시 가정) | k6 시나리오 |
-| 정산 정확도 | Σ share = 총 요금, 오차 0원 | 프로퍼티 기반 테스트 |
-| 가용성 | 카카오 API 장애 시 fallback 동작 | 장애 주입 테스트 |
-| 보안 | 비밀번호 BCrypt, 개인정보 최소 수집, HTTPS 강제 | 코드 리뷰 체크리스트 |
-| 테스트 커버리지 | `matching`, `fare` 패키지 80% 이상 | JaCoCo |
+| 항목 | 목표치 | 검증 방법 | 담당 |
+|---|---|---|---|
+| 매칭 API 응답 | P95 < 500ms | k6 부하 테스트 | 이승민 |
+| 매칭 tick 처리 | 대기 100건 기준 < 2초 | 단위 테스트 + 실행 시간 로그 | 서준 |
+| 동시 접속 | 200명 (피크 8~9시 가정) | k6 시나리오 | 이승민 |
+| 정산 정확도 | Σ share = 총 요금, 오차 0원 | 프로퍼티 기반 테스트 | 서준 |
+| 가용성 | 카카오 API 장애 시 fallback 동작 | Mock 장애 주입 테스트 | 송준호 |
+| 보안 | 비밀번호 BCrypt, 개인정보 최소 수집, 토큰 회전 | 자가 점검 체크리스트 | 임승현 |
+| 테스트 커버리지 | `matching`, `fare` 패키지 80% 이상 | JaCoCo | 서준 |
+| 빌드 건강 | `main`의 CI가 24시간 이상 빨간 상태로 방치되지 않음 | GitHub Actions | 전원 |
 
 ---
 
 ## 11. 엣지 케이스 (구현 필수)
 
-| # | 상황 | 처리 |
-|---|---|---|
-| E-01 | 매칭 성사 후 1명 취소 | 잔여 인원 2명 이상이면 경로·요금 **재계산 후 전원에게 변경 알림 및 재동의 요청**. 1명만 남으면 그룹 해체 후 재대기열 |
-| E-02 | 동일 사용자가 여러 그룹에 배정 | `ride_requests.version` 낙관적 락. 실패한 배정은 폐기 |
-| E-03 | 카카오 API 타임아웃/오류 | 3초 타임아웃, 1회 재시도, 실패 시 Haversine fallback + "추정치" 표시 |
-| E-04 | 대기시간 만료 직전 매칭 | 만료 30초 전부터는 신규 그룹 배정 중단 |
-| E-05 | 노쇼 (수락 후 미등장) | 채팅 내 "노쇼 신고" 버튼. 누적 시 이용 제한 |
-| E-06 | 동성 옵션 충돌 | 그룹 내 1명이라도 동성 옵션 ON이면 전원 동성이어야 함 |
-| E-07 | 목적지가 사실상 동일 (100m 이내) | 경유지 생성 없이 단일 목적지로 처리, 균등 분할 |
-| E-08 | 우회율 계산 시 분모 0 | 출발지=목적지인 비정상 요청은 생성 단계에서 차단 (최소 500m) |
-| E-09 | 인증 토큰 만료 중 매칭 진행 | Refresh 자동 갱신. 실패 시 요청 유지하되 재로그인 유도 |
-| E-10 | 채팅 중 그룹 해체 | 시스템 메시지 발송 후 5분 뒤 방 삭제 |
-
----
-
-## 12. 팀 구성 및 역할
-
-> 서동연 팀원 이탈에 따라 5인 체제로 재편했습니다. 이탈자가 담당하던 서버 아키텍처는 이승민, 보안 인프라는 임승현, 시스템 설계 문서는 서준이 흡수했습니다.
-
-각자 **1차 도메인**(전 기간 책임)과 **2차 도메인**(1차가 마무리된 뒤 인수)을 갖는다. 1차만 배정하면 8~9월에 일이 몰리는 사람과 10~11월에 몰리는 사람이 갈려 전체 일정이 무너지기 때문이다.
-
-| 이름 | 역할 | 1차 도메인 (8~9월) | 2차 도메인 (10~12월) | 포트폴리오 어필 포인트 |
-|---|---|---|---|---|
-| **서준** | PM / 알고리즘 리드 | `matching`, `fare` 인터페이스 설계 및 오프라인 프로토타입<br>스프린트 운영 | `matching`, `fare` 본구현 및 튜닝<br>기술 백서 집필 | "휴리스틱 매칭 알고리즘 및 구간 분할 정산 모델 설계·구현" — 기술 난도 최상위 영역 |
-| **이승민** | 백엔드 코어 리드 | `common`, `ride`<br>서버 구조·예외·응답 표준<br>대기열 및 스케줄러 | `ride` 고도화<br>전체 API 통합 및 성능 튜닝 | "Spring Boot 실시간 매칭 서버 아키텍처 설계, P95 500ms 달성" |
-| **임승현** | 인증·보안 / 실시간 | `auth`, `user`<br>JWT·웹메일 인증<br>DB 스키마 및 마이그레이션 | `chat` **(신규 인수)**<br>WebSocket STOMP 채팅<br>WS 핸드셰이크 인증 | "JWT 인증 체계 및 WebSocket 실시간 채팅 구현 (인증 연계 포함)" |
-| **송준호** | 공간 데이터 / 지도 | `route`, `stats`<br>카카오모빌리티 클라이언트·캐싱<br>4대 거점 노드 데이터 | **프론트엔드 지도 파트 인수**<br>경로 시각화 컴포넌트<br>절감 효과 통계 리포트 | "카카오 API 연동 및 캐싱 최적화 + 합승 경로 시각화 구현" (백엔드·프론트 양쪽 경험) |
-| **오승원** | 프론트엔드 / UI·UX | `frontend` 기반 구조<br>디자인 시스템, 라우팅<br>인증·요청 화면 | 매칭·정산·채팅 화면<br>UX 개선 및 베타 테스트 총괄 | "React 기반 실시간 매칭 웹앱 설계 및 사용성 검증" |
-
-### 12.1 배분 원칙
-
-1. **1인 1도메인 오너십** — 각자 1차 도메인의 설계·구현·테스트·문서를 끝까지 책임진다. 포트폴리오에 "내가 무엇을 만들었는가"를 한 줄로 쓸 수 있어야 한다.
-2. **2차 도메인은 인접 영역으로만 이동** — 임승현이 채팅을 맡는 것은 WebSocket 핸드셰이크에 JWT 검증이 필요하기 때문이고, 송준호가 지도 컴포넌트를 맡는 것은 그가 카카오 응답 구조를 가장 잘 알기 때문이다. 학습 비용이 낮은 방향으로만 이동시킨다.
-3. **크로스 리뷰 필수** — 오너십이 있어도 머지는 반드시 타인 리뷰를 거친다.
-4. **인수인계는 문서가 아니라 코드로** — 2차 도메인 인수 시 기존 담당자가 인터페이스와 테스트를 먼저 만들어 두고 넘긴다.
-
-### 12.2 기능 오너십 매핑 (FR ↔ 담당자 ↔ 코드 위치)
-
-> AI에게 "내 역할 구현해줘"라고 지시했을 때 작업 범위가 결정되는 근거표다. §4의 FR 번호와 1:1로 대응한다.
-
-| 담당 | FR | 코드 위치 | 선행 조건 |
+| # | 상황 | 처리 | 담당 |
 |---|---|---|---|
-| **서준** | FR-11, 12, 13, 14, 16, 17, 18 | `backend/.../matching/`, `backend/.../fare/` | 이승민 `common` 완료, 송준호 `route` 인터페이스 확정 |
-| **이승민** | FR-08, 09, 10 + 전 도메인 공통 기반 | `backend/.../ride/`, `backend/.../common/`, `config/` | 없음 (**최우선 착수**) |
-| **임승현** | FR-01, 02, 03, 04 / FR-20, 21, 22, 23 | `backend/.../auth/`, `.../user/`, `.../chat/`, `db/migration/` | 이승민 `common` 완료 |
-| **송준호** | FR-05, 06, 15 / FR-19, 24, 25, 26 | `backend/.../route/`, `.../stats/`, `frontend/src/features/map/` | 없음 (**최우선 착수**) |
-| **오승원** | FR-05~10, 12, 13, 17의 화면 / 전체 UI | `frontend/src/` (map 제외) | `docs/api-spec.yaml` v1 확정 |
-
-**착수 순서:** 이승민(`common`) + 송준호(`route`)가 먼저 기반을 깔아야 서준·임승현이 움직일 수 있다. 8월 첫 스프린트는 이 두 사람의 작업이 크리티컬 패스다.
+| E-01 | 매칭 성사 후 1명 취소 | 잔여 인원 2명 이상이면 경로·요금 **재계산 후 전원에게 변경 알림 및 재동의 요청**(`GroupRecalculated` 이벤트). 1명만 남으면 그룹 해체 후 재대기열 | 서준 |
+| E-02 | 동일 사용자가 여러 그룹에 배정 | `ride_requests.version` 낙관적 락. `RideRequestPort.tryMarkMatched()`가 false를 돌려주면 그 배정은 폐기 | 이승민·서준 |
+| E-03 | 카카오 API 타임아웃/오류 | 3초 타임아웃, 1회 재시도, 실패 시 Haversine fallback + `estimated=true` → UI "추정치" 배지 | 송준호·오승원 |
+| E-04 | 대기시간 만료 직전 매칭 | 만료 30초 전부터는 `findWaiting()` 결과에서 제외 (신규 배정 중단) | 이승민 |
+| E-05 | 노쇼 (수락 후 미등장) | 채팅 내 "노쇼 신고" 버튼 → `POST /api/reports`. 누적 시 이용 제한 | 임승현·오승원 |
+| E-06 | 동성 옵션 충돌 | 그룹 내 1명이라도 동성 옵션 ON이면 전원 동성이어야 함 (§5.1 필터 3) | 서준 |
+| E-07 | 목적지가 사실상 동일 (100m 이내) | 경유지 생성 없이 단일 목적지로 처리, 균등 분할 | 서준 |
+| E-08 | 우회율 계산 시 분모 0 | 출발지=목적지인 비정상 요청은 생성 단계에서 차단 (최소 500m, `REQUEST_TOO_SHORT`) | 이승민 |
+| E-09 | 인증 토큰 만료 중 매칭 진행 | 프론트 인터셉터가 Refresh 자동 갱신. 실패 시 요청은 유지하되 재로그인 유도 | 오승원·임승현 |
+| E-10 | 채팅 중 그룹 해체 | `GroupDissolved` 수신 → 시스템 메시지 발송 후 5분 뒤 방 삭제 | 임승현 |
+| E-11 | 스텁이 아직 실구현으로 교체되지 않은 상태에서 시연 | 스텁은 "그럴싸한 고정값"을 돌려주므로 시연은 가능. 단, 화면에 `DEV` 배지를 띄워 구분 | 각자 |
 
 ---
 
-## 13. 협업 규칙
+## 12. 파트 분배 — 5명 × 20%
 
-### 13.1 저장소 구조
+### 12.1 분배 원칙
+
+1. **1인 1파트, 파트 = 폴더 묶음.** 폴더 소유자만 그 안의 파일을 만들고 고친다. 남의 폴더는 읽기만 한다.
+2. **파트끼리는 §14 계약으로만 만난다.** 인터페이스·이벤트·`api-spec.yaml`·WebSocket 프로토콜이 전부다. 남의 클래스를 직접 import 하지 않는다.
+3. **각 파트는 혼자서도 시연할 수 있다.** 다른 파트가 안 끝났어도 Phase 0 스텁·MSW 위에서 자기 파트가 돈다.
+4. **비중은 20%씩.** 아래 표의 작업량은 기능 수·난도·외부 의존을 합친 추정치(±2%)다. 한 사람이 일찍 끝나면 남의 폴더를 대신 만들지 않고 **통합 테스트·문서·발표 준비**를 가져간다.
+
+### 12.2 파트 총괄표
+
+| 파트 | 담당 | 한 줄 정의 | 소유 폴더 | 담당 FR | 비중 |
+|---|---|---|---|---|---|
+| ① 플랫폼·요청 | **이승민** | 뼈대·계약·공통·매칭 요청/대기열·통합 | `backend/…/common/ config/ contract/ ride/`, `resources/application*.yml`, `resources/domain/ride.yml`, 저장소 루트 파일(`build.gradle`, `docker-compose.yml`, `.env.example`, `.gitignore`, `.github/`), `docs/PRD.md`, `docs/api-spec.yaml`, `README.md`, `CLAUDE.md` | FR-07(API), 08, 09(데이터), 10 + Phase 0 + 통합·성능 | ~20% |
+| ② 매칭·정산·통계 | **서준** | 매칭 엔진, 구간 정산, 그룹 API, 이력·통계, PM | `backend/…/matching/ fare/ stats/`, `resources/domain/matching.yml` | FR-11, 12, 13, 14, 16, 17, 18, 24, 25, 26 | ~20% |
+| ③ 계정·실시간 | **임승현** | 웹메일 인증·JWT·프로필·신고, WebSocket 전부(대기 push·매칭 알림·채팅) | `backend/…/auth/ user/ realtime/`, `resources/domain/auth.yml` | FR-01, 02, 03, 04, 09(push), 12(push), 20, 21, 22, 23 | ~20% |
+| ④ 경로·지도·요청 화면 | **송준호** | 카카오 연동·거점·장소 검색, 지도 컴포넌트, 요청·대기 화면 | `backend/…/route/`, `resources/domain/route.yml`, `frontend/src/features/request/`, `frontend/src/features/map/` | FR-05, 06, 07(UI), 15, 19 + FR-08·09·10 화면 | ~20% |
+| ⑤ 프론트 기반·핵심 화면 | **오승원** | 디자인 시스템·라우팅·API 클라이언트, 인증·매칭 성사·정산·채팅·이력 화면, 베타 UX | `frontend/` 전체 (단, `features/request/`·`features/map/` 제외) | FR-01~04 화면, 12·13·17 화면, 20·22·24·25 화면 | ~20% |
+
+**작업량 추정 근거** (총 100 기준)
+
+| 파트 | 구성 요소별 추정 | 합계 |
+|---|---|---|
+| ① 이승민 | Phase 0 뼈대·계약·스텁·CI (8) + common/config (2) + 요청 API·Redis 대기열·만료 스케줄러 (6) + 통합 점검·부하 테스트·데모 시뮬레이터·배포 (4) | 20 |
+| ② 서준 | 매칭 엔진 4단계 + tick (9) + 정산·우회 할인 (4) + 그룹 API·수락·해체·재계산 (3) + 이력·통계 (3) + PM·베타 진행·백서 (2) | 21 |
+| ③ 임승현 | 웹메일 인증·JWT 회전·Security·프로필·신고 (8) + STOMP 설정·핸드셰이크 인증·대기/매칭 push (4) + 채팅 저장·자동 개설·삭제·퀵·마스킹 (7) | 19 |
+| ④ 송준호 | 카카오 클라이언트·fallback·캐시·호출량 (6) + 거점·장소 검색 (2) + 지도 컴포넌트 3종 (4) + 요청·대기 화면 (6) + 성과 지표 산출 (1) | 19 |
+| ⑤ 오승원 | 디자인 시스템·공통 컴포넌트·API 클라이언트·인터셉터·MSW 유지 (6) + 인증 화면 (3) + 성사·정산 화면 (5) + 채팅 화면 (2) + 이력 화면 (2) + 에러·반응형·법적 고지 (2) + 베타 피드백 UX 반영 (1) | 21 |
+
+### 12.3 파트별 상세
+
+#### ① 이승민 — 플랫폼·요청
+
+- **하는 일:** Phase 0에서 팀 전체가 올라탈 뼈대를 만든다(§15 Phase 0). 그 뒤 `ride` 모듈(요청 생성·취소·조회, Redis 대기열, 만료 스케줄러, `RideRequestPort`·`QueueStatusPort` 구현)을 만들고, Phase 2~3에서 통합 점검·N+1 제거·k6 부하 테스트·데모 시뮬레이터·베타 배포를 맡는다.
+- **혼자서 시연 가능한 것:** Swagger에서 요청 생성 → Redis 대기열에 들어감 → 만료되면 EXPIRED 처리.
+- **다른 파트와의 접점:** 전원에게 `common`·`contract`·스텁을 제공. 계약·공용 파일 변경 요청의 유일한 접수처.
+- **특수성:** Phase 0가 늦으면 4명이 멈춘다. 9/21~27 한 주는 이것만 한다. 이 파트는 실행보다 **"남이 막히지 않게 하는 일"**이 절반이다.
+
+#### ② 서준 — 매칭·정산·통계 (+ PM)
+
+- **하는 일:** §5 알고리즘 전체(하드 필터 → 클러스터링 → 조합 평가 → 점수화), 30초 tick 스케줄러, `MatchGroup`·`MatchMember`, 그룹 상세·수락·거절·완료 API, 해체·재계산(E-01), 구간 분할 정산(§5.2)과 우회 할인(§5.3), 이력·통계 API. PM으로 주간 통합 점검 진행, 베타 테스트 설계·진행, 기술 백서.
+- **혼자서 시연 가능한 것:** `FixedRouteProvider`(스텁)와 인메모리 요청 목록으로 정산 단위 테스트, 시뮬레이션 1,000건 매칭 결과.
+- **다른 파트와의 접점:** `RideRequestPort`(이승민)·`RouteProvider`·`HubPort`(송준호)·`UserPort`(임승현)를 **사용**하고, `MatchHistoryPort`를 **제공**하며, `GroupProposed/Confirmed/Recalculated/Dissolved/Completed` 이벤트를 **발행**한다.
+- **특수성:** 기술 난도 최상. 그래서 남을 기다리지 않도록 계약이 먼저 얼려진다. **§5를 임의로 단순화하지 않는다** — 특히 정산을 1/N으로 바꾸지 않는다.
+
+#### ③ 임승현 — 계정·실시간
+
+- **하는 일:** 웹메일 인증(Spring Mail + Redis TTL), 비밀번호 BCrypt, JWT 발급·Refresh 회전, `SecurityFilterChain`과 `@CurrentUser` 리졸버, 프로필, 신고·이용 제한. 그리고 **WebSocket 전부**: STOMP 설정, CONNECT 시 JWT 검증, 그룹 멤버만 채팅 구독 가능하도록 인가, 대기 상태 push(5초), 매칭 알림 push(이벤트 수신), 채팅 저장·조회·자동 개설·물리 삭제·퀵 메시지·연락처 마스킹.
+- **혼자서 시연 가능한 것:** 회원가입→메일 코드→로그인→JWT로 `/api/users/me`; STOMP 클라이언트 2개로 채팅 왕복.
+- **다른 파트와의 접점:** `UserPort` **제공**, `QueueStatusPort`(이승민)·`MatchHistoryPort`(서준) **사용**, 그룹 이벤트 **수신**.
+- **특수성:** WebSocket을 한 사람이 다 가진 이유 — STOMP 설정 파일이 두 사람에게 걸치면 그 파일이 충돌 1순위가 된다. v1에서 `/ws/queue`(이승민)와 `/ws/chat`(임승현)이 나뉘어 있던 것을 v2에서 합쳤다. Security 설정도 `config/`가 아니라 `auth/`에 둔다 — 인증 필터를 등록하는 사람이 설정 파일도 갖는다.
+
+#### ④ 송준호 — 경로·지도·요청 화면
+
+- **하는 일 (백엔드):** `KakaoRouteProvider`(§6.2), 3초 타임아웃·1회 재시도·Haversine fallback, Redis 캐시(좌표 4자리 반올림 키, TTL 10분), tick당 호출 상한·일일 카운터, 카카오 로컬 장소 검색 프록시, 거점(Hub) 엔티티·시드·`GET /api/hubs`, `RouteProvider`·`HubPort` 구현.
+- **하는 일 (프론트):** `useKakaoMap` 훅, `RouteMap`(Polyline + 순서 마커 + bound 맞춤), `DestinationPicker`(검색 결과 핀·클릭 미세 조정), **매칭 요청 화면**(거점 프리셋·목적지 검색·조건 설정·법적 고지)과 **대기 화면**(WS 대기 상태 수신·카운트다운·만료 시 재시도).
+- **혼자서 시연 가능한 것:** 요청 화면에서 거점 선택→목적지 검색→지도 핀→요청 생성(MSW 또는 실서버)→대기 화면; Swagger에서 실제 카카오 경로·요금 응답.
+- **다른 파트와의 접점:** `RouteProvider`·`HubPort` **제공**(스텁 `EstimatedRouteProvider`는 그대로 fallback으로 남긴다), `RouteMap`을 오승원의 성사 화면이 **사용**(props 계약 §14.6).
+- **특수성:** 백엔드·프론트 양쪽을 하는 유일한 파트. 요청 화면을 맡는 이유는 그 화면의 핵심(지도·장소 검색·거점)이 전부 이 파트의 데이터이기 때문이다.
+
+#### ⑤ 오승원 — 프론트 기반·핵심 화면
+
+- **하는 일:** 디자인 토큰·공통 컴포넌트(Button, Input, Card, Modal, Toast, Spinner, Badge), 레이아웃·라우팅·인증 라우트 가드, `openapi-fetch` API 클라이언트와 토큰 자동 갱신 인터셉터(E-09), STOMP 클라이언트 래퍼, MSW 핸들러 유지, 인증 3화면(가입·코드·프로필)+로그인, **매칭 성사 화면**(절감액 강조, 탑승·하차 순서, `RouteMap` 배치, P1에서 60초 수락/거절), **정산 상세 화면**(구간별 누가 어디까지 타고 얼마 내는지 시각화), 채팅 화면(퀵 버튼·마스킹 표시·휘발성 안내), 이력·누적 절감 대시보드, 에러·빈 상태·추정치 배지·`DEV` 배지, 반응형(360px~)·접근성, 베타 피드백 UX 반영.
+- **혼자서 시연 가능한 것:** MSW만으로 §3.2 시나리오 전체를 클릭으로 한 바퀴.
+- **다른 파트와의 접점:** `api-spec.yaml`(이승민)에서 타입 생성, `RouteMap`(송준호) 사용, WS 프로토콜(임승현) 구독.
+- **특수성:** 심사자가 보는 건 결국 화면이다. **매칭 성사 화면과 정산 상세 화면이 프로젝트의 하이라이트**다.
+
+---
+
+## 13. 협업 방식 — `main` 하나로 일하는 법
+
+### 13.1 왜 바꿨나
+
+v1은 `develop` 브랜치 + 기능 브랜치 + PR + 리뷰 + Squash merge였다. 정석이지만, GitHub에 익숙하지 않은 팀에서는 **브랜치를 잘못 타고, PR이 쌓이고, 충돌이 나면 멈추는** 병목이 됐다. v2는 접근을 바꾼다. **충돌이 나지 않게 구조를 짜고, 그 위에서 가장 단순한 git만 쓴다.** 리뷰가 하던 "깨진 코드 차단" 역할은 빌드·CI·ArchUnit이 대신한다.
+
+### 13.2 각자 올려도 작동하는 다섯 가지 장치
+
+| # | 장치 | 무엇을 해결하나 |
+|---|---|---|
+| 1 | **폴더 = 사람** (§12.2) | git 충돌은 같은 파일을 두 사람이 고칠 때만 난다. 파일이 겹치지 않으면 충돌은 구조적으로 없다 |
+| 2 | **계약 동결** (§14) | 상대 코드가 아니라 인터페이스에 의존하므로, 상대가 안 끝나도·다시 짜도 내 코드는 그대로다 |
+| 3 | **스텁 선탑재** (§14.7) | 모든 인터페이스에 "그럴싸한 가짜"가 Phase 0부터 들어 있어 앱이 항상 뜬다. 각자 자기 스텁을 자기 진짜로 바꾼다 |
+| 4 | **ID 참조·이벤트** (§7.2, §9.3) | 컴파일 의존이 없어 누가 먼저 올리든 빌드가 된다. ArchUnit이 위반을 잡는다 |
+| 5 | **빌드 후 push + CI** (§13.4) | main에는 빌드 통과한 코드만 올라가고, 어기면 CI가 즉시 알린다 |
+
+### 13.3 브랜치
 
 ```
-we-meet/
-├── backend/            # Spring Boot
-├── frontend/           # React
-├── docs/
-│   ├── api-spec.yaml   # OpenAPI 명세 (SSOT)
-│   ├── erd.md
-│   └── adr/            # 주요 기술 결정 기록
-├── docker-compose.yml
-├── .github/
-│   ├── workflows/ci.yml
-│   ├── PULL_REQUEST_TEMPLATE.md
-│   └── ISSUE_TEMPLATE/
-└── README.md
+main   ← 유일한 브랜치. 전원이 여기에 직접 push 한다.
 ```
 
-### 13.2 브랜치 전략 (Git Flow 간소화)
+- `develop`은 Phase 0에서 삭제한다. 기능 브랜치는 만들지 않는다. (혼자 실험용으로 로컬 브랜치를 쓰는 것은 자유지만, 올릴 때는 `main`으로 올린다.)
+- 브랜치 보호 규칙은 걸지 않는다 — PR 없이 push 해야 하므로.
 
-```
-main         ← 배포 가능 상태만. 직접 push 금지 (브랜치 보호 설정)
- └ develop   ← 개발 통합 브랜치. 모든 feature가 여기로 머지
-    ├ feat/#12-matching-engine
-    ├ feat/#15-jwt-auth
-    ├ fix/#20-fare-rounding
-    └ docs/#22-api-spec
-```
+### 13.4 매일 루틴 (이것만 외우면 된다)
 
-**규칙**
-- 브랜치명: `{type}/#{issue번호}-{영문-요약}`
-- feature 브랜치 수명은 **최대 3일**. 길어지면 작업 단위를 쪼갠다.
-- 매일 아침 `develop`을 자기 브랜치로 rebase하여 충돌을 조기 발견한다.
+```bash
+# ① 시작할 때 — 항상
+git pull --rebase origin main
 
-### 13.3 커밋 및 PR
+# ② 작업 — 내 폴더 안에서만 (AI에게: "나는 OOO이야. docs/roles/OOO.md 읽고 다음 작업 진행해줘.")
 
-**커밋 메시지 (Conventional Commits)**
+# ③ 올리기 전 — 빌드가 초록이어야만 다음으로
+cd backend  && ./gradlew build        # 백엔드 담당자 (Windows: gradlew.bat build)
+cd frontend && npm run build          # 프론트 담당자 (송준호는 둘 다)
 
-```
-feat: 구간 분할 정산 로직 구현 (#12)
-fix: 100원 단위 반올림 시 총액 불일치 수정 (#20)
-refactor: RouteClient 캐싱 레이어 분리 (#18)
-test: FareCalculator 프로퍼티 테스트 추가 (#12)
-docs: API 명세에 매칭 수락 엔드포인트 추가 (#22)
-chore: Docker Compose에 Redis 추가
+# ④ 올리기
+git add -A
+git status                            # ← 내 폴더 파일만 떠야 한다. 남의 폴더가 보이면 git restore --staged 그파일
+git commit -m "feat(ride): 매칭 요청 생성 API (FR-08)"
+git pull --rebase origin main         # 그 사이 누가 올렸을 수 있다. 뭔가 받아졌으면 ③ 빌드를 한 번 더
+git push origin main
 ```
 
-**PR 규칙**
+**GitHub Desktop을 쓰는 경우:** `Fetch origin` → `Pull origin` → (터미널에서 빌드) → 변경 파일 목록이 내 폴더만인지 확인 → Summary에 커밋 메시지 → `Commit to main` → `Push origin`. 순서는 위와 같다.
 
-| 항목 | 규칙 |
+**빈도:** 하루에 한 번 이상, **빌드가 통과하는 단위**로 올린다. 3일 넘게 안 올리면 위험 신호다(남들이 내 옛 스텁 위에서 일하고 있다). 반쯤 만든 기능도 컴파일만 되면 올려도 된다 — 화면에 연결하지 않았거나 `@Disabled`인 상태로.
+
+### 13.5 문제가 생겼을 때
+
+| 상황 | 처방 |
 |---|---|
-| 크기 | 변경 500줄 이하 권장. 초과 시 분할 |
-| 리뷰어 | 최소 1명 Approve 필수, **셀프 머지 금지** |
-| 리뷰 SLA | 지정 후 24시간 이내 1차 응답 |
-| 머지 방식 | Squash and merge |
-| CI | build + test 통과가 머지 조건 |
+| `push` 거절 (`rejected`, `non-fast-forward`) | 누가 먼저 올린 것. `git pull --rebase origin main` → `git push origin main` |
+| `pull --rebase` 중 **충돌(CONFLICT)** | 내 폴더만 만졌다면 원칙상 안 난다. 났다면 공용 파일(§13.7)을 누가 건드린 것. AI에게 "충돌 난 파일 정리해줘, 양쪽 변경 다 살려" → `git add 그파일` → `git rebase --continue`. 모르겠으면 `git rebase --abort` 하고 단톡방에 묻는다 |
+| **main의 CI가 빨간 X** | 깨뜨린 사람(커밋에 이름이 있다)이 **30분 안에** 고쳐 올린다. 연락이 안 되면 누구든 `git revert <커밋해시>` → push 해서 복구한다. revert는 비난이 아니라 복구다 — 되돌려진 사람은 로컬에서 고쳐 다시 올리면 된다 |
+| 실수로 남의 폴더를 고쳤다 (push 전) | `git restore 그파일` 또는 `git restore .` |
+| 실수로 남의 폴더를 고쳐서 push 했다 | 단톡방에 알리고 폴더 주인이 판단한다. 주인이 `git revert`로 되돌려도 된다 |
+| 계약(`contract/`, `api-spec.yaml`)을 바꿔야 한다 | 직접 고치지 말고 §13.7 절차 |
+| 컬럼을 지우거나 이름을 바꿨다 | 단톡방 공지 → 각자 `docker compose down -v && docker compose up -d --wait` (§7.3) |
 
-**PR 템플릿**
+### 13.6 커밋 메시지
 
-```markdown
-## 관련 이슈
-Closes #
+```
+{type}({모듈}): {무엇을} (FR-XX)
 
-## 변경 내용
--
-
-## 테스트 방법
--
-
-## 리뷰 포인트
-- (특히 봐줬으면 하는 부분)
-
-## 체크리스트
-- [ ] 로컬 빌드/테스트 통과
-- [ ] API 변경 시 docs/api-spec.yaml 갱신
-- [ ] 신규 환경변수는 .env.example에 추가
+feat(ride): 매칭 요청 생성 API (FR-08)
+feat(fare): 구간 분할 정산 계산기 (FR-16)
+fix(route): 캐시 키 좌표 반올림 누락 수정 (FR-15)
+test(matching): 정산 합계 보존 프로퍼티 테스트 (FR-16)
+feat(fe-group): 매칭 성사 화면 절감액 표시 (FR-17)
+docs(roles): 임승현 T1-2 완료 체크
+chore(contract): RouteResult에 estimated 필드 추가   ← 이승민만
 ```
 
-### 13.4 코딩 컨벤션
+`type`: `feat` / `fix` / `refactor` / `test` / `docs` / `chore`. 모듈은 백엔드 패키지명 또는 `fe-{feature}`. 이슈 번호 대신 **FR 번호**를 적는다(이슈 트래커를 안 쓰기로 했으므로).
+
+### 13.7 공용 파일과 계약 — 변경은 요청으로
+
+아래 파일은 **이승민만 수정한다.** 5명이 각자 올리는 구조에서 유일하게 겹칠 수 있는 파일들이므로 한 사람이 관리한다.
+
+| 파일 | 내용 |
+|---|---|
+| `backend/…/contract/**` | 모듈 간 인터페이스·DTO·이벤트 (§14) |
+| `backend/…/common/**` | 공통 응답·에러 코드·예외 처리 |
+| `docs/api-spec.yaml` | REST API 계약 |
+| `backend/build.gradle`, `backend/src/main/resources/application*.yml` | 의존성·공통 설정 |
+| `docker-compose.yml`, `.env.example`, `.gitignore`, `.github/**` | 인프라·CI |
+| `docs/PRD.md`, `README.md`, `CLAUDE.md` | 팀 문서 |
+
+**변경 요청 방법** — 단톡방에 한 줄:
+
+```
+[계약 변경 요청] 서준 / contract/route/RouteResult / sections에 duration(초) 추가 / 도착 예정 시각 계산에 필요
+[에러코드 요청]  임승현 / ErrorCode / VERIFY_CODE_EXPIRED 추가 / 만료와 불일치를 구분해 안내하려고
+[의존성 요청]    송준호 / build.gradle / spring-boot-starter-cache 추가 / 경로 캐시 @Cacheable 사용
+[.env 항목 요청] 임승현 / .env.example / JWT_SECRET, MAIL_USERNAME, MAIL_PASSWORD 추가
+```
+
+이승민은 **24시간 안에** 반영해 push 하고 "반영했음, pull 하세요"라고 공지한다. 급하면 요청자가 자기 모듈 안에 임시 필드·상수로 우회하고 나중에 계약으로 올린다.
+
+`frontend/package.json`은 **오승원**이 같은 방식으로 관리한다(송준호가 라이브러리를 추가해야 하면 요청). 단, Phase 0에서 지도·STOMP·MSW 등 알려진 의존성은 미리 넣어 두므로 요청은 드물 것이다.
+
+### 13.8 팀 리듬
+
+| 언제 | 무엇 | 진행 |
+|---|---|---|
+| **매주 1회, 30분, 온라인** (요일·시간은 팀에서 정함) | **통합 점검**: 전원이 그 자리에서 `git pull` → 실행 → 각자 자기 파트 3분 시연 → 막힌 것·요청할 것 | 서준(PM) |
+| 매월 마지막 통합 점검 | **데모 데이**: 각자 5분 시연 + 다음 달 목표 | 서준 |
+| 수시 | 단톡방. **막히면 3시간 안에 말한다.** 혼자 이틀 붙잡는 것이 팀에 가장 손해 | 전원 |
+
+통합 점검의 핵심은 **"지금 main을 받으면 도는가"를 매주 전원이 눈으로 확인하는 것**이다. 이게 리뷰를 대체한다.
+
+### 13.9 AI 코딩 어시스턴트 사용 규칙 (요약 — 상세는 `CLAUDE.md`)
+
+1. 첫 지시에 **이름을 밝힌다**: `나는 송준호야. docs/roles/송준호.md 읽고 다음 미완료 작업 진행해줘.`
+2. AI가 **내 폴더 밖 파일을 고치면 되돌린다.** 계약·공용 파일이 필요하면 AI는 §13.7 요청 문구를 대신 써 준다.
+3. **커밋 전에 빌드.** AI는 사용자 확인 없이 커밋·push 하지 않는다.
+4. **내가 설명 못 하는 코드는 올리지 않는다.** 이해가 안 되면 "이 코드 한 줄씩 초보도 알게 설명해줘".
+5. 실제 API 키·비밀번호를 AI 채팅에 붙이지 않는다.
+6. 카카오 API 필드명, Spring Boot 3.x 설정 문법은 AI가 자주 틀린다. §6과 공식 문서로 대조한다.
+
+### 13.10 코딩 컨벤션
 
 **Java**
-- Google Java Style (IntelliJ 설정 파일을 `/docs`에 공유)
-- 패키지 구조는 §9.2를 따른다
-- **문자열 비교는 반드시 `.equals()` 사용.** `==` 사용 금지 — 동성 매칭 필터, 목적지 문자열 비교 등에서 논리 오류 원천 차단 *(원 계획서 명시 제약)*
-- **문자열 파싱은 `StringTokenizer` 사용** *(원 계획서 명시 제약)*
-  > 참고: `StringTokenizer`는 Java 공식 문서상 레거시 클래스로, 신규 코드에는 `String.split()`이 권장됩니다. 이 규칙이 교과목 요구사항이 아니라면 담당 교수님·멘토와 한 번 확인해 보시길 권합니다. 요구사항이라면 그대로 준수하되, 백서에 "명시적 제약 조건" 으로 기록해 두면 좋습니다.
-- 예외는 `common/exception`의 커스텀 예외 + `@RestControllerAdvice`로 일괄 처리
-- 금액 계산은 `int`(원 단위) 또는 `BigDecimal`. `double` 금지
+- Google Java Style
+- **문자열 비교는 반드시 `.equals()`. `==` 금지** (팀 명시 제약)
+- **문자열 파싱은 `StringTokenizer` 사용** (팀 명시 제약 — 교과 요구사항이면 준수, 아니면 `String.split()` 권장. 백서에 "명시적 제약"으로 기록)
+- 금액은 `int`(원) 또는 `BigDecimal`. **`double`/`float` 금지** (좌표·거리·비율은 `double` 허용)
+- 예외는 `common/exception`의 `BusinessException` + `ErrorCode`. `RuntimeException` 직접 throw 금지
+- Lombok 사용. 엔티티는 `@NoArgsConstructor(access = PROTECTED)`, setter 대신 의도가 드러나는 메서드
+- Service는 인터페이스 없이 클래스 단일 구현. 인터페이스는 `contract/`의 port에만 둔다
+- 주석·커밋 메시지는 한국어, 식별자는 영어
 
 **TypeScript / React**
-- ESLint + Prettier (pre-commit hook으로 강제)
-- 컴포넌트는 함수형 + 명명 export
-- API 타입은 OpenAPI 스펙에서 자동 생성 (`openapi-typescript`)
+- ESLint + Prettier (`npm run lint`가 CI에서 돈다)
+- 함수형 컴포넌트, 명명 export, `any` 금지
+- API 타입은 `src/generated/api.d.ts`(자동 생성)만 사용. 손으로 중복 정의 금지
+- 서버 상태는 TanStack Query, 클라이언트 상태는 Zustand
+- 모바일 우선. 터치 영역 44px 이상
 
-### 13.5 스프린트 운영
-
-| 항목 | 내용 |
-|---|---|
-| 주기 | 2주 |
-| 도구 | GitHub Projects (Backlog / Todo / In Progress / In Review / Done) |
-| 스프린트 플래닝 | 격주 월요일 — 이슈 생성 및 담당자 배정 |
-| 데일리 스크럼 | 주 2회(화·금) 15분, 온라인 — 어제 한 일 / 오늘 할 일 / 막힌 것 |
-| 스프린트 리뷰 | 격주 금요일 — 데모 + 회고, `/docs/retrospective`에 기록 |
-
-### 13.6 협업의 핵심 — API 계약 우선 개발
-
-프론트엔드(오승원)와 백엔드(이승민·임승현)가 서로를 기다리지 않기 위해:
-
-1. 스프린트 시작 시 **`docs/api-spec.yaml`에 엔드포인트 스펙부터 합의·확정**한다.
-2. 프론트엔드는 MSW(Mock Service Worker)로 목 서버를 띄워 병렬 개발한다.
-3. 스펙 변경은 반드시 PR로 진행하고 전원에게 공지한다. **구두 변경 금지.**
-
-### 13.7 환경 설정
+### 13.11 환경 설정
 
 ```bash
-git clone <repo> && cd we-meet
-cp .env.example .env       # 카카오 키 등 입력
-docker compose up -d       # MySQL + Redis 기동
-cd backend && ./gradlew bootRun
-cd frontend && npm i && npm run dev
+git clone https://github.com/imkingjunho/stole_g-ride.git && cd stole_g-ride
+cp .env.example .env               # 카카오 키 등 입력 (Windows: copy .env.example .env)
+docker compose up -d --wait        # MySQL + Redis
+cd backend  && ./gradlew bootRun   # → http://localhost:8080/swagger-ui.html
+cd frontend && npm install && npm run dev   # → http://localhost:5173  (기본은 MSW 목 모드)
 ```
 
-- **비밀 키는 절대 커밋하지 않는다.** `.env`는 `.gitignore`에 포함, 팀 공유는 별도 채널로.
-- 카카오 REST 키는 백엔드 환경변수에만 존재한다.
+- 비밀 키는 절대 커밋하지 않는다. `.env`는 `.gitignore`에 있고, 실제 키는 단톡방이 아닌 별도 채널로 받는다.
+- 프론트 `.env`: `VITE_API_MODE=mock|real` 로 MSW와 실서버를 전환한다. `VITE_KAKAO_JS_KEY`는 JS 키(도메인 제한 필수).
 
-### 13.8 AI 코딩 어시스턴트 기반 역할별 작업 체계
+---
 
-각 팀원이 저장소를 pull한 뒤 AI에게 **"내 역할의 다음 작업을 진행해줘"** 한 마디로 자기 몫을 이어갈 수 있도록, 저장소에 역할 정의 파일을 둔다.
+## 14. 모듈 간 계약 (Contract) — 동결 목록
 
-#### 13.8.1 동작 방식
+> `backend/src/main/java/com/gachiga/contract/`는 **Phase 0에서 이승민이 이 장을 그대로 코드로 옮겨 만들고, 이후 동결**한다. 모듈 사이에 오가는 것은 여기 있는 것이 전부다. 변경은 §14.8 절차로만.
 
-```
-we-meet/
-├── CLAUDE.md                  # AI가 세션 시작 시 자동으로 읽는 공통 규칙
-└── docs/
-    ├── roles/
-    │   ├── 서준.md            # 개인 작업 지시서 (담당 FR, 순서, 완료 기준)
-    │   ├── 이승민.md
-    │   ├── 임승현.md
-    │   ├── 송준호.md
-    │   └── 오승원.md
-    └── PRD.md                 # 이 문서
-```
-
-- `CLAUDE.md`는 **모든 팀원에게 공통 적용**되는 규칙(코딩 컨벤션, 금지사항, 참조 문서)을 담는다.
-- `docs/roles/{이름}.md`는 **그 사람의 담당 FR·패키지·작업 순서·완료 기준**을 담는다.
-
-#### 13.8.2 사용법
-
-> ⚠️ **중요:** AI는 git 이력이나 로그인 정보로 "지금 이 사람이 누구인지"를 자동으로 알지 못한다. **첫 지시에 자기 이름을 반드시 밝혀야 한다.**
-
-```
-✅ 올바른 지시
-"나는 이승민이야. docs/roles/이승민.md 읽고 내 역할의 다음 미완료 작업을 진행해줘."
-
-❌ 동작하지 않는 지시
-"내 역할 구현해줘."          → AI가 '내'가 누구인지 모름
-"이승민 역할 구현해줘."      → 파일을 안 읽고 이름만 보고 추측할 수 있음
-```
-
-**선택 사항 — 이름 생략하기.** `CLAUDE.md`에 다음 규칙을 넣으면 git 설정으로 자동 식별이 가능하다. 다만 각자 `git config user.name`을 실제 이름으로 정확히 설정해 두어야 하고, 100% 보장되는 방식은 아니므로 **첫 지시에는 이름을 직접 밝히는 것을 권장**한다.
-
-```markdown
-## 작업자 식별
-사용자가 이름을 밝히지 않았다면 `git config user.name`을 실행해
-docs/roles/ 아래 해당 이름의 파일을 읽는다.
-일치하는 파일이 없으면 추측하지 말고 사용자에게 이름을 물어본다.
-```
-
-#### 13.8.3 전형적인 작업 흐름
-
-```bash
-git checkout develop && git pull            # 1. 최신 코드 동기화
-```
-```
-2. AI에게: "나는 임승현이야. docs/roles/임승현.md 읽고 다음 작업 진행해줘."
-3. AI가 미완료 체크리스트 확인 → 브랜치 생성 → 구현 → 테스트 작성
-4. 본인이 코드 검토 및 로컬 실행 확인      ← 생략 금지
-5. 커밋·푸시 후 PR 생성, 리뷰어 지정
-```
-
-### 13.9 AI 병렬 작업 시 반드시 지킬 것
-
-5명이 각자 AI로 코드를 만들면 **서로 다른 다섯 벌의 컨벤션이 생긴다.** 이를 막기 위한 규칙이다.
-
-#### 13.9.1 공유 기반은 먼저 얼린다
-
-8월 첫 스프린트에서 **전원이 모여** 다음을 확정하고, 이후에는 PR 없이 변경하지 않는다.
-
-| 대상 | 내용 | 오너 |
-|---|---|---|
-| `common/response/ApiResponse.java` | 공통 응답 래퍼 | 이승민 |
-| `common/exception/` | 예외 계층 및 에러 코드 enum | 이승민 |
-| `config/` | Security, WebSocket, Jackson 설정 | 이승민 |
-| `docs/api-spec.yaml` | API 계약 | 서준(중재) |
-| `db/migration/` | 스키마 | 임승현 |
-| `build.gradle` / `package.json` | 의존성 | 이승민 / 오승원 |
-
-**이 파일들을 AI가 임의로 수정하는 것이 가장 흔한 충돌 원인이다.** `CLAUDE.md`에 "위 파일은 담당자 승인 없이 수정 금지"를 명시한다.
-
-#### 13.9.2 남의 패키지가 필요할 때
-
-AI에게 다른 사람 담당 코드를 만들게 하지 않는다. 대신:
-
-```
-1. 필요한 기능을 Java 인터페이스로 정의한다 (자기 패키지 안에)
-2. 테스트용 Stub 구현을 만들어 개발을 진행한다
-3. 실제 구현이 필요한 사람에게 이슈로 요청한다
-```
-
-예: 서준이 매칭 엔진을 만들 때 카카오 API가 아직 없다면
+### 14.1 port 인터페이스
 
 ```java
-// matching 패키지 안에 인터페이스만 정의
-public interface RouteProvider {
-    RouteResult findRoute(Coordinate origin, List<Coordinate> waypoints, Coordinate dest);
+// ── contract/route ─────────────────────────────────────────────
+public record Coordinate(double lat, double lng) {}
+
+public record RouteResult(
+        int totalFare,            // 원. summary.fare.taxi
+        int totalDistance,        // m
+        int totalDuration,        // 초
+        List<Section> sections,   // 경유지 N개 → N+1개. 순서대로
+        boolean estimated,        // true = 카카오 실패로 fallback 추정치
+        String rawJson) {         // 카카오 응답 원본 (없으면 null)
+    public record Section(int distance, int duration, List<Coordinate> path) {}
 }
-// 송준호가 route 패키지에서 KakaoRouteProvider로 구현
-// 그 전까지 서준은 FixedRouteProvider(테스트용)로 개발 진행
+
+public interface RouteProvider {
+    /** origin → waypoints(순서대로 하차) → destination. 실패해도 예외 대신 estimated=true 로 돌려준다. */
+    RouteResult findRoute(Coordinate origin, List<Coordinate> waypoints, Coordinate destination);
+}
+
+public record HubInfo(Long id, String name, double lat, double lng, String type) {}
+
+public interface HubPort {
+    Optional<HubInfo> findById(Long hubId);
+    List<HubInfo> findAll();
+}
+
+// ── contract/user ──────────────────────────────────────────────
+public enum Gender { M, F }
+public enum UserStatus { ACTIVE, SUSPENDED }
+public record UserSummary(Long id, String nickname, Gender gender, UserStatus status) {}
+
+public interface UserPort {
+    Optional<UserSummary> findById(Long userId);
+}
+
+// ── contract/ride ──────────────────────────────────────────────
+public record WaitingRequest(
+        Long requestId, Long userId, Long hubId,
+        Coordinate destination, String destName,
+        LocalDateTime departAt, LocalDateTime expiresAt, LocalDateTime createdAt,
+        boolean sameGenderOnly, BigDecimal maxDetourRatio,
+        int soloDistance, int soloFare, int version) {}
+
+public interface RideRequestPort {
+    /** status=WAITING 이고 만료 30초 이상 남은 요청 전체 (E-04). matching 이 tick 마다 호출 */
+    List<WaitingRequest> findWaiting();
+    /** WAITING → MATCHED. 낙관적 락 실패(이미 다른 그룹에 배정) 시 false (E-02) */
+    boolean tryMarkMatched(Long requestId, int version);
+    /** 그룹 해체 → 재대기열 */
+    void markWaiting(Long requestId);
+    void markConfirmed(Long requestId);
+    void markCompleted(Long requestId);
+}
+
+public record QueueStatus(Long requestId, String status, int remainingSeconds, int candidateCount) {}
+
+public interface QueueStatusPort {
+    /** 사용자의 진행 중 요청 상태. 없으면 empty. realtime 이 5초마다 호출 */
+    Optional<QueueStatus> statusOf(Long userId);
+}
+
+// ── contract/matching ──────────────────────────────────────────
+public interface MatchHistoryPort {
+    boolean isMember(Long groupId, Long userId);        // 채팅 구독 인가, 신고 검증
+    List<Long> memberUserIds(Long groupId);
+}
+
+// ── contract/auth ──────────────────────────────────────────────
+/** 컨트롤러 파라미터에 붙이면 현재 사용자 id(Long)가 주입된다. 리졸버 구현은 auth/ 소유 */
+@Target(ElementType.PARAMETER) @Retention(RetentionPolicy.RUNTIME)
+public @interface CurrentUser {}
 ```
 
-이 방식 덕분에 **송준호의 API 연동이 끝나기 전에도 서준은 알고리즘을 완성할 수 있다.** 5인 팀에서 서로 기다리지 않게 만드는 가장 중요한 장치다.
+**누가 만들고 누가 쓰나**
 
-#### 13.9.3 마이그레이션 파일 충돌 방지
-
-여러 명이 동시에 스키마를 건드리면 파일명이 겹친다. 명명 규칙:
-
-```
-V{날짜}_{순번}__{설명}.sql
-예) V20260901_01__create_users.sql
-    V20260901_02__create_ride_requests.sql
-```
-
-스키마 변경은 **임승현에게 요청 후 진행**한다. 각자 만들지 않는다.
-
-### 13.10 AI 사용 시 주의사항
-
-| 항목 | 내용 |
-|---|---|
-| **코드 이해 없는 머지 금지** | 자기가 설명하지 못하는 코드는 PR에 올리지 않는다. 면접에서 "이 부분 왜 이렇게 했어요?"에 답하지 못하면 포트폴리오로서 가치가 없다 |
-| **AI 생성 코드도 리뷰 대상** | "AI가 짰으니 맞겠지"는 통하지 않는다. 특히 §5 정산 로직은 반드시 손으로 검산한다 |
-| **테스트는 직접 설계** | 무엇을 검증해야 하는지는 사람이 정한다. AI에게는 "이 케이스를 검증하는 테스트"라고 구체적으로 지시한다 |
-| **환각 주의 영역** | 카카오 API 필드명, Spring Boot 3.x 설정 문법은 AI가 자주 틀린다. §6과 공식 문서로 대조 확인한다 |
-| **비밀 키 입력 금지** | 실제 API 키를 AI에게 붙여넣지 않는다. `.env.example`에는 항상 placeholder만 둔다 |
-
----
-
-## 14. 로드맵
-
-> 원 계획서는 7월 시작 기준이었으나 현재(8월 중순) 기준으로 5개월 일정으로 재편성했습니다.
-
-| 기간 | 마일스톤 | 주요 산출물 | 주담당 |
-|---|---|---|---|
-| **8월** | 기반 구축 | 저장소·CI 세팅, ERD 확정, API 명세 v1, Docker 환경, 4대 거점 데이터 구축 | 전원 |
-| **9월** | 인증 + 요청 플로우 | 웹메일 인증·JWT(임승현), 매칭 요청 CRUD·대기열(이승민), 카카오 클라이언트·캐싱(송준호), 프론트 기반 구조(오승원), 알고리즘 오프라인 프로토타입(서준) | 전원 |
-| **10월** | 매칭 엔진 + 정산 | §5 알고리즘 및 정산 본구현(서준), 스케줄러 연동(이승민), **채팅 착수**(임승현), **지도 컴포넌트 착수**(송준호), 매칭 화면(오승원) | 전원 |
-| **11월** | 통합 + 실시간 | 엔드투엔드 통합·성능 튜닝(이승민), WebSocket 채팅 완성(임승현), 경로 시각화 완성(송준호), 정산·채팅 화면(오승원) | 전원 |
-| **12월** | 베타 테스트 + 백서 | 교내 베타 테스트(30명 목표, 오승원 총괄), 부하 테스트(이승민), 절감 지표 산출(송준호), 기술 백서(서준) | 전원 |
-
-**월별 데모 데이:** 매월 말 전원이 자기 파트를 5분씩 시연한다. 진척 관리와 발표 연습을 겸한다.
-
----
-
-## 15. 성과 지표
-
-| 지표 | 목표 | 측정 방법 |
+| 인터페이스 | 구현(제공) | 사용 |
 |---|---|---|
-| 매칭 성사율 | ≥ 60% | 성사 그룹 수 / 전체 요청 수 |
-| 평균 요금 절감률 | ≥ 40% | (단독 요금 − 분담액) / 단독 요금 |
-| 평균 매칭 대기시간 | ≤ 5분 | 요청 생성 ~ 그룹 확정 |
-| 정산 정확도 | 오차 0원 | 자동화 테스트 |
-| API 응답 P95 | < 500ms | k6 부하 테스트 |
-| 베타 만족도 | ≥ 4.0 / 5.0 | 설문 |
-| 테스트 커버리지 | 핵심 패키지 80% | JaCoCo |
+| `RouteProvider` | 송준호 `route/` | 서준(조합 평가), 이승민(단독 요금 캐시) |
+| `HubPort` | 송준호 `route/` | 서준(출발 좌표), 이승민(요청 검증) |
+| `UserPort` | 임승현 `user/` | 서준(성별 필터), 임승현 `realtime/`(닉네임) |
+| `RideRequestPort` | 이승민 `ride/` | 서준(대기열 읽기·상태 변경) |
+| `QueueStatusPort` | 이승민 `ride/` | 임승현 `realtime/`(대기 상태 push) |
+| `MatchHistoryPort` | 서준 `matching/` | 임승현 `realtime/`(채팅 인가), `user/`(신고 검증) |
+| `@CurrentUser` 리졸버 | 임승현 `auth/` | 컨트롤러 전부 |
+
+### 14.2 이벤트 (`contract/event/`)
+
+Spring `ApplicationEventPublisher`로 발행하고 `@TransactionalEventListener(phase = AFTER_COMMIT)`로 받는다. **수신 측이 실패해도 발행 측 트랜잭션은 깨지지 않는다**(수신 측은 try/catch + 로그).
+
+```java
+public record RideRequestCreated(Long requestId, Long userId, Long hubId) {}
+public record RideRequestCancelled(Long requestId, Long userId) {}
+public record RideRequestExpired(Long requestId, Long userId) {}
+
+public record GroupProposed(Long groupId, List<Long> userIds) {}      // 그룹 생성, 수락 대기 (P1). P0에서는 Confirmed 와 연달아 발행
+public record GroupConfirmed(Long groupId, List<Long> userIds) {}     // 전원 수락 → 채팅방 개설 트리거
+public record GroupRecalculated(Long groupId, List<Long> userIds) {}  // E-01 재계산 → 재동의 요청
+public record GroupDissolved(Long groupId, List<Long> userIds, String reason) {}
+public record GroupCompleted(Long groupId, List<Long> userIds) {}
+```
+
+| 이벤트 | 발행 | 수신 |
+|---|---|---|
+| `RideRequest*` | 이승민 `ride/` | 임승현 `realtime/`(대기 화면 갱신) |
+| `Group*` | 서준 `matching/` | 임승현 `realtime/`(매칭 알림 push, 채팅방 개설·시스템 메시지·삭제 예약), 이승민 `ride/`(요청 상태 정리) |
+
+### 14.3 공통 응답·에러 (`common/`)
+
+`ApiResponse<T> { success, data, error }`, `ApiError { code, message }`, `ErrorCode` enum(§8), `BusinessException(ErrorCode)`, `@RestControllerAdvice` 전역 처리. 모든 컨트롤러는 `ApiResponse<T>`를 반환한다.
+
+### 14.4 REST API 계약 — `docs/api-spec.yaml`
+
+§8 표의 모든 엔드포인트에 대해 요청·응답 스키마를 OpenAPI 3로 기술한다. Phase 0 산출물. 프론트는 `npm run gen:api`로 `src/generated/api.d.ts`를 만들고, 백엔드는 구현 후 Swagger(`/v3/api-docs`)와 대조한다. **스펙과 구현이 다르면 구현이 틀린 것이다.**
+
+핵심 응답 형태(그룹 상세 — 성사·정산 화면의 데이터):
+
+```json
+{
+  "groupId": 17, "status": "CONFIRMED", "estimated": false,
+  "hub": { "id": 2, "name": "전남대 후문", "lat": 35.1760, "lng": 126.8977 },
+  "totalFare": 15000, "totalDistance": 10000, "totalDuration": 1320,
+  "route": { "sections": [ { "distance": 3000, "duration": 400, "path": [ {"lat": 35.17, "lng": 126.89}, ... ] } ] },
+  "members": [
+    { "userId": 1, "nickname": "후문호랑이", "isMe": true, "boardingOrder": 1, "dropoffOrder": 1,
+      "destName": "경신여고", "shareAmount": 1500, "soloFare": 5600, "savingAmount": 4100, "detourRatio": 0.02, "accepted": true }
+  ],
+  "acceptDeadline": "2026-10-20T08:31:00"
+}
+```
+
+### 14.5 WebSocket 프로토콜 (STOMP over WebSocket, `/ws`)
+
+| 항목 | 값 |
+|---|---|
+| 엔드포인트 | `ws://host/ws` (SockJS 미사용) |
+| 인증 | STOMP `CONNECT` 프레임 헤더 `Authorization: Bearer {accessToken}`. 실패 시 연결 거부 |
+| 구독 `/user/queue/status` | 내 대기 상태. 5초마다 + 변경 즉시. 본문 = `QueueStatus` JSON |
+| 구독 `/user/queue/match` | 매칭 알림. `{ "type": "PROPOSED" \| "CONFIRMED" \| "RECALCULATED" \| "DISSOLVED" \| "COMPLETED", "groupId": 17, "message": "…" }` |
+| 구독 `/topic/chat/{groupId}` | 채팅 수신. 그룹 멤버만 구독 가능(서버가 거부). 본문 = `ChatMessage` |
+| 발신 `/app/chat/{groupId}` | `{ "type": "TEXT" \| "QUICK", "content": "…" }` |
+| `ChatMessage` | `{ "id", "groupId", "senderId", "senderNickname", "type": "TEXT"\|"QUICK"\|"SYSTEM", "content", "createdAt" }` |
+
+프론트 개발 모드(`VITE_API_MODE=mock`)에서는 `shared/ws`의 가짜 클라이언트가 위 메시지를 타이머로 흘려 준다(오승원).
+
+### 14.6 프론트 계약
+
+**라우트** (Phase 0에서 전부 등록. 각 화면은 처음엔 제목만 있는 placeholder)
+
+| 경로 | 화면 | 담당 |
+|---|---|---|
+| `/login`, `/signup`, `/signup/verify`, `/signup/profile` | 인증 | 오승원 |
+| `/` → `/request` | 매칭 요청 | 송준호 |
+| `/waiting` | 대기 | 송준호 |
+| `/groups/:groupId` | 매칭 성사·정산 상세 | 오승원 |
+| `/groups/:groupId/chat` | 채팅 | 오승원 |
+| `/history`, `/me` | 이력·대시보드·프로필 | 오승원 |
+
+**공유 모듈** (`src/shared/`, 오승원 소유. Phase 0에서 초기 버전 제공)
+- `api/client.ts` — `openapi-fetch` 클라이언트, 토큰 헤더, 401 시 refresh 후 재시도
+- `stores/authStore.ts` — `{ accessToken, user, setTokens(), logout() }`
+- `ws/stompClient.ts` — `connect()`, `subscribe(dest, cb)`, `send(dest, body)`; mock 모드 자동 전환
+- `mocks/handlers.ts` — MSW 핸들러(api-spec 전체의 happy path)
+
+**지도 컴포넌트 props** (`features/map/`, 송준호 제공 → `features/group/`, 오승원 사용)
+
+```ts
+export interface LatLng { lat: number; lng: number }
+export interface Stop { order: number; kind: 'PICKUP' | 'DROPOFF'; position: LatLng; label: string }
+export interface RouteMapProps {
+  sections: { path: LatLng[] }[];   // 그룹 상세 응답의 route.sections 그대로
+  stops: Stop[];                    // 탑승 1개 + 하차 N개
+  className?: string;
+}
+export function RouteMap(props: RouteMapProps): JSX.Element;
+
+export interface DestinationPickerProps {
+  value: (LatLng & { name: string }) | null;
+  onChange: (v: LatLng & { name: string }) => void;
+}
+export function DestinationPicker(props: DestinationPickerProps): JSX.Element;
+```
+
+### 14.7 Phase 0 스텁 목록 — 누가 무엇으로 바꾸나
+
+스텁은 **미래 소유자의 폴더 안에** 만든다. 그래야 소유자가 자기 폴더만 고쳐서 교체할 수 있다.
+
+| 스텁 | 위치 | Phase 0 동작 | 교체 담당 · 시점 |
+|---|---|---|---|
+| `DevSecurityConfig` + `DevCurrentUserResolver` | `auth/` | 전부 `permitAll`. `@CurrentUser` = 요청 헤더 `X-Dev-User`(기본 1) | 임승현 · Phase 1 (JWT 필터·실제 리졸버로) |
+| `StubUserAdapter implements UserPort` | `user/` | id 1~4 고정 사용자(닉네임·성별) | 임승현 · Phase 1 |
+| `EstimatedRouteProvider implements RouteProvider` | `route/` | Haversine × 1.3 + 광주 택시 요금표, `estimated=true` | 송준호 · Phase 1 (`KakaoRouteProvider` 추가, **이 클래스는 fallback으로 유지**) |
+| `StaticHubAdapter implements HubPort` | `route/` | 거점 6개 하드코딩 | 송준호 · Phase 1 (DB + 시드) |
+| `InMemoryRideRequestAdapter implements RideRequestPort, QueueStatusPort` | `ride/` | 인메모리 리스트 | 이승민 · Phase 1 (JPA + Redis) |
+| `StubMatchHistoryAdapter implements MatchHistoryPort` | `matching/` | 항상 `true` / 빈 리스트 | 서준 · Phase 1 |
+| `WebSocketConfig` (기본 브로커, 인증 없음) | `realtime/` | 연결·구독만 됨, push 없음 | 임승현 · Phase 1 |
+| `ArchitectureTest` | `common/` | 모듈 경계 검사 (스텁 아님, 상시) | 이승민 유지 |
+| MSW 핸들러 | `frontend/src/shared/mocks/` | api-spec 전체 happy path | 오승원 · 상시 유지 |
+| placeholder 페이지 | `frontend/src/features/*/` | 라우트마다 제목만 | 각 화면 담당 · Phase 1 |
+
+**교체 규칙:** 스텁을 지우고 진짜를 넣는다. 둘을 같이 두려면 진짜에 `@Primary`를 붙인다. 스텁이 남아 있는 화면·API에는 `DEV` 배지/로그를 남겨 시연 때 헷갈리지 않게 한다(E-11).
+
+### 14.8 계약 변경 절차
+
+1. 필요한 사람이 단톡방에 `[계약 변경 요청]` 한 줄(§13.7).
+2. 이승민이 영향 받는 사람(구현자·사용자)에게 확인 — 보통 2명, 5분.
+3. 이승민이 `contract/`·`api-spec.yaml`을 고쳐 push → "반영했음, pull 하세요".
+4. 영향 받는 사람은 pull 후 빌드가 깨지면 자기 폴더를 맞춘다(보통 한 줄).
+
+**추가는 쉽고 변경·삭제는 어렵다.** 필드 추가는 기존 코드를 깨지 않으므로 바로 반영한다. 필드 이름 변경·삭제·시그니처 변경은 영향 받는 사람이 같은 날 맞출 수 있을 때만 한다.
 
 ---
 
-## 16. 리스크 및 대응
+## 15. 로드맵 (2026-09-21 ~ 12월 중순)
+
+### 15.1 단계
+
+| 단계 | 기간 | 목표 | 마일스톤 |
+|---|---|---|---|
+| **Phase 0 — 뼈대** | 9/21(월) ~ 9/27(일), 1주 | 이승민이 §9·§14를 코드로 옮긴다. 나머지 4명은 환경 세팅 + 첫 push 연습 | **M0**: `main`을 clone → `docker compose up` → `bootRun` → Swagger 뜸 / `npm run dev` → 모든 화면이 placeholder+MSW로 클릭 가능 / CI 초록 / ArchUnit 통과 |
+| **Phase 1 — P0 (스텁 → 진짜)** | 9/28 ~ 10/25, 4주 | 각자 P0 항목 전부. 수락 단계 없이 **자동 성사** | **M1**: 실서버로 §3.2 시나리오 한 바퀴 — 두 계정이 같은 거점에서 요청 → 30초 내 매칭 → 실제 카카오 경로·요금 → 지도 + 분담액 → 채팅 → 완료 |
+| **Phase 2 — P1 + 안정화** | 10/26 ~ 11/22, 4주 | 수락/거절, 대기 상태 push, 우회 할인, 퀵 메시지, 마스킹, 이력, 지도 완성도, 엣지 케이스(§11) | **M2**: 3~4인 매칭 시연, E-01·E-03·E-09 재현 시연, 모바일 뷰 깨짐 없음 |
+| **Phase 3 — 베타·마무리** | 11/23 ~ 12/13, 3주 | 교내 베타 30명, 부하 테스트, P2(여유 시), 백서·발표 자료 | **M3**: 12/13 코드 프리즈. 절감률·성사율 실측치 확보 |
+| **최종 발표** | 12월 3주 (12/14~18, 학교 일정에 맞춰 확정) | | |
+
+### 15.2 Phase 0 상세 — 이승민 (팀 전체의 출발선)
+
+| 순서 | 산출물 | 완료 기준 |
+|---|---|---|
+| 0-1 | `develop` 브랜치 삭제, `.github/workflows/ci.yml`, README 배지 | main push 시 백엔드·프론트 빌드가 돌고 결과가 보인다 |
+| 0-2 | `common/` — `ApiResponse`, `ApiError`, `ErrorCode`, `BusinessException`, `GlobalExceptionHandler`, `GeoUtils`(Haversine) | 검증 실패·비즈니스 예외·500이 모두 `ApiResponse` 형태로 나온다 |
+| 0-3 | `contract/` — §14.1·§14.2 전부 | 컴파일. Javadoc에 계약 의미 기술 |
+| 0-4 | 스텁 전부(§14.7) 각 폴더에 배치 | 스텁만으로 `bootRun` 성공, Swagger에 스텁 API 노출 |
+| 0-5 | `config/` — Jackson, Redis, Swagger(JWT 헤더 입력 UI), CORS(5173), `spring.config.import` + `domain/*.yml` 4개(빈 파일) | 각자 자기 yml에 설정을 넣으면 읽힌다 |
+| 0-6 | `application.yml` `ddl-auto: update`, test 프로파일 정리 | `./gradlew build`가 DB 없이 통과 |
+| 0-7 | `common/ArchitectureTest` (ArchUnit) | `matching`이 `ride.RideRequest`를 import 하면 빌드 실패하는 것을 확인 |
+| 0-8 | `docs/api-spec.yaml` v1 — §8 전체 엔드포인트 스키마 | `npm run gen:api` 성공 |
+| 0-9 | `frontend/` — Vite+React+TS, Tailwind, Router, TanStack Query, Zustand, `openapi-fetch`, `openapi-typescript`, MSW, `@stomp/stompjs`, `react-kakao-maps-sdk`, ESLint+Prettier. §14.6 라우트 전부 + placeholder 페이지 + `shared/` 초기 버전 + MSW 핸들러 | `npm run dev`로 §3.2 시나리오를 목으로 끝까지 클릭 |
+| 0-10 | 이 문서 기준으로 `README.md`·`CLAUDE.md`·`docs/roles/*.md` 정합성 확인, 단톡방에 "Phase 0 끝, 시작하세요" | 전원이 clone 후 M0 재현 |
+
+**Phase 0 동안 나머지 4명:** 설치·clone·실행(README 1단계), `docs/roles/내이름.md`와 이 문서 §12·§13·§14 읽기, **첫 push 연습** — `docs/roles/내이름.md`의 "환경 세팅 완료" 체크박스를 `[x]`로 바꿔 §13.4 루틴으로 main에 올려 본다.
+
+### 15.3 사람별 Phase 목표 (요약 — 상세 체크리스트는 `docs/roles/`)
+
+| | Phase 1 (10/25) — P0 | Phase 2 (11/22) — P1 | Phase 3 (12/13) |
+|---|---|---|---|
+| **이승민** | `RideRequest` JPA + Redis 대기열, 요청 생성·취소·조회 API, 만료 스케줄러, `RideRequestPort`·`QueueStatusPort` 실구현 | 데모 시뮬레이터(가상 요청 투입, local 전용), N+1 제거, 통합 점검(api-spec ↔ Swagger 대조) | k6 부하 테스트(P95<500ms), `docs/schema.sql` 추출·`validate` 전환, 베타 배포, `docs/performance.md` |
+| **서준** | 정산기(§5.2)+합계 보존 테스트, 하드 필터, 클러스터링, 조합 평가, 점수화, `executeTick`, 그룹 생성·자동 성사, 그룹 상세·완료 API, 이벤트 발행 | 수락/거절 60초(FR-13), 해체·재계산(E-01), 우회 할인(§5.3), 이력 API, 시뮬레이션 1,000건 | 파라미터 튜닝, 통계 API(P2), 기술 백서, 발표 자료 총괄 |
+| **임승현** | `User` JPA, 웹메일 코드 발송·검증·잠금, BCrypt, JWT+Refresh 회전, `SecurityFilterChain`, `@CurrentUser` 실구현, `UserPort`, STOMP CONNECT 인증, 매칭 알림 push, 채팅 저장·브로드캐스트·자동 개설·조회 API, 3시간 물리 삭제 | 대기 상태 push(5초), 퀵 메시지, 연락처 마스킹, 로그아웃, 프로필 수정, E-10 | 신고·이용 제한(P2), 보안 자가 점검, WS 재접속 안정화 |
+| **송준호** | 거점 좌표 실측·`Hub` JPA·시드·`GET /api/hubs`, `KakaoRouteProvider`+fallback+캐시, 장소 검색 프록시, `useKakaoMap`·`RouteMap`·`DestinationPicker`, 요청 화면, 대기 화면(폴링 또는 목) | 호출량 제어·일일 카운터·캐시 적중률 로그, 대기 화면 WS 연동, 지도 완성도(bound·마커·추정치 배지), 목적지 클릭 미세 조정 | 트래픽 분석(공개 데이터)→튜닝 근거, 베타 절감률·성사율 산출 |
+| **오승원** | 디자인 토큰·공통 컴포넌트, API 클라이언트·인터셉터, 인증 3화면+로그인+라우트 가드, 매칭 성사 화면(절감액·순서·`RouteMap`), 채팅 화면, 법적 고지 | 60초 수락/거절 UI, 정산 상세 시각화, 이력·대시보드, 에러·빈 상태·추정치·`DEV` 배지, 반응형·접근성 | 베타 피드백 UX 반영(전후 기록), 발표 시연 흐름 |
+
+### 15.4 시연 정의
+
+**M1 시연 (10/25 주 통합 점검)**
+1. 브라우저 2개, 계정 A·B로 로그인 (실 JWT)
+2. A: 후문 → 광주송정역 요청 / B: 후문 → 송정역 인근 요청
+3. 30초 내 tick → 그룹 생성 → WS 알림 → 두 화면이 `/groups/:id`로 이동
+4. 실제 카카오 경로가 지도에 그려지고, 분담액·절감액이 표시된다 (`estimated=false`)
+5. 채팅 메시지 왕복, 채팅방 자동 개설 시스템 메시지 확인
+6. 탑승 완료 → 요청 COMPLETED, 3시간 뒤 채팅 삭제 예약 로그
+
+**M2 시연 (11/22 주)** — 3~4인 매칭, 1명 거절 → 재대기열, 1명 취소 → 재계산·재동의(E-01), 카카오 키를 틀리게 넣어 fallback·추정치 배지(E-03), 토큰 만료 후 자동 갱신(E-09), 360px 모바일 뷰.
+
+**최종 발표** — M2 시연 + 베타 실측 지표(절감률·성사율·만족도) + 각자 5분 파트 설명.
+
+---
+
+## 16. 성과 지표
+
+| 지표 | 목표 | 측정 방법 | 담당 |
+|---|---|---|---|
+| 매칭 성사율 | ≥ 60% | 성사 그룹 수 / 전체 요청 수 (베타 실측) | 송준호 |
+| 평균 요금 절감률 | ≥ 40% | (단독 요금 − 분담액) / 단독 요금 | 송준호 |
+| 평균 매칭 대기시간 | ≤ 5분 | 요청 생성 ~ 그룹 확정 | 서준 |
+| 정산 정확도 | 오차 0원 | 자동화 테스트 | 서준 |
+| API 응답 P95 | < 500ms | k6 부하 테스트 | 이승민 |
+| 베타 만족도 | ≥ 4.0 / 5.0 | 설문 (30명) | 서준·오승원 |
+| 테스트 커버리지 | `matching`·`fare` 80% | JaCoCo | 서준 |
+| **main 건강도** | CI 빨간 상태 24시간 이상 방치 0회 | GitHub Actions 이력 | 전원 |
+
+---
+
+## 17. 리스크 및 대응
 
 | 리스크 | 영향 | 대응 |
 |---|---|---|
-| 사용자 임계치 미달 (매칭 상대 부재) | 높음 | 베타 시 시간대·거점을 집중(등하교 피크 + 후문)해 밀도 확보. 예약 매칭(사전 등록) 기능 추가 검토 |
-| 카카오 API 무료 한도 초과 | 중간 | 캐싱, tick당 호출 상한, 조합 사전 필터링으로 호출 수 최소화 |
-| 인원 이탈에 따른 일정 지연 | 중간 | 도메인 오너십 + 크로스 리뷰로 버스 팩터 완화. 문서화 필수 |
-| 웹메일 인증 API 제공 불가 | 중간 | 학교 인증 API가 어려우면 `@jnu.ac.kr` 메일 발송 검증 방식으로 대체(이미 기본안) |
+| **Phase 0 지연** (이승민 한 사람에 집중) | 높음 — 4명이 대기 | 9/21~27은 이것만. 0-1~0-7(백엔드)을 먼저 끝내 백엔드 3명을 먼저 출발시키고, 0-8~0-9(프론트)는 그 다음. 27일까지 안 끝나면 오승원이 0-9를 자기 폴더에서 직접 진행 |
+| **main이 깨진 채 방치** | 높음 — 전원 작업 중단 | CI 메일 + 30분 규칙 + 누구나 revert (§13.5). 통합 점검에서 매주 확인 |
+| **계약 변경 병목** (이승민 응답 지연) | 중간 | 24시간 SLA. 급하면 자기 모듈 안에서 임시 우회 후 계약으로 승격. 추가는 즉시 반영 |
+| **스텁이 영원히 남는다** | 중간 — 시연이 가짜 | roles 체크리스트의 "스텁 교체" 항목, 화면 `DEV` 배지, M1에서 `estimated=false`·실 JWT를 명시적으로 확인 |
+| 남의 폴더를 AI가 고친다 | 중간 | CLAUDE.md 규칙 + `git status` 확인 습관 + ArchUnit(백엔드 import 위반) |
+| 사용자 임계치 미달 (매칭 상대 부재) | 높음 | 베타 시 시간대·거점 집중(등하교 피크 + 후문). 데모 시뮬레이터로 시연 보장 |
+| 카카오 API 무료 한도 초과 | 중간 | 캐싱, tick당 호출 상한, 조합 사전 필터링. 초과 시 fallback으로 시연 지속 |
+| 인원 이탈 | 중간 | 파트가 폴더로 분리되어 있어 인수인계 범위가 명확. roles 파일 = 인수인계 문서 |
+| 웹메일 발송 불가(SMTP 차단 등) | 중간 | Gmail 앱 비밀번호 등 대체 SMTP. 최악의 경우 local 프로파일에서 코드를 로그로 출력 |
 | 법적 이슈(운송 중개 오인) | 낮음~중간 | 호출·결제 기능 완전 배제, UI 고지 문구 상시 노출 |
-| 개인정보 이슈 | 중간 | 실명·연락처 미수집, 채팅 휘발성 처리, 최소 수집 원칙 문서화 |
+| 개인정보 이슈 | 중간 | 실명·연락처 미수집, 채팅 휘발성, 최소 수집 원칙 |
 
 ---
 
@@ -855,13 +1167,21 @@ V{날짜}_{순번}__{설명}.sql
 - 국토교통부 TIMS(택시운행정보관리시스템) — 격자별 영업통계, 노드링크 통행량
 - 광주광역시 빅데이터 통합플랫폼 — 교통·유동인구·대중교통 승하차 데이터
 
-## 부록 C. 원 계획서 대비 변경 사항
+## 부록 C. v1.0 → v2.0 변경 사항
 
-| 항목 | 변경 |
-|---|---|
-| 팀 구성 | 6인 → 5인 (서동연 이탈, 담당 업무 재분배) |
-| 백엔드 스택 | Java/FastAPI 혼재 → **Java 17 + Spring Boot 3.2 단일화** |
-| 지도/경로 | "Location API" → **카카오맵 SDK + 카카오모빌리티 길찾기 API** 확정 |
-| 정산 방식 | 거리 비례 1/N → **구간 분할 정산**으로 고도화 (§5.2) |
-| 일정 | 7~12월 → 8~12월 재편성 |
-| 제외 항목 | "토큰 사용량 절감", "AI API Gateway/LLMOps 시장 조사", "중복 질문 패턴" 등 본 서비스와 무관한 항목 삭제 |
+| 항목 | v1.0 | v2.0 |
+|---|---|---|
+| 브랜치 | `main` + `develop` + 기능 브랜치 | **`main` 하나** |
+| 코드 반영 | PR + 리뷰 1명 Approve + Squash merge | **빌드 통과 후 직접 push**. 리뷰 대신 CI·ArchUnit·주간 통합 점검 |
+| 이슈 | GitHub Issues + Projects | 사용 안 함. 커밋에 FR 번호, 할 일은 `docs/roles/` 체크박스 |
+| 선행 의존성 | `WORK-ORDER.md`의 🔴/🟡 그래프, AI가 선행 검사 후 정지 | **폐지.** Phase 0 계약·스텁으로 선행 의존성 자체를 제거 |
+| 모듈 간 참조 | 소비자가 자기 패키지에 인터페이스 정의 | **`contract/` 패키지에 집중, 동결**, 이승민 관리 |
+| 엔티티 관계 | 명시 없음 | **모듈 간 ID 참조만.** ArchUnit이 import 검사 |
+| DB 스키마 | Flyway 마이그레이션, 임승현 단독 관리, `ddl-auto: validate` | **`ddl-auto: update`**, 각자 자기 엔티티. 운영 전환 시 `schema.sql` |
+| WebSocket | `/ws/queue`(이승민) + `/ws/chat`(임승현), STOMP 설정 공유 | **`realtime/` 모듈 하나, 임승현.** 단일 `/ws` 엔드포인트 |
+| Security 설정 | `config/`(이승민) + 필터(임승현) 협의 | **`auth/`(임승현)로 통합** |
+| 설정 파일 | `application.yml` 공용 | `domain/{모듈}.yml` 사람별 분리 |
+| 파트 분배 | 1차·2차 도메인(시기별 인수), 프론트 1인 + 지도 인수 | **5파트 고정 20%.** 요청·대기 화면을 송준호가, 이력·통계 백엔드를 서준이, WebSocket 전체를 임승현이 |
+| 수락 단계 | P1 | P1 유지. **P0는 자동 성사**로 M1 단순화 |
+| 로드맵 | 8월 ~ 12월 (5개월) | **9/21 ~ 12월 중순 (12주), Phase 0~3** |
+| 회의 | 화·금 스크럼, 격주 스프린트 | **주 1회 통합 점검 30분** + 월말 데모 데이 |
