@@ -14,8 +14,9 @@ import org.springframework.context.annotation.Configuration;
  *
  * <p>시간대는 {@code Asia/Seoul} 로 고정한다. 서버가 어디서 돌든 같은 시각이 나와야 한다.
  *
- * <p>{@code application.yml} 에도 같은 설정이 있지만 여기에 코드로 두는 이유는, 설정 파일을
- * 누가 건드려도 규칙이 유지되게 하고 의도를 주석으로 남기기 위해서다.
+ * <p><b>Jackson 설정은 이 파일 하나에만 둔다.</b> {@code application.yml} 의
+ * {@code spring.jackson.*} 에 같은 값을 적으면 코드 쪽이 이겨서, yml 을 고친 사람이 왜 안 먹는지
+ * 찾느라 시간을 버린다. 그래서 yml 쪽은 비워 두었다.
  */
 @Configuration
 public class JacksonConfig {

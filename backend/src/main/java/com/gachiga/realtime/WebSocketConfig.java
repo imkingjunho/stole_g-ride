@@ -1,5 +1,6 @@
 package com.gachiga.realtime;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
@@ -29,14 +30,21 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 @EnableWebSocketMessageBroker
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
-    /** 프론트 개발 서버(Vite)에서 오는 연결만 허용한다. 배포 도메인은 Phase 3 에 추가한다 */
-    private static final String[] ALLOWED_ORIGINS = {
-        "http://localhost:5173", "http://127.0.0.1:5173"
-    };
+    /**
+     * 연결을 허용할 출처. {@code config/CorsConfig} 와 같은 값을 읽는다
+     * ({@code application.yml} 의 {@code gachiga.cors.allowed-origins}).
+     *
+     * <p>두 곳에 따로 적어 두면 배포 때 REST 만 열리고 {@code /ws} 는 막히는 일이 생긴다.
+     */
+    private final String[] allowedOrigins;
+
+    public WebSocketConfig(@Value("${gachiga.cors.allowed-origins}") String[] allowedOrigins) {
+        this.allowedOrigins = allowedOrigins;
+    }
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        registry.addEndpoint("/ws").setAllowedOrigins(ALLOWED_ORIGINS);
+        registry.addEndpoint("/ws").setAllowedOrigins(allowedOrigins);
     }
 
     @Override

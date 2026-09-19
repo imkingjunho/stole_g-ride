@@ -1,6 +1,8 @@
 # auth 모듈 설정 — 소유: 임승현 (PRD §9.2)
 #
-# 여기에는 gachiga.auth.* 아래에만 쓴다. application.yml 에는 쓰지 않는다 (CLAUDE.md §5).
+# 이 파일이 갖는 범위 (PRD §9.2): gachiga.auth.*, gachiga.chat.*, spring.mail.*
+# 그 밖의 것은 여기에 쓰지 않는다. application.yml 에도 쓰지 않는다 (CLAUDE.md §5).
+# ⚠️ 메일 비밀번호·JWT 시크릿은 값을 적지 말고 ${MAIL_PASSWORD} 처럼 환경변수로 참조한다 (CLAUDE.md §8).
 # 예정 항목: JWT 만료 시간, 허용 웹메일 도메인, spring.mail.*, gachiga.chat.* 등
 #
 # application.yml 의 spring.config.import 가 이 파일을 optional 로 읽는다.

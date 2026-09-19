@@ -28,14 +28,17 @@ spring:
         format_sql: true
         jdbc:
           time_zone: Asia/Seoul
-  jackson:
-    time-zone: Asia/Seoul
-    serialization:
-      write-dates-as-timestamps: false
 
 server:
   port: ${SERVER_PORT:8080}
   shutdown: graceful
+
+# 브라우저에서 우리 API 를 부를 수 있는 출처.
+# REST(config/CorsConfig)와 WebSocket 핸드셰이크(realtime/WebSocketConfig)가 이 한 줄을 함께 읽는다.
+# 배포 도메인이 생기면 여기에만 추가하면 둘 다 열린다 (Phase 3 T3-3).
+gachiga:
+  cors:
+    allowed-origins: http://localhost:5173,http://127.0.0.1:5173
 
 # 제목·인증 UI 등 상세 설정은 config/SwaggerConfig 에 있다
 springdoc:

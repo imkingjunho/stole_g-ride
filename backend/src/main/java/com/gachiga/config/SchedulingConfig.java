@@ -22,6 +22,11 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
  *
  * <p>빈 이름을 {@code taskScheduler} 로 두는 것이 중요하다. 컨텍스트에 스케줄러가 둘 이상일 때
  * 스프링은 이 이름을 보고 {@code @Scheduled} 가 쓸 것을 고른다.
+ *
+ * <p><b>알아 둘 것:</b> 이 컨텍스트에는 {@code Executor} 타입 빈이 있어 스프링 부트의
+ * {@code applicationTaskExecutor} 자동 구성이 물러난다. 그래서 {@code @Async} 나 MVC 비동기를
+ * 쓰면 요청마다 스레드를 새로 만드는 기본 실행기로 떨어지고 {@code spring.task.execution.*} 설정도
+ * 먹지 않는다. 비동기를 쓰기 시작할 때 전용 실행기 빈을 여기에 추가한다.
  */
 @Configuration
 @EnableScheduling

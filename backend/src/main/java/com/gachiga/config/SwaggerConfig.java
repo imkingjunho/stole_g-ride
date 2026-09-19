@@ -20,6 +20,11 @@ import org.springframework.context.annotation.Configuration;
  *
  * <p>운영 프로파일에서는 {@code application-prod.yml} 이 Swagger 를 통째로 끈다 — API 구조를
  * 외부에 공개할 이유가 없다.
+ *
+ * <p><b>공개 엔드포인트 표시(임승현 Phase 1):</b> 여기서 Bearer 인증을 <i>전역</i> 요구로 걸어 두었다.
+ * {@code docs/api-spec.yaml} 은 가입·인증·로그인·토큰 재발급 4개에 {@code security: []} 로 예외를
+ * 두었으므로, 해당 컨트롤러 메서드에 {@code @SecurityRequirements} 를 붙여야 Swagger 와 스펙이
+ * 일치한다. 붙이지 않으면 T2-2 스펙 대조에서 그 4개가 계속 불일치로 잡힌다.
  */
 @Configuration
 public class SwaggerConfig {

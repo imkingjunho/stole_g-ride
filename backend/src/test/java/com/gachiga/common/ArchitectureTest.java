@@ -42,8 +42,13 @@ class ArchitectureTest {
         "ride", "matching", "fare", "stats", "auth", "user", "realtime", "route"
     };
 
-    /** 어느 모듈에서나 써도 되는 공용 패키지 */
-    private static final String[] SHARED_PACKAGES = {"contract", "common", "config"};
+    /**
+     * 도메인 모듈이 import 해도 되는 패키지. CLAUDE.md §4·PRD §9.3 이 정한 대로 두 개뿐이다.
+     *
+     * <p>{@code config} 는 여기 없다. 스프링이 알아서 읽어 가는 설정 모음이지 라이브러리가 아니다 —
+     * 도메인 코드가 직접 import 할 일이 없다.
+     */
+    private static final String[] SHARED_PACKAGES = {"contract", "common"};
 
     private final JavaClasses classes =
             new ClassFileImporter()
@@ -55,7 +60,7 @@ class ArchitectureTest {
     @DisplayName("도메인 모듈은 다른 도메인 모듈을 import 하지 않는다")
     void domainModulesDoNotDependOnEachOther() {
         for (String module : DOMAIN_MODULES) {
-            String[] forbidden = otherModulePackages(module);
+            String[] forbidden = forbiddenPackagesFor(module);
 
             ArchRule rule =
                     noClasses()
@@ -67,7 +72,8 @@ class ArchitectureTest {
                             .because(
                                     module
                                             + " 모듈이 다른 모듈의 클래스를 직접 쓰고 있다. "
-                                            + "contract 의 port 인터페이스를 주입받아 쓰고, 필요한 port 가 없으면 "
+                                            + "허용되는 것은 contract 와 common 뿐이다. 다른 모듈의 기능이 "
+                                            + "필요하면 contract 의 port 를 주입받고, 필요한 port 가 없으면 "
                                             + "단톡방에 [계약 변경 요청]을 보낸다 (CLAUDE.md §3·§4)")
                             // fare·stats 처럼 아직 클래스가 없는 모듈이 있다. 그때는 검사할 것이 없을 뿐 위반은 아니다
                             .allowEmptyShould(true);
@@ -133,11 +139,15 @@ class ArchitectureTest {
         rule.check(classes);
     }
 
-    /** {@code module} 을 뺀 나머지 도메인 모듈 패키지 경로 */
-    private String[] otherModulePackages(String module) {
-        return java.util.Arrays.stream(DOMAIN_MODULES)
-                .filter(other -> !other.equals(module))
-                .map(other -> ROOT + "." + other + "..")
+    /**
+     * {@code module} 이 import 하면 안 되는 패키지 — 다른 도메인 모듈 전부와 {@code config}.
+     */
+    private String[] forbiddenPackagesFor(String module) {
+        return java.util.stream.Stream.concat(
+                        java.util.Arrays.stream(DOMAIN_MODULES)
+                                .filter(other -> !other.equals(module))
+                                .map(other -> ROOT + "." + other + ".."),
+                        java.util.stream.Stream.of(ROOT + ".config.."))
                 .toArray(String[]::new);
     }
 
@@ -153,7 +163,7 @@ class ArchitectureTest {
      * 새 공용 패키지를 만들 일이 생기면 여기와 위 규칙을 함께 고쳐야 한다.
      */
     @Test
-    @DisplayName("허용된 공용 패키지 목록이 실제 구조와 맞는지 확인한다")
+    @DisplayName("허용된 공용 패키지(contract·common)가 실제로 존재한다")
     void sharedPackagesExist() {
         for (String shared : SHARED_PACKAGES) {
             boolean exists =
