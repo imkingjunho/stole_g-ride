@@ -2,6 +2,8 @@ plugins {
     id 'java'
     id 'org.springframework.boot' version '3.2.5'
     id 'io.spring.dependency-management' version '1.1.4'
+    // 테스트 커버리지 리포트. matching·fare 는 80% 이상이 목표다 (CLAUDE.md §7)
+    id 'jacoco'
 }
 
 group = 'com.gachiga'
@@ -27,6 +29,10 @@ repositories {
 ext {
     // Spring Boot 3.2 계열과 호환되는 springdoc 버전
     springdocVersion = '2.3.0'
+    // JWT. 0.12.x 부터 API 가 바뀌었으니 예제를 볼 때 버전을 확인할 것 (임승현)
+    jjwtVersion = '0.12.5'
+    // 모듈 경계 검사 (common/ArchitectureTest)
+    archunitVersion = '1.2.1'
 }
 
 dependencies {
@@ -44,6 +50,14 @@ dependencies {
     // --- 캐시 / 대기열 ---
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 
+    // --- 메일 (웹메일 인증 코드 발송 — 임승현 FR-01) ---
+    implementation 'org.springframework.boot:spring-boot-starter-mail'
+
+    // --- JWT (임승현 FR-03) ---
+    implementation "io.jsonwebtoken:jjwt-api:${jjwtVersion}"
+    runtimeOnly "io.jsonwebtoken:jjwt-impl:${jjwtVersion}"
+    runtimeOnly "io.jsonwebtoken:jjwt-jackson:${jjwtVersion}"
+
     // --- API 문서 (Swagger UI) ---
     implementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:${springdocVersion}"
 
@@ -60,8 +74,22 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    // 모듈 경계 검사. 남의 패키지를 import 하면 빌드를 실패시킨다 (PRD §9.3)
+    testImplementation "com.tngtech.archunit:archunit-junit5:${archunitVersion}"
 }
 
 tasks.named('test') {
     useJUnitPlatform()
+    // 테스트가 끝나면 커버리지 리포트를 자동으로 만든다
+    finalizedBy tasks.named('jacocoTestReport')
+}
+
+tasks.named('jacocoTestReport') {
+    dependsOn tasks.named('test')
+    reports {
+        // build/reports/jacoco/test/html/index.html 을 브라우저로 열어 본다
+        html.required = true
+        xml.required = true
+    }
 }

@@ -2,15 +2,13 @@ package com.gachiga;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * 가치가(WE-Meet) 백엔드 진입점.
  *
- * <p>매칭 tick·만료 처리는 30초 주기 스케줄러로 동작하므로(PRD §9.2)
- * 애플리케이션 단위에서 스케줄링을 활성화한다.
+ * <p>공통 설정은 {@code config} 패키지에 모여 있다. 주기 작업(매칭 tick·만료 처리·대기 상태 push)은
+ * {@code config/SchedulingConfig} 가 전용 스레드 풀과 함께 활성화한다 (PRD §9.2).
  */
-@EnableScheduling
 @SpringBootApplication
 public class GachigaApplication {
 

@@ -1,0 +1,11 @@
+# route 모듈 설정 — 소유: 송준호 (PRD §9.2)
+#
+# 여기에는 gachiga.route.* 아래에만 쓴다. application.yml 에는 쓰지 않는다 (CLAUDE.md §5).
+# 예정 항목: 카카오 API URL·REST 키·타임아웃(3초)·재시도, tick당 호출 상한, 경로 캐시 TTL(10분) 등
+#
+# application.yml 의 spring.config.import 가 이 파일을 optional 로 읽는다.
+# 아직 넣을 값이 없어 비어 있다 — 값을 추가할 때 아래 주석을 지우고 쓰면 된다.
+#
+# gachiga:
+#   route:
+#     some-key: value

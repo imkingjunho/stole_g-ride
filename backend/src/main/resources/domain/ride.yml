@@ -1,0 +1,18 @@
+# ride 모듈 설정 — 소유: 이승민 (PRD §9.2)
+#
+# 여기에는 gachiga.ride.* 아래에만 쓴다. application.yml 에는 쓰지 않는다 (CLAUDE.md §5).
+# application.yml 의 spring.config.import 가 이 파일을 읽는다.
+#
+# 다른 모듈 담당자는 domain/{자기모듈}.yml 에 같은 방식으로 쓰면 된다.
+gachiga:
+  ride:
+    # 사용자가 고를 수 있는 최대 대기시간(분). PRD FR-07
+    allowed-max-wait-minutes: [5, 10, 15, 20]
+    # 화면에서 미리 선택돼 있는 값(분). PRD §3.2 시나리오
+    default-max-wait-minutes: 10
+    # 거점에서 목적지까지 이보다 가까우면 요청을 거절한다 (REQUEST_TOO_SHORT). PRD E-08
+    min-distance-meters: 500
+    # 만료가 이만큼도 안 남은 요청은 새 그룹에 넣지 않는다. PRD E-04
+    match-cutoff-seconds: 30
+    # 만료 처리 스케줄러가 도는 주기(초). PRD §9.2
+    expiry-interval-seconds: 30

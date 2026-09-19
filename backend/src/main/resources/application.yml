@@ -5,11 +5,22 @@ spring:
   profiles:
     # 기본은 로컬. 운영은 SPRING_PROFILES_ACTIVE=prod 로 덮어쓴다
     default: local
+  # 모듈별 설정은 각 소유자가 자기 파일에만 쓴다 (PRD §9.2).
+  # 파일이 없어도 기동되도록 optional 로 둔다 — 아직 안 만든 사람이 있어도 남이 막히지 않는다.
+  config:
+    import:
+      - optional:classpath:domain/ride.yml
+      - optional:classpath:domain/matching.yml
+      - optional:classpath:domain/auth.yml
+      - optional:classpath:domain/route.yml
   jpa:
     hibernate:
-      # 스키마는 마이그레이션 SQL(db/migration)이 단일 진실 공급원이다.
-      # 애플리케이션이 스키마를 만들지 않는다.
-      ddl-auto: validate
+      # 엔티티가 곧 스키마다 (PRD §7.3). Flyway 같은 마이그레이션 도구는 쓰지 않는다.
+      # 각자 자기 모듈 엔티티만 만들면 테이블이 자동 생성된다.
+      # 주의: 컬럼 삭제·이름 변경·타입 변경은 반영되지 않는다. 그런 변경을 했으면 단톡방에 공지하고
+      #       전원이 docker compose down -v && docker compose up -d --wait 로 DB 를 초기화한다.
+      # 운영(prod)은 validate 로 덮어쓴다 — application-prod.yml 참고.
+      ddl-auto: update
     # 트랜잭션 밖 지연 로딩을 막아 N+1 을 조기에 드러낸다
     open-in-view: false
     properties:
@@ -26,7 +37,7 @@ server:
   port: ${SERVER_PORT:8080}
   shutdown: graceful
 
-# Swagger UI 는 T1-5 에서 상세 설정한다
+# 제목·인증 UI 등 상세 설정은 config/SwaggerConfig 에 있다
 springdoc:
   swagger-ui:
     path: /swagger-ui.html

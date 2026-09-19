@@ -16,6 +16,10 @@ spring:
       port: ${REDIS_PORT}
       password: ${REDIS_PASSWORD}
   jpa:
+    hibernate:
+      # 운영에서는 애플리케이션이 스키마를 건드리지 않는다. 구조가 안 맞으면 기동을 거부한다.
+      # 스키마는 Phase 3(T3-2)에서 로컬에서 뽑은 docs/schema.sql 로 미리 적용한다 (PRD §7.3).
+      ddl-auto: validate
     show-sql: false
 
 # 운영에서는 명세 UI 를 노출하지 않는다
