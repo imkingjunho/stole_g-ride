@@ -121,6 +121,60 @@ class RideRequestTest {
         }
 
         @Test
+        @DisplayName("매칭된 요청은 취소할 수 없다 — 그룹 거절로 빠져야 한다 (E-01)")
+        void cannotCancelMatched() {
+            RideRequest request = waitingRequest();
+            request.markMatched();
+
+            assertThatThrownBy(request::cancel)
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("이미 매칭된 요청");
+        }
+
+        @Test
+        @DisplayName("확정된 요청도 취소할 수 없다")
+        void cannotCancelConfirmed() {
+            RideRequest request = waitingRequest();
+            request.markMatched();
+            request.markConfirmed();
+
+            assertThatThrownBy(request::cancel)
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("이미 매칭된 요청");
+        }
+
+        @Test
+        @DisplayName("종료 상태가 되면 진행 중 표시가 비워진다 — 그래야 새 요청을 만들 수 있다")
+        void finishingClearsActiveMarker() {
+            RideRequest cancelled = waitingRequest();
+            cancelled.cancel();
+            assertThat(cancelled.getActiveUserId()).isNull();
+
+            RideRequest expired = waitingRequest();
+            expired.expire();
+            assertThat(expired.getActiveUserId()).isNull();
+
+            RideRequest completed = waitingRequest();
+            completed.markMatched();
+            completed.markConfirmed();
+            completed.markCompleted();
+            assertThat(completed.getActiveUserId()).isNull();
+        }
+
+        @Test
+        @DisplayName("진행 중인 동안에는 진행 중 표시가 유지된다 — 해체로 대기로 돌아와도 마찬가지")
+        void activeMarkerSurvivesInProgressTransitions() {
+            RideRequest request = waitingRequest();
+            assertThat(request.getActiveUserId()).isEqualTo(1L);
+
+            request.markMatched();
+            assertThat(request.getActiveUserId()).isEqualTo(1L);
+
+            request.markWaiting();
+            assertThat(request.getActiveUserId()).isEqualTo(1L);
+        }
+
+        @Test
         @DisplayName("이미 끝난 요청은 다시 취소할 수 없다")
         void cannotCancelFinished() {
             RideRequest request = waitingRequest();

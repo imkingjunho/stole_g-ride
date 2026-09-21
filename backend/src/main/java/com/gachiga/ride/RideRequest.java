@@ -11,6 +11,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.Version;
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -39,7 +40,13 @@ import lombok.NoArgsConstructor;
             @Index(name = "idx_ride_requests_status_hub_depart", columnList = "status, hub_id, depart_at"),
             // 1인 1건 제한과 내 요청 조회
             @Index(name = "idx_ride_requests_user_status", columnList = "user_id, status")
-        })
+        },
+        uniqueConstraints =
+                // 1인 1건(FR-08)을 DB 가 보장한다. 애플리케이션의 사전 검사만으로는
+                // 같은 사용자가 동시에 두 번 누르면 둘 다 통과한다.
+                @UniqueConstraint(
+                        name = "uk_ride_requests_active_user",
+                        columnNames = "active_user_id"))
 public class RideRequest {
 
     @Id
@@ -95,6 +102,18 @@ public class RideRequest {
      */
     @Column(name = "estimated", nullable = false)
     private boolean estimated;
+
+    /**
+     * 진행 중일 때만 {@code userId} 를 담고, 끝나면 null 이 된다.
+     *
+     * <p>1인 1건 제한(FR-08)을 DB 가 지키게 하는 장치다. MySQL 은 UNIQUE 컬럼의 NULL 중복을
+     * 허용하므로, 끝난 요청은 몇 건이든 남아 있어도 되고 진행 중인 것만 사용자당 하나로 묶인다.
+     *
+     * <p><b>새 종료 상태를 추가하면 {@link #finish} 를 거치게 해야 한다.</b> 빠뜨리면 그 사용자는
+     * 영영 새 요청을 못 만든다.
+     */
+    @Column(name = "active_user_id")
+    private Long activeUserId;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
@@ -153,6 +172,7 @@ public class RideRequest {
         request.soloFare = soloFare;
         request.estimated = estimated;
         request.status = RideRequestStatus.WAITING;
+        request.activeUserId = userId;
         request.createdAt = now;
         request.expiresAt = now.plusMinutes(maxWaitMin);
         return request;
@@ -178,25 +198,43 @@ public class RideRequest {
 
     /** 탑승이 끝났다 */
     public void markCompleted() {
-        this.status = RideRequestStatus.COMPLETED;
+        finish(RideRequestStatus.COMPLETED);
     }
 
     /**
-     * 사용자가 취소했다. 아직 진행 중일 때만 가능하다.
+     * 사용자가 취소했다. <b>대기 중일 때만</b> 가능하다.
      *
-     * <p>이미 끝난 요청을 다시 취소하려 하면 {@code INVALID_INPUT} 이 난다.
+     * <p>이미 그룹에 배정·확정된 요청은 취소가 아니라 <b>그룹 거절</b>로 빠져야 한다
+     * ({@code POST /api/groups/{groupId}/reject}). 여기서 상태만 바꾸면 그룹 쪽 데이터가
+     * 그대로 남아 남은 사람들이 옛 인원 기준 분담액을 계속 보게 된다 (E-01).
      */
     public void cancel() {
         if (status.isFinished()) {
             throw new BusinessException(
                     ErrorCode.INVALID_INPUT, "이미 종료된 요청은 취소할 수 없습니다.");
         }
-        this.status = RideRequestStatus.CANCELLED;
+        if (status != RideRequestStatus.WAITING) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_INPUT,
+                    "이미 매칭된 요청은 취소할 수 없습니다. 그룹에서 나가려면 매칭 거절을 이용해 주세요.");
+        }
+        finish(RideRequestStatus.CANCELLED);
     }
 
     /** 대기 시간이 지나 만료됐다 (FR-10). 스케줄러가 호출한다 */
     public void expire() {
-        this.status = RideRequestStatus.EXPIRED;
+        finish(RideRequestStatus.EXPIRED);
+    }
+
+    /**
+     * 종료 상태로 넘어가는 유일한 통로.
+     *
+     * <p>{@code activeUserId} 를 비우는 일을 한 곳에 모아 둔다. 상태를 직접 대입하면
+     * 그 사용자가 영영 새 요청을 못 만들게 되므로, 종료는 반드시 여기를 거친다.
+     */
+    private void finish(RideRequestStatus finished) {
+        this.status = finished;
+        this.activeUserId = null;
     }
 
     // ── 조회용 ──────────────────────────────────────────────

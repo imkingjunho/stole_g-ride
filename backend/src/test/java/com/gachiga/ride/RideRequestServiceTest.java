@@ -25,7 +25,10 @@ import com.gachiga.contract.user.UserSummary;
 import com.gachiga.ride.dto.CreateRideRequestRequest;
 import com.gachiga.ride.dto.RideRequestResponse;
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,6 +40,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.SimpleTransactionStatus;
 
 /**
  * {@link RideRequestService} 생성 규칙 검증 (T1-9 항목 중 요청 1건 제한·500m 차단).
@@ -57,12 +62,36 @@ class RideRequestServiceTest {
     @Mock private UserPort userPort;
     @Mock private RouteProvider routeProvider;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private PlatformTransactionManager transactionManager;
 
     private RideRequestService service;
 
+    /** 시각을 고정해 남은 시간·만료 계산이 항상 같은 값이 되게 한다 */
+    private static final Clock FIXED_CLOCK =
+            Clock.fixed(
+                    LocalDateTime.of(2026, 10, 20, 8, 0)
+                            .atZone(ZoneId.of("Asia/Seoul"))
+                            .toInstant(),
+                    ZoneId.of("Asia/Seoul"));
+
     @BeforeEach
     void setUp() {
-        RideProperties properties = new RideProperties(List.of(5, 10, 15, 20), 10, 500, 30, 30);
+        RideProperties properties =
+                new RideProperties(
+                        List.of(5, 10, 15, 20),
+                        10,
+                        List.of(
+                                new BigDecimal("0.10"),
+                                new BigDecimal("0.20"),
+                                new BigDecimal("0.30")),
+                        500,
+                        30,
+                        30);
+        // 검증에서 걸리는 테스트는 트랜잭션까지 가지 않는다. 그런 경우 이 스텁이 안 쓰여도
+        // 문제가 아니므로 엄격 검사에서 제외한다
+        org.mockito.Mockito.lenient()
+                .when(transactionManager.getTransaction(any()))
+                .thenReturn(new SimpleTransactionStatus());
         service =
                 new RideRequestService(
                         rideRequestRepository,
@@ -70,7 +99,9 @@ class RideRequestServiceTest {
                         hubPort,
                         userPort,
                         routeProvider,
-                        eventPublisher);
+                        eventPublisher,
+                        FIXED_CLOCK,
+                        transactionManager);
     }
 
     /** 광주송정역 — 후문에서 약 10.6km */
@@ -103,7 +134,7 @@ class RideRequestServiceTest {
     }
 
     private void givenSaveEchoesBack() {
-        given(rideRequestRepository.save(any(RideRequest.class)))
+        given(rideRequestRepository.saveAndFlush(any(RideRequest.class)))
                 .willAnswer(invocation -> invocation.getArgument(0));
     }
 
@@ -140,7 +171,7 @@ class RideRequestServiceTest {
         ArgumentCaptor<RideRequest> saved = ArgumentCaptor.forClass(RideRequest.class);
         service.create(USER_ID, validRequest());
 
-        verify(rideRequestRepository).save(saved.capture());
+        verify(rideRequestRepository).saveAndFlush(saved.capture());
         assertThat(saved.getValue().getSoloFare()).isEqualTo(12_400);
         assertThat(saved.getValue().isEstimated()).isFalse();
     }
@@ -157,7 +188,7 @@ class RideRequestServiceTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.ALREADY_IN_QUEUE);
 
-        verify(rideRequestRepository, never()).save(any());
+        verify(rideRequestRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -183,7 +214,7 @@ class RideRequestServiceTest {
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.REQUEST_TOO_SHORT);
 
-        verify(rideRequestRepository, never()).save(any());
+        verify(rideRequestRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -254,6 +285,78 @@ class RideRequestServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_INPUT);
+    }
+
+    @Test
+    @DisplayName("허용 목록에 없는 우회율은 거절한다 (FR-07)")
+    void rejectsUnsupportedDetourRatio() {
+        CreateRideRequestRequest odd =
+                new CreateRideRequestRequest(
+                        HUB_ID,
+                        "광주송정역",
+                        35.1378d,
+                        126.7902d,
+                        LocalDateTime.of(2026, 10, 20, 8, 30),
+                        10,
+                        false,
+                        new BigDecimal("0.99"));
+
+        assertThatThrownBy(() -> service.create(USER_ID, odd))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_INPUT);
+    }
+
+    @Test
+    @DisplayName("0.2 처럼 자릿수가 달라도 0.20 과 같은 값으로 본다")
+    void detourRatioComparesByValueNotScale() {
+        givenActiveUser();
+        givenHubExists();
+        givenRoute(15_466, 15_300, true);
+        givenSaveEchoesBack();
+
+        CreateRideRequestRequest shortScale =
+                new CreateRideRequestRequest(
+                        HUB_ID,
+                        "광주송정역",
+                        35.1378d,
+                        126.7902d,
+                        LocalDateTime.of(2026, 10, 20, 8, 30),
+                        10,
+                        false,
+                        new BigDecimal("0.2"));
+
+        assertThat(service.create(USER_ID, shortScale).status()).isEqualTo("WAITING");
+    }
+
+    @Test
+    @DisplayName("동시에 두 번 눌러 유니크 제약에 걸리면 500 이 아니라 409 로 돌려준다")
+    void duplicateInsertBecomesAlreadyInQueue() {
+        givenActiveUser();
+        givenHubExists();
+        givenRoute(15_466, 15_300, true);
+        given(rideRequestRepository.saveAndFlush(any(RideRequest.class)))
+                .willThrow(new org.springframework.dao.DataIntegrityViolationException("uk"));
+
+        assertThatThrownBy(() -> service.create(USER_ID, validRequest()))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.ALREADY_IN_QUEUE);
+    }
+
+    @Test
+    @DisplayName("내 요청이 매칭 상태면 대기자 수에서 나를 빼지 않는다 — 나는 애초에 안 세어졌다")
+    void candidateCountDoesNotSubtractWhenNotWaiting() {
+        givenHubExists();
+        RideRequest matched = savedWaitingRequest();
+        matched.markMatched();
+        given(rideRequestRepository.findFirstByUserIdAndStatusInOrderByCreatedAtDesc(
+                        eq(USER_ID), anyList()))
+                .willReturn(Optional.of(matched));
+        given(rideRequestRepository.countByHubIdAndStatus(HUB_ID, RideRequestStatus.WAITING))
+                .willReturn(3L);
+
+        assertThat(service.findMyRequest(USER_ID).orElseThrow().candidateCount()).isEqualTo(3);
     }
 
     // ── 조회·취소 (T1-3) ────────────────────────────────

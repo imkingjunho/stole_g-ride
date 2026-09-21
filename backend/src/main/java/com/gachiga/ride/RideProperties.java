@@ -1,5 +1,6 @@
 package com.gachiga.ride;
 
+import java.math.BigDecimal;
 import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
@@ -11,6 +12,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *
  * @param allowedMaxWaitMinutes 사용자가 고를 수 있는 최대 대기 시간(분) 목록 (FR-07)
  * @param defaultMaxWaitMinutes 화면 기본 선택값(분)
+ * @param allowedDetourRatios   사용자가 고를 수 있는 최대 우회율 목록 (FR-07)
  * @param minDistanceMeters     거점~목적지 최소 거리(m). 미만이면 요청을 거절한다 (E-08)
  * @param matchCutoffSeconds    만료가 이만큼도 안 남으면 새 그룹에 넣지 않는다 (E-04)
  * @param expiryIntervalSeconds 만료 처리 스케줄러 주기(초) (FR-10)
@@ -19,6 +21,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public record RideProperties(
         List<Integer> allowedMaxWaitMinutes,
         int defaultMaxWaitMinutes,
+        List<BigDecimal> allowedDetourRatios,
         int minDistanceMeters,
         int matchCutoffSeconds,
         int expiryIntervalSeconds) {}

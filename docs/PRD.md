@@ -388,6 +388,7 @@ ride_requests                         -- 소유: ride (이승민)
   solo_fare INT                       -- 단독 예상 요금(원), 캐시
   estimated BOOLEAN                   -- solo_fare 가 카카오가 아닌 추정치인지 (E-03, UI 배지)
   status ENUM('WAITING','MATCHED','CONFIRMED','CANCELLED','EXPIRED','COMPLETED')
+  active_user_id BIGINT UNIQUE        -- 진행 중이면 user_id, 끝나면 NULL. 1인 1건(FR-08)을 DB 가 보장
   version INT                         -- 낙관적 락 (@Version)
   created_at, expires_at DATETIME
 
@@ -420,7 +421,7 @@ chat_messages                         -- 소유: realtime (임승현)
   -- 그룹 종료 또는 3시간 경과 시 스케줄러가 물리 삭제
 ```
 
-**인덱스:** `ride_requests(status, hub_id, depart_at)`, `match_members(user_id)`, `chat_messages(group_id, created_at)`, `refresh_tokens(user_id)`
+**인덱스:** `ride_requests(status, hub_id, depart_at)`, `ride_requests(user_id, status)`, `UNIQUE ride_requests(active_user_id)`, `match_members(user_id)`, `chat_messages(group_id, created_at)`, `refresh_tokens(user_id)`
 
 **Redis 키:** `queue:{hubId}` (Sorted Set, score=희망 출발 시각), `route:{좌표해시}` (경로 캐시, TTL 10분), `verify:{email}` (인증 코드, TTL 10분), `verify:fail:{email}` (실패 횟수, TTL 30분)
 

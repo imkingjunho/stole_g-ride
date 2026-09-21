@@ -33,6 +33,7 @@ public class RideRequestController {
     private final RideRequestService rideRequestService;
 
     @Operation(
+            operationId = "postRequests",
             summary = "[P0] 매칭 요청 생성 (대기열 등록)",
             description =
                     "대기열에 들어간다 (FR-07·FR-08). 진행 중인 요청이 있으면 ALREADY_IN_QUEUE, "
@@ -45,6 +46,7 @@ public class RideRequestController {
     }
 
     @Operation(
+            operationId = "getRequestsMe",
             summary = "[P0] 내 진행 중 요청 조회",
             description =
                     "대기 화면이 쓰는 엔드포인트다 (FR-09). 남은 시간과 같은 거점 후보 수가 함께 나온다. "
@@ -55,6 +57,7 @@ public class RideRequestController {
     }
 
     @Operation(
+            operationId = "deleteRequestsByRequestId",
             summary = "[P0] 요청 취소",
             description =
                     "본인 요청만 취소할 수 있다 (FR-08). 이미 확정된 그룹에서 빠지는 것은 "
