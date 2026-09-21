@@ -20,7 +20,8 @@ import org.springframework.web.method.support.ModelAndViewContainer;
  * curl -H "X-Dev-User: 2" http://localhost:8080/api/requests/me
  * }</pre>
  *
- * <p>줄 수 있는 값은 {@code user/StubUserAdapter} 가 아는 1~4 다.
+ * <p>{@code users} 테이블에 실제로 그 id 의 행이 있어야 {@code UserPort.findById} 가 값을 돌려준다 —
+ * 가입 전이면 헤더로 아무 숫자나 넣어도 프로필 조회 같은 곳에서는 {@code NOT_FOUND} 가 난다.
  *
  * <p><b>교체 담당: 임승현 · Phase 1.</b> JWT 에서 사용자 id 를 꺼내는 리졸버로 바꾸고 이 클래스를 삭제한다.
  *
