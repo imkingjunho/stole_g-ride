@@ -79,4 +79,26 @@ class DevStompUserInterceptorTest {
 
         assertThat(result).isSameAs(message);
     }
+
+    @Test
+    @DisplayName("재접속 — 새 CONNECT 는 이전 세션과 무관하게 같은 결과를 낸다 (T2-6)")
+    void reconnectIsIndependentOfPreviousSession() {
+        StompHeaderAccessor first = StompHeaderAccessor.create(StompCommand.CONNECT);
+        first.setLeaveMutable(true);
+        first.addNativeHeader("X-Dev-User", "3");
+        interceptor.preSend(
+                MessageBuilder.createMessage(new byte[0], first.getMessageHeaders()), null);
+
+        // 연결이 끊기고 같은 사용자가 새 세션으로 다시 CONNECT 한다 — 인터셉터는 필드가 없어
+        // 이전 호출의 흔적을 들고 있지 않는다
+        StompHeaderAccessor second = StompHeaderAccessor.create(StompCommand.CONNECT);
+        second.setLeaveMutable(true);
+        second.addNativeHeader("X-Dev-User", "3");
+        interceptor.preSend(
+                MessageBuilder.createMessage(new byte[0], second.getMessageHeaders()), null);
+
+        assertThat(first.getUser().getName()).isEqualTo("3");
+        assertThat(second.getUser().getName()).isEqualTo("3");
+        assertThat(second.getUser()).isNotSameAs(first.getUser());
+    }
 }

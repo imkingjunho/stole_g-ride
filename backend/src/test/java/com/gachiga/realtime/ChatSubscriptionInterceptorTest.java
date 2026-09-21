@@ -89,6 +89,26 @@ class ChatSubscriptionInterceptorTest {
         assertThat(interceptor.preSend(message, null)).isSameAs(message);
     }
 
+    @Test
+    @DisplayName("재접속 — 끊겼다가 다시 구독해도 매번 새로 인가를 검사한다 (T2-6)")
+    void reconnectReevaluatesAuthorizationEachTime() {
+        interceptor = new ChatSubscriptionInterceptor(matchHistoryPort);
+        given(matchHistoryPort.isMember(17L, 3L)).willReturn(true);
+
+        // 첫 연결에서 구독
+        assertThat(interceptor.preSend(subscribe("/topic/chat/17", "3"), null)).isNotNull();
+
+        // 연결이 끊기고, 그사이 그룹 구성이 바뀌어 더 이상 멤버가 아니게 됐다
+        given(matchHistoryPort.isMember(17L, 3L)).willReturn(false);
+
+        // 같은 사용자가 새 세션으로 재접속해 같은 방을 다시 구독하면, 캐시된 예전 결과가 아니라
+        // 바뀐 멤버십을 그대로 반영해 거부한다 — 인터셉터가 상태를 들고 있지 않기 때문이다
+        assertThatThrownBy(() -> interceptor.preSend(subscribe("/topic/chat/17", "3"), null))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.GROUP_NOT_MEMBER);
+    }
+
     private Message<byte[]> subscribe(String destination, String userId) {
         StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.SUBSCRIBE);
         accessor.setDestination(destination);
