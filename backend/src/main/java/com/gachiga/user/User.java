@@ -39,6 +39,12 @@ import lombok.NoArgsConstructor;
         })
 public class User {
 
+    /** 신고가 이 횟수 쌓이면 정지된다 (T3-1, E-05) */
+    private static final int SUSPEND_THRESHOLD = 3;
+
+    /** 정지 기간(일) */
+    private static final int SUSPEND_DAYS = 7;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -124,5 +130,22 @@ public class User {
         this.nickname = nickname;
         this.department = department;
         this.grade = grade;
+    }
+
+    /**
+     * 신고 한 건을 반영한다 (T3-1, FR-04). 누적 {@value #SUSPEND_THRESHOLD}회가 되면 그 순간부터
+     * {@value #SUSPEND_DAYS}일 이용이 제한된다 (E-05).
+     *
+     * <p>이미 정지된 상태에서 또 신고가 들어와도 조건은 그대로 검사한다 — 정지 중에 더 신고를
+     * 받으면 정지 기간이 그 시점부터 다시 {@value #SUSPEND_DAYS}일로 늘어난다.
+     *
+     * @param now 신고가 접수된 시각. {@code suspendedUntil} 계산에 쓰인다
+     */
+    public void applyReport(LocalDateTime now) {
+        this.reportCount++;
+        if (this.reportCount >= SUSPEND_THRESHOLD) {
+            this.status = UserStatus.SUSPENDED;
+            this.suspendedUntil = now.plusDays(SUSPEND_DAYS);
+        }
     }
 }

@@ -104,4 +104,51 @@ class UserTest {
             assertThat(user.getGrade()).isNull();
         }
     }
+
+    @Nested
+    @DisplayName("신고 반영 (T3-1)")
+    class ApplyReport {
+
+        @Test
+        @DisplayName("1·2회는 카운트만 올리고 상태는 그대로다")
+        void countsWithoutSuspending() {
+            User user = verifiedUser();
+
+            user.applyReport(NOW);
+            user.applyReport(NOW);
+
+            assertThat(user.getReportCount()).isEqualTo(2);
+            assertThat(user.getStatus()).isEqualTo(UserStatus.ACTIVE);
+            assertThat(user.getSuspendedUntil()).isNull();
+        }
+
+        @Test
+        @DisplayName("3회가 되면 그 시점부터 7일 정지된다 (E-05)")
+        void suspendsOnThirdReport() {
+            User user = verifiedUser();
+
+            user.applyReport(NOW);
+            user.applyReport(NOW);
+            user.applyReport(NOW);
+
+            assertThat(user.getReportCount()).isEqualTo(3);
+            assertThat(user.getStatus()).isEqualTo(UserStatus.SUSPENDED);
+            assertThat(user.getSuspendedUntil()).isEqualTo(NOW.plusDays(7));
+        }
+
+        @Test
+        @DisplayName("정지 중에 또 신고를 받으면 정지 기간이 그 시점부터 다시 7일로 늘어난다")
+        void extendsSuspensionOnFurtherReports() {
+            User user = verifiedUser();
+            user.applyReport(NOW);
+            user.applyReport(NOW);
+            user.applyReport(NOW);
+            LocalDateTime later = NOW.plusDays(3);
+
+            user.applyReport(later);
+
+            assertThat(user.getReportCount()).isEqualTo(4);
+            assertThat(user.getSuspendedUntil()).isEqualTo(later.plusDays(7));
+        }
+    }
 }
