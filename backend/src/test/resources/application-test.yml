@@ -1,12 +1,24 @@
 # 테스트 전용 프로파일.
-# MySQL/Redis 없이도 스프링 컨텍스트가 조립되는지만 검증한다.
-# 실제 DB 를 쓰는 통합 테스트는 T1-4(Docker Compose) 이후 별도 프로파일로 추가한다.
+#
+# 외부 DB(MySQL 컨테이너) 없이 돌아야 한다 — CI 에는 DB 가 없다 (CLAUDE.md §7).
+# 예전에는 DataSource·JPA 자동설정을 통째로 제외했는데, 그러면 리포지토리 빈이 아예 안 만들어져
+# 서비스 주입이 실패한다. 그래서 임베디드 H2 를 쓴다. 외부 의존은 여전히 없다.
+#
+# ⚠️ 여기서 통과한다고 MySQL 에서도 통과한다는 뜻은 아니다. H2 와 MySQL 은 타입·예약어가 다르다.
+#    스키마가 실제로 맞는지는 local 프로파일(MySQL)로 bootRun 해서 확인한다 (PRD §7.3).
 spring:
-  autoconfigure:
-    exclude:
-      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
-      - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
-      - org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration
+  datasource:
+    url: jdbc:h2:mem:gachiga;DB_CLOSE_DELAY=-1;MODE=MySQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      # 테스트마다 깨끗한 스키마에서 시작한다
+      ddl-auto: create-drop
+    show-sql: false
+  # Redis 는 아직 테스트에서 쓰지 않는다. 실제 연결은 처음 명령을 보낼 때 일어나므로
+  # 컨텍스트 로딩만 하는 테스트에는 영향이 없다.
 
 logging:
   level:

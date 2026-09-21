@@ -386,6 +386,7 @@ ride_requests                         -- 소유: ride (이승민)
   max_detour_ratio DECIMAL(3,2)       -- 0.10 / 0.20 / 0.30
   solo_distance INT                   -- 단독 직행 거리(m), 캐시
   solo_fare INT                       -- 단독 예상 요금(원), 캐시
+  estimated BOOLEAN                   -- solo_fare 가 카카오가 아닌 추정치인지 (E-03, UI 배지)
   status ENUM('WAITING','MATCHED','CONFIRMED','CANCELLED','EXPIRED','COMPLETED')
   version INT                         -- 낙관적 락 (@Version)
   created_at, expires_at DATETIME

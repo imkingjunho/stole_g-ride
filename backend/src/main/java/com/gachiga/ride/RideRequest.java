@@ -87,6 +87,15 @@ public class RideRequest {
     @Column(name = "solo_fare", nullable = false)
     private int soloFare;
 
+    /**
+     * {@link #soloFare} 가 카카오 실호출이 아니라 직선거리 추정치인지 (E-03).
+     *
+     * <p>화면에 "추정치" 배지를 띄울지 판단하는 값이라 요청과 함께 저장한다.
+     * 생성 시점의 판단을 그대로 보존해야 나중에 조회해도 같은 표시가 나온다.
+     */
+    @Column(name = "estimated", nullable = false)
+    private boolean estimated;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
     private RideRequestStatus status;
@@ -127,6 +136,7 @@ public class RideRequest {
             BigDecimal maxDetourRatio,
             int soloDistance,
             int soloFare,
+            boolean estimated,
             LocalDateTime now) {
 
         RideRequest request = new RideRequest();
@@ -141,6 +151,7 @@ public class RideRequest {
         request.maxDetourRatio = maxDetourRatio;
         request.soloDistance = soloDistance;
         request.soloFare = soloFare;
+        request.estimated = estimated;
         request.status = RideRequestStatus.WAITING;
         request.createdAt = now;
         request.expiresAt = now.plusMinutes(maxWaitMin);

@@ -33,6 +33,7 @@ class RideRequestTest {
                 new BigDecimal("0.20"),
                 10_591,
                 12_400,
+                true,
                 NOW);
     }
 

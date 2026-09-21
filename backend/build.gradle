@@ -77,6 +77,12 @@ dependencies {
 
     // 모듈 경계 검사. 남의 패키지를 import 하면 빌드를 실패시킨다 (PRD §9.3)
     testImplementation "com.tngtech.archunit:archunit-junit5:${archunitVersion}"
+
+    // 테스트용 인메모리 DB.
+    // CLAUDE.md §7 "테스트는 DB 없이 돌아야 한다" 는 CI 에 MySQL 컨테이너를 두지 않겠다는 뜻이다.
+    // 임베디드라 외부 DB 가 필요 없고, 덕분에 각 모듈 소유자가 공용 테스트를 건드리지 않아도
+    // 리포지토리 빈이 정상으로 뜬다. 스키마 검증은 여전히 local 프로파일(MySQL)로 한다.
+    testRuntimeOnly 'com.h2database:h2'
 }
 
 tasks.named('test') {
