@@ -204,4 +204,28 @@ class ChatServiceTest {
             assertThat(captor.getValue().getPageSize()).isEqualTo(100);
         }
     }
+
+    @Nested
+    @DisplayName("시스템 메시지")
+    class SystemMessage {
+
+        @Test
+        @DisplayName("저장하고 broadcast 한다 — 멤버십 검사는 하지 않는다")
+        void savesAndBroadcasts() {
+            given(chatMessageRepository.save(any()))
+                    .willAnswer(invocation -> invocation.getArgument(0));
+
+            chatService.systemMessage(17L, "매칭이 성사됐어요");
+
+            ArgumentCaptor<ChatMessageResponse> captor =
+                    ArgumentCaptor.forClass(ChatMessageResponse.class);
+            verify(messagingTemplate)
+                    .convertAndSend(
+                            org.mockito.ArgumentMatchers.eq("/topic/chat/17"), captor.capture());
+            assertThat(captor.getValue().senderNickname()).isEqualTo("시스템");
+            assertThat(captor.getValue().content()).isEqualTo("매칭이 성사됐어요");
+            assertThat(captor.getValue().type()).isEqualTo("SYSTEM");
+            verify(matchHistoryPort, never()).isMember(any(), any());
+        }
+    }
 }

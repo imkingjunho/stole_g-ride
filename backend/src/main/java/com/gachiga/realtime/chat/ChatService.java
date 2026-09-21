@@ -58,6 +58,16 @@ public class ChatService {
         log.info("채팅 발신 groupId={} senderId={} type={}", groupId, senderId, type);
     }
 
+    /** 서버가 만드는 안내 메시지를 저장하고 broadcast 한다 (T1-12·E-10) */
+    @Transactional
+    public void systemMessage(Long groupId, String content) {
+        ChatMessage saved =
+                chatMessageRepository.save(
+                        ChatMessage.system(groupId, content, LocalDateTime.now(clock)));
+        broadcast(saved, null);
+        log.info("시스템 메시지 groupId={}", groupId);
+    }
+
     /** 재접속 시 지난 메시지 (FR-20). 멤버만 조회할 수 있다 */
     @Transactional(readOnly = true)
     public List<ChatMessageResponse> recentMessages(
