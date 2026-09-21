@@ -1,16 +1,19 @@
 package com.gachiga.realtime;
 
+import java.util.ArrayList;
+import java.util.List;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
+import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 
 /**
- * ⚠️ <b>Phase 0 스텁</b> — STOMP 연결과 구독만 되게 열어 둔다 (PRD §14.7).
- *
- * <p>주소 규약은 PRD §14.5 그대로다.
+ * STOMP 엔드포인트·브로커 설정 (PRD §14.5).
  *
  * <ul>
  *   <li>연결: {@code ws://localhost:8080/ws} (SockJS 미사용)
@@ -19,12 +22,9 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
  *   <li>발신: {@code /app/chat/{groupId}}
  * </ul>
  *
- * <p>지금은 <b>인증도 없고 서버가 보내는 메시지도 없다.</b> 프론트가 연결·구독 코드를 미리 맞춰 볼 수
- * 있게 하는 것이 전부다.
- *
- * <p><b>교체 담당: 임승현 · Phase 1.</b> CONNECT 프레임의 {@code Authorization: Bearer} 검증,
- * 대기 상태·매칭 알림 push, 채팅 저장·마스킹을 붙인다. 구독 인가는
- * {@code contract.matching.MatchHistoryPort} 로 확인한다.
+ * <p>CONNECT 시점의 사용자 식별은 {@link DevStompUserInterceptor}(T1-8, 아직 Dev 스텁 — 로그인이
+ * 계약 승인 대기라 실제 토큰이 없다), 채팅 구독 인가는 {@link ChatSubscriptionInterceptor}(T1-9)가
+ * 맡는다.
  */
 @Configuration
 @EnableWebSocketMessageBroker
@@ -38,8 +38,18 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
      */
     private final String[] allowedOrigins;
 
-    public WebSocketConfig(@Value("${gachiga.cors.allowed-origins}") String[] allowedOrigins) {
+    private final ChatSubscriptionInterceptor chatSubscriptionInterceptor;
+
+    /** {@code local}·{@code test} 에만 있으므로 {@link ObjectProvider} 로 받아 "있으면 등록"한다 */
+    private final ObjectProvider<DevStompUserInterceptor> devStompUserInterceptor;
+
+    public WebSocketConfig(
+            @Value("${gachiga.cors.allowed-origins}") String[] allowedOrigins,
+            ChatSubscriptionInterceptor chatSubscriptionInterceptor,
+            ObjectProvider<DevStompUserInterceptor> devStompUserInterceptor) {
         this.allowedOrigins = allowedOrigins;
+        this.chatSubscriptionInterceptor = chatSubscriptionInterceptor;
+        this.devStompUserInterceptor = devStompUserInterceptor;
     }
 
     @Override
@@ -55,5 +65,15 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         registry.setApplicationDestinationPrefixes("/app");
         // 특정 사용자에게만 보내는 목적지의 접두사 (/user/queue/status 등)
         registry.setUserDestinationPrefix("/user");
+    }
+
+    @Override
+    public void configureClientInboundChannel(ChannelRegistration registration) {
+        // 순서: 사용자 식별(CONNECT) 먼저, 그다음 구독 인가(SUBSCRIBE) — 서로 다른 프레임에 반응하므로
+        // 실행 순서 자체는 결과에 영향이 없지만, 읽는 사람이 자연스러운 순서로 둔다
+        List<ChannelInterceptor> interceptors =
+                new ArrayList<>(List.of(chatSubscriptionInterceptor));
+        devStompUserInterceptor.ifAvailable(interceptor -> interceptors.add(0, interceptor));
+        registration.interceptors(interceptors.toArray(ChannelInterceptor[]::new));
     }
 }
