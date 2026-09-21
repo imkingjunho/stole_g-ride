@@ -2,11 +2,15 @@ package com.gachiga.user;
 
 import com.gachiga.common.response.ApiResponse;
 import com.gachiga.contract.auth.CurrentUser;
+import com.gachiga.user.dto.UpdateProfileRequest;
 import com.gachiga.user.dto.UserProfileResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -26,5 +30,15 @@ public class UserController {
     @GetMapping("/me")
     public ApiResponse<UserProfileResponse> me(@CurrentUser Long userId) {
         return ApiResponse.ok(userService.myProfile(userId));
+    }
+
+    @Operation(
+            operationId = "patchUsersMe",
+            summary = "[P1] 프로필 수정",
+            description = "닉네임·학과·학년만 바꿀 수 있다. 성별은 바꿀 수 없다 (FR-03).")
+    @PatchMapping("/me")
+    public ApiResponse<UserProfileResponse> updateMe(
+            @CurrentUser Long userId, @Valid @RequestBody UpdateProfileRequest request) {
+        return ApiResponse.ok(userService.updateProfile(userId, request));
     }
 }

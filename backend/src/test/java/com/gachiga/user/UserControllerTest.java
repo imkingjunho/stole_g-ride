@@ -1,9 +1,12 @@
 package com.gachiga.user;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -11,6 +14,7 @@ import com.gachiga.common.exception.BusinessException;
 import com.gachiga.common.exception.ErrorCode;
 import com.gachiga.contract.user.Gender;
 import com.gachiga.contract.user.UserStatus;
+import com.gachiga.user.dto.UpdateProfileRequest;
 import com.gachiga.user.dto.UserProfileResponse;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -18,6 +22,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -88,5 +93,58 @@ class UserControllerTest {
         mockMvc.perform(get("/api/users/me"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.error.code").value("NOT_FOUND"));
+    }
+
+    @Test
+    @DisplayName("프로필 수정에 성공하면 바뀐 프로필을 돌려준다 (T2-5)")
+    void updateMeReturnsUpdatedProfile() throws Exception {
+        given(userService.updateProfile(eq(1L), any(UpdateProfileRequest.class)))
+                .willReturn(
+                        new UserProfileResponse(
+                                1L,
+                                "gachiga@jnu.ac.kr",
+                                "용봉동다람쥐",
+                                Gender.M,
+                                "전자공학과",
+                                4,
+                                UserStatus.ACTIVE,
+                                null));
+
+        mockMvc.perform(
+                        patch("/api/users/me")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(
+                                        "{\"nickname\":\"용봉동다람쥐\",\"department\":\"전자공학과\",\"grade\":4}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.nickname").value("용봉동다람쥐"))
+                .andExpect(jsonPath("$.data.department").value("전자공학과"))
+                .andExpect(jsonPath("$.data.grade").value(4));
+    }
+
+    @Test
+    @DisplayName("닉네임이 2자 미만이면 400 INVALID_INPUT")
+    void rejectsTooShortNickname() throws Exception {
+        mockMvc.perform(
+                        patch("/api/users/me")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"nickname\":\"a\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_INPUT"));
+    }
+
+    @Test
+    @DisplayName("중복 닉네임이면 400 INVALID_INPUT")
+    void rejectsDuplicateNickname() throws Exception {
+        willThrow(new BusinessException(ErrorCode.INVALID_INPUT, "이미 사용 중인 닉네임입니다."))
+                .given(userService)
+                .updateProfile(eq(1L), any(UpdateProfileRequest.class));
+
+        mockMvc.perform(
+                        patch("/api/users/me")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"nickname\":\"용봉동다람쥐\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("INVALID_INPUT"));
     }
 }

@@ -113,4 +113,16 @@ public class User {
         user.createdAt = now;
         return user;
     }
+
+    /**
+     * 닉네임·학과·학년을 바꾼다 (T2-5, FR-03).
+     *
+     * <p>성별은 여기 없다 — 가입 후 바꿀 수 없다. 학과·학년은 선택 입력이라 {@code null} 을 주면
+     * 지워진다.
+     */
+    public void updateProfile(String nickname, String department, Integer grade) {
+        this.nickname = nickname;
+        this.department = department;
+        this.grade = grade;
+    }
 }

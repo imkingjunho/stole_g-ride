@@ -17,4 +17,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     /** 가입 시 닉네임 중복 검사(T1-3)에 쓴다 */
     boolean existsByNickname(String nickname);
+
+    /** 프로필 수정 시 닉네임 중복 검사(T2-5). 본인 것은 중복으로 치지 않는다 */
+    boolean existsByNicknameAndIdNot(String nickname, Long id);
 }

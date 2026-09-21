@@ -66,4 +66,42 @@ class UserTest {
             assertThat(user.getGrade()).isEqualTo(3);
         }
     }
+
+    @Nested
+    @DisplayName("프로필 수정")
+    class UpdateProfile {
+
+        @Test
+        @DisplayName("닉네임·학과·학년을 바꾼다")
+        void changesFields() {
+            User user = verifiedUser();
+
+            user.updateProfile("용봉동다람쥐", "전자공학과", 4);
+
+            assertThat(user.getNickname()).isEqualTo("용봉동다람쥐");
+            assertThat(user.getDepartment()).isEqualTo("전자공학과");
+            assertThat(user.getGrade()).isEqualTo(4);
+        }
+
+        @Test
+        @DisplayName("성별은 바뀌지 않는다 (FR-03)")
+        void genderStaysTheSame() {
+            User user = verifiedUser();
+
+            user.updateProfile("용봉동다람쥐", "전자공학과", 4);
+
+            assertThat(user.getGender()).isEqualTo(Gender.M);
+        }
+
+        @Test
+        @DisplayName("학과·학년에 null 을 주면 지워진다")
+        void clearsOptionalFields() {
+            User user = verifiedUser();
+
+            user.updateProfile("용봉동다람쥐", null, null);
+
+            assertThat(user.getDepartment()).isNull();
+            assertThat(user.getGrade()).isNull();
+        }
+    }
 }

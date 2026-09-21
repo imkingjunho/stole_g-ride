@@ -67,4 +67,14 @@ class UserRepositoryTest {
         assertThat(repository.existsByNickname("후문호랑이")).isTrue();
         assertThat(repository.existsByNickname("없는닉네임")).isFalse();
     }
+
+    @Test
+    @DisplayName("existsByNicknameAndIdNot — 본인 닉네임은 중복으로 치지 않는다 (T2-5)")
+    void existsByNicknameAndIdNotExcludesSelf() {
+        User me = repository.saveAndFlush(newUser("me@jnu.ac.kr", "후문호랑이"));
+        repository.saveAndFlush(newUser("other@jnu.ac.kr", "용봉동다람쥐"));
+
+        assertThat(repository.existsByNicknameAndIdNot("후문호랑이", me.getId())).isFalse();
+        assertThat(repository.existsByNicknameAndIdNot("용봉동다람쥐", me.getId())).isTrue();
+    }
 }
