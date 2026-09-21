@@ -3,11 +3,32 @@
 # 이 파일이 갖는 범위 (PRD §9.2): gachiga.auth.*, gachiga.chat.*, spring.mail.*
 # 그 밖의 것은 여기에 쓰지 않는다. application.yml 에도 쓰지 않는다 (CLAUDE.md §5).
 # ⚠️ 메일 비밀번호·JWT 시크릿은 값을 적지 말고 ${MAIL_PASSWORD} 처럼 환경변수로 참조한다 (CLAUDE.md §8).
-# 예정 항목: JWT 만료 시간, 허용 웹메일 도메인, spring.mail.*, gachiga.chat.* 등
 #
 # application.yml 의 spring.config.import 가 이 파일을 optional 로 읽는다.
-# 아직 넣을 값이 없어 비어 있다 — 값을 추가할 때 아래 주석을 지우고 쓰면 된다.
-#
-# gachiga:
-#   auth:
-#     some-key: value
+
+gachiga:
+  auth:
+    # @ 뒤쪽이 이 값과 같아야 가입할 수 있다 (FR-01)
+    allowed-email-domain: jnu.ac.kr
+    # 인증 코드 유효 시간(분). Redis verify:{email} TTL 도 이 값을 쓴다
+    verify-code-ttl-minutes: 10
+    # 이 횟수만큼 코드를 틀리면 잠긴다
+    verify-max-fail-count: 5
+    # 잠금이 풀릴 때까지의 시간(분). Redis verify:fail:{email} TTL
+    verify-lock-minutes: 30
+
+# ⚠️ MAIL_USERNAME·MAIL_PASSWORD 는 [.env 항목 요청]으로 .env.example 에 추가해 달라고 이승민에게
+# 요청해야 한다 (CLAUDE.md §2). 그 전까지는 기본값(localhost)으로 기동만 되고, local 프로파일에서는
+# auth/VerificationMailSender 가 로그로 코드를 보여 주므로 메일 없이도 개발할 수 있다.
+spring:
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
