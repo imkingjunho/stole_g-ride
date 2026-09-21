@@ -63,6 +63,7 @@ class RideRequestServiceTest {
     @Mock private RouteProvider routeProvider;
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private PlatformTransactionManager transactionManager;
+    @Mock private RideCandidateCounter candidateCounter;
 
     private RideRequestService service;
 
@@ -100,6 +101,7 @@ class RideRequestServiceTest {
                         userPort,
                         routeProvider,
                         eventPublisher,
+                        candidateCounter,
                         FIXED_CLOCK,
                         transactionManager);
     }
@@ -344,21 +346,6 @@ class RideRequestServiceTest {
                 .isEqualTo(ErrorCode.ALREADY_IN_QUEUE);
     }
 
-    @Test
-    @DisplayName("내 요청이 매칭 상태면 대기자 수에서 나를 빼지 않는다 — 나는 애초에 안 세어졌다")
-    void candidateCountDoesNotSubtractWhenNotWaiting() {
-        givenHubExists();
-        RideRequest matched = savedWaitingRequest();
-        matched.markMatched();
-        given(rideRequestRepository.findFirstByUserIdAndStatusInOrderByCreatedAtDesc(
-                        eq(USER_ID), anyList()))
-                .willReturn(Optional.of(matched));
-        given(rideRequestRepository.countByHubIdAndStatus(HUB_ID, RideRequestStatus.WAITING))
-                .willReturn(3L);
-
-        assertThat(service.findMyRequest(USER_ID).orElseThrow().candidateCount()).isEqualTo(3);
-    }
-
     // ── 조회·취소 (T1-3) ────────────────────────────────
 
     @Test
@@ -378,8 +365,7 @@ class RideRequestServiceTest {
         given(rideRequestRepository.findFirstByUserIdAndStatusInOrderByCreatedAtDesc(
                         eq(USER_ID), anyList()))
                 .willReturn(Optional.of(savedWaitingRequest()));
-        given(rideRequestRepository.countByHubIdAndStatus(HUB_ID, RideRequestStatus.WAITING))
-                .willReturn(2L);
+        given(candidateCounter.countFor(any(RideRequest.class))).willReturn(1);
 
         RideRequestResponse response = service.findMyRequest(USER_ID).orElseThrow();
 
@@ -466,8 +452,7 @@ class RideRequestServiceTest {
         givenHubExists();
         givenRoute(10_591, 12_400, true);
         givenSaveEchoesBack();
-        given(rideRequestRepository.countByHubIdAndStatus(HUB_ID, RideRequestStatus.WAITING))
-                .willReturn(3L);
+        given(candidateCounter.countFor(any(RideRequest.class))).willReturn(2);
 
         RideRequestResponse response = service.create(USER_ID, validRequest());
 

@@ -49,6 +49,7 @@ public class RideRequestService {
     private final UserPort userPort;
     private final RouteProvider routeProvider;
     private final ApplicationEventPublisher eventPublisher;
+    private final RideCandidateCounter candidateCounter;
     private final Clock clock;
 
     /**
@@ -67,6 +68,7 @@ public class RideRequestService {
             UserPort userPort,
             RouteProvider routeProvider,
             ApplicationEventPublisher eventPublisher,
+            RideCandidateCounter candidateCounter,
             Clock clock,
             PlatformTransactionManager transactionManager) {
         this.rideRequestRepository = rideRequestRepository;
@@ -75,6 +77,7 @@ public class RideRequestService {
         this.userPort = userPort;
         this.routeProvider = routeProvider;
         this.eventPublisher = eventPublisher;
+        this.candidateCounter = candidateCounter;
         this.clock = clock;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
@@ -301,20 +304,8 @@ public class RideRequestService {
                 new Coordinate(hub.lat(), hub.lng()), List.of(), new Coordinate(destLat, destLng));
     }
 
-    /**
-     * 같은 거점에서 함께 기다리는 사람 수 (나 자신 제외).
-     *
-     * <p>집계는 WAITING 만 세므로, 내 요청이 이미 MATCHED·CONFIRMED 면 나는 애초에 포함돼
-     * 있지 않다. 그때까지 1을 빼면 남의 대기자를 한 명 덜 세게 된다.
-     */
+    /** WebSocket push 와 같은 숫자가 나오도록 계산은 {@link RideCandidateCounter} 한 곳에 둔다 */
     private int candidateCount(RideRequest request) {
-        long sameHubWaiting =
-                rideRequestRepository.countByHubIdAndStatus(
-                        request.getHubId(), RideRequestStatus.WAITING);
-        long others =
-                request.getStatus() == RideRequestStatus.WAITING
-                        ? sameHubWaiting - 1
-                        : sameHubWaiting;
-        return (int) Math.max(0L, others);
+        return candidateCounter.countFor(request);
     }
 }

@@ -5,6 +5,9 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 /**
  * {@link RideRequest} 조회·저장.
@@ -57,4 +60,25 @@ public interface RideRequestRepository extends JpaRepository<RideRequest, Long> 
 
     /** 특정 거점의 대기 중 요청. 대기열을 다시 만들 때 쓴다 */
     List<RideRequest> findByHubIdAndStatusOrderByDepartAtAsc(Long hubId, RideRequestStatus status);
+
+    /**
+     * WAITING → MATCHED 를 <b>한 문장으로</b> 바꾼다. 중복 배정을 막는 지점이다 (E-02).
+     *
+     * <p>조건에 {@code version} 과 {@code status} 를 함께 넣어, 두 그룹이 같은 요청을 동시에
+     * 집어 가려 하면 나중 쪽이 0건을 갱신하게 만든다. 읽고 나서 쓰는 방식이면 그 사이에
+     * 끼어들 틈이 생기므로 하나의 UPDATE 로 처리한다.
+     *
+     * <p>{@code version} 을 직접 올리는 이유는 이 갱신도 낙관적 락의 한 단계로 세어야
+     * 같은 버전으로 두 번 성공하지 않기 때문이다.
+     *
+     * @return 갱신된 행 수. 1이면 이번 호출이 배정에 성공한 것, 0이면 남이 먼저 가져간 것
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(
+            "update RideRequest r set r.status = com.gachiga.ride.RideRequestStatus.MATCHED, "
+                    + "r.version = r.version + 1 "
+                    + "where r.id = :requestId and r.version = :version "
+                    + "and r.status = com.gachiga.ride.RideRequestStatus.WAITING")
+    int markMatchedIfVersionMatches(
+            @Param("requestId") Long requestId, @Param("version") int version);
 }
