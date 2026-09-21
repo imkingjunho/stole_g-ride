@@ -28,6 +28,14 @@ spring:
         format_sql: true
         jdbc:
           time_zone: Asia/Seoul
+  data:
+    redis:
+      # Redis 가 죽었을 때 요청 응답이 같이 멈추지 않도록 짧게 자른다.
+      # 대기열 갱신은 커밋 뒤(AFTER_COMMIT)에 같은 스레드에서 일어나므로, 여기서 오래 기다리면
+      # 이미 성공한 요청의 응답까지 늦어진다. Lettuce 기본값은 60초라 그대로 두면 안 된다.
+      # 대기열은 색인일 뿐이고 어긋나면 RideQueue.rebuild 로 복구한다.
+      timeout: 1s
+      connect-timeout: 1s
 
 server:
   port: ${SERVER_PORT:8080}
