@@ -11,6 +11,7 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -36,6 +37,10 @@ public class ChatService {
     private static final String TOPIC_PREFIX = "/topic/chat/";
     private static final String UNKNOWN_NICKNAME = "알 수 없음";
 
+    /** 퀵 메시지로 보낼 수 있는 문구 3종. 프론트(오승원)의 버튼 목록과 같다 (FR-22, PRD §4.5) */
+    private static final Set<String> ALLOWED_QUICK_MESSAGES =
+            Set.of("도착했어요", "5분 늦어요", "출발합니다");
+
     private final ChatMessageRepository chatMessageRepository;
     private final MatchHistoryPort matchHistoryPort;
     private final UserPort userPort;
@@ -47,7 +52,7 @@ public class ChatService {
     public void send(Long groupId, Long senderId, ChatSendRequest request) {
         requireMember(groupId, senderId);
         ChatMessageType type = requireSendableType(request.type());
-        String content = requireContent(request.content());
+        String content = requireContent(type, request.content());
 
         ChatMessage saved =
                 chatMessageRepository.save(
@@ -128,9 +133,21 @@ public class ChatService {
                 ErrorCode.INVALID_INPUT, "메시지 종류는 TEXT 또는 QUICK 만 가능합니다.");
     }
 
-    private String requireContent(String content) {
+    /**
+     * TEXT 는 자유 입력(길이만 제한), QUICK 은 허용된 문구 3종 중 하나여야 한다 (FR-22).
+     * 정형 문구라 서버가 임의로 다듬지 않고 정확히 일치하는지만 본다 — 비교는 {@code equals}.
+     */
+    private String requireContent(ChatMessageType type, String content) {
         if (content == null || content.isBlank()) {
             throw new BusinessException(ErrorCode.INVALID_INPUT, "메시지 내용을 입력해 주세요.");
+        }
+        if (type == ChatMessageType.QUICK) {
+            if (!ALLOWED_QUICK_MESSAGES.contains(content)) {
+                throw new BusinessException(
+                        ErrorCode.INVALID_INPUT,
+                        "허용된 퀵 메시지가 아닙니다. 가능한 문구: " + ALLOWED_QUICK_MESSAGES);
+            }
+            return content;
         }
         if (content.length() > MAX_CONTENT_LENGTH) {
             throw new BusinessException(

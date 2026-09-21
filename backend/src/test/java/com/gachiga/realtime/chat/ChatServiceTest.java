@@ -128,6 +128,37 @@ class ChatServiceTest {
                     .extracting(e -> ((BusinessException) e).getErrorCode())
                     .isEqualTo(ErrorCode.INVALID_INPUT);
         }
+
+        @Test
+        @DisplayName("QUICK — 허용된 문구 3종은 그대로 보낸다 (FR-22)")
+        void allowsApprovedQuickMessages() {
+            given(matchHistoryPort.isMember(17L, 1L)).willReturn(true);
+            given(chatMessageRepository.save(any()))
+                    .willAnswer(invocation -> invocation.getArgument(0));
+
+            chatService.send(17L, 1L, new ChatSendRequest("QUICK", "도착했어요"));
+            chatService.send(17L, 1L, new ChatSendRequest("QUICK", "5분 늦어요"));
+            chatService.send(17L, 1L, new ChatSendRequest("QUICK", "출발합니다"));
+
+            org.mockito.Mockito.verify(chatMessageRepository, org.mockito.Mockito.times(3))
+                    .save(any());
+        }
+
+        @Test
+        @DisplayName("QUICK — 목록에 없는 문구는 INVALID_INPUT (FR-22)")
+        void rejectsUnapprovedQuickMessage() {
+            given(matchHistoryPort.isMember(17L, 1L)).willReturn(true);
+
+            assertThatThrownBy(
+                            () ->
+                                    chatService.send(
+                                            17L, 1L, new ChatSendRequest("QUICK", "안녕하세요")))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isEqualTo(ErrorCode.INVALID_INPUT);
+
+            verify(chatMessageRepository, never()).save(any());
+        }
     }
 
     @Nested
