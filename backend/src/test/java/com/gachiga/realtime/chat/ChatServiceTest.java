@@ -82,6 +82,20 @@ class ChatServiceTest {
         }
 
         @Test
+        @DisplayName("TEXT 안의 연락처는 저장 전에 마스킹된다 (FR-23)")
+        void masksContactInfoBeforeSaving() {
+            given(matchHistoryPort.isMember(17L, 1L)).willReturn(true);
+            given(chatMessageRepository.save(any()))
+                    .willAnswer(invocation -> invocation.getArgument(0));
+
+            chatService.send(17L, 1L, new ChatSendRequest("TEXT", "연락처는 010-1234-5678 이에요"));
+
+            ArgumentCaptor<ChatMessage> captor = ArgumentCaptor.forClass(ChatMessage.class);
+            verify(chatMessageRepository).save(captor.capture());
+            assertThat(captor.getValue().getContent()).isEqualTo("연락처는 *** 이에요");
+        }
+
+        @Test
         @DisplayName("멤버가 아니면 GROUP_NOT_MEMBER — 저장하지 않는다")
         void rejectsNonMember() {
             given(matchHistoryPort.isMember(17L, 1L)).willReturn(false);

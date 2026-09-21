@@ -6,6 +6,7 @@ import com.gachiga.contract.matching.MatchHistoryPort;
 import com.gachiga.contract.user.UserPort;
 import com.gachiga.realtime.chat.dto.ChatMessageResponse;
 import com.gachiga.realtime.chat.dto.ChatSendRequest;
+import com.gachiga.realtime.chat.util.ContactMasker;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.HashMap;
@@ -53,11 +54,17 @@ public class ChatService {
         requireMember(groupId, senderId);
         ChatMessageType type = requireSendableType(request.type());
         String content = requireContent(type, request.content());
+        // 퀵 메시지는 허용 문구 3종으로 고정돼 있어 연락처가 섞일 수 없다 — TEXT만 마스킹한다 (FR-23)
+        String storedContent = type == ChatMessageType.TEXT ? ContactMasker.mask(content) : content;
 
         ChatMessage saved =
                 chatMessageRepository.save(
                         ChatMessage.from(
-                                groupId, senderId, type, content, LocalDateTime.now(clock)));
+                                groupId,
+                                senderId,
+                                type,
+                                storedContent,
+                                LocalDateTime.now(clock)));
 
         broadcast(saved, nicknameOf(senderId));
         log.info("채팅 발신 groupId={} senderId={} type={}", groupId, senderId, type);
