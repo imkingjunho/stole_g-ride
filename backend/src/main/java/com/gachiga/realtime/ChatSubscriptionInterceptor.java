@@ -3,7 +3,6 @@ package com.gachiga.realtime;
 import com.gachiga.common.exception.BusinessException;
 import com.gachiga.common.exception.ErrorCode;
 import com.gachiga.contract.matching.MatchHistoryPort;
-import java.security.Principal;
 import java.util.StringTokenizer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -43,7 +42,7 @@ public class ChatSubscriptionInterceptor implements ChannelInterceptor {
             return message;
         }
 
-        Long userId = userIdOf(accessor.getUser());
+        Long userId = StompPrincipal.userIdOf(accessor.getUser());
         if (!matchHistoryPort.isMember(groupId, userId)) {
             log.warn("채팅 구독 거부 groupId={} userId={}", groupId, userId);
             throw new BusinessException(ErrorCode.GROUP_NOT_MEMBER);
@@ -71,18 +70,6 @@ public class ChatSubscriptionInterceptor implements ChannelInterceptor {
             return Long.valueOf(tokenizer.nextToken());
         } catch (NumberFormatException e) {
             return null;
-        }
-    }
-
-    private Long userIdOf(Principal principal) {
-        if (principal == null) {
-            throw new BusinessException(ErrorCode.UNAUTHORIZED, "STOMP 세션에 사용자 정보가 없습니다.");
-        }
-        try {
-            return Long.valueOf(principal.getName());
-        } catch (NumberFormatException e) {
-            throw new BusinessException(
-                    ErrorCode.UNAUTHORIZED, "STOMP 세션 사용자 id 형식이 올바르지 않습니다.");
         }
     }
 }
