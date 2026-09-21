@@ -9,6 +9,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -39,5 +42,26 @@ public class RideRequestController {
     public ApiResponse<RideRequestResponse> create(
             @CurrentUser Long userId, @Valid @RequestBody CreateRideRequestRequest request) {
         return ApiResponse.ok(rideRequestService.create(userId, request));
+    }
+
+    @Operation(
+            summary = "[P0] 내 진행 중 요청 조회",
+            description =
+                    "대기 화면이 쓰는 엔드포인트다 (FR-09). 남은 시간과 같은 거점 후보 수가 함께 나온다. "
+                            + "진행 중인 요청이 없으면 data 가 null 이다 — 404 가 아니다.")
+    @GetMapping("/me")
+    public ApiResponse<RideRequestResponse> findMine(@CurrentUser Long userId) {
+        return ApiResponse.ok(rideRequestService.findMyRequest(userId).orElse(null));
+    }
+
+    @Operation(
+            summary = "[P0] 요청 취소",
+            description =
+                    "본인 요청만 취소할 수 있다 (FR-08). 이미 확정된 그룹에서 빠지는 것은 "
+                            + "POST /api/groups/{groupId}/reject 다.")
+    @DeleteMapping("/{requestId}")
+    public ApiResponse<Void> cancel(@CurrentUser Long userId, @PathVariable Long requestId) {
+        rideRequestService.cancel(userId, requestId);
+        return ApiResponse.ok();
     }
 }

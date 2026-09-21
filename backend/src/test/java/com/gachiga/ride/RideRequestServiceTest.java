@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 
 import com.gachiga.common.exception.BusinessException;
 import com.gachiga.common.exception.ErrorCode;
+import com.gachiga.contract.event.RideRequestCancelled;
 import com.gachiga.contract.event.RideRequestCreated;
 import com.gachiga.contract.route.Coordinate;
 import com.gachiga.contract.route.HubInfo;
@@ -253,6 +254,106 @@ class RideRequestServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting(e -> ((BusinessException) e).getErrorCode())
                 .isEqualTo(ErrorCode.INVALID_INPUT);
+    }
+
+    // ── 조회·취소 (T1-3) ────────────────────────────────
+
+    @Test
+    @DisplayName("진행 중인 요청이 없으면 빈 값이다 — 404 가 아니다")
+    void noRequestReturnsEmpty() {
+        given(rideRequestRepository.findFirstByUserIdAndStatusInOrderByCreatedAtDesc(
+                        eq(USER_ID), anyList()))
+                .willReturn(Optional.empty());
+
+        assertThat(service.findMyRequest(USER_ID)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("진행 중인 요청을 거점 정보·후보 수와 함께 돌려준다")
+    void findsMyRequestWithHubAndCandidates() {
+        givenHubExists();
+        given(rideRequestRepository.findFirstByUserIdAndStatusInOrderByCreatedAtDesc(
+                        eq(USER_ID), anyList()))
+                .willReturn(Optional.of(savedWaitingRequest()));
+        given(rideRequestRepository.countByHubIdAndStatus(HUB_ID, RideRequestStatus.WAITING))
+                .willReturn(2L);
+
+        RideRequestResponse response = service.findMyRequest(USER_ID).orElseThrow();
+
+        assertThat(response.status()).isEqualTo("WAITING");
+        assertThat(response.hub().name()).isEqualTo("전남대 후문");
+        assertThat(response.candidateCount()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("본인 요청은 취소되고 취소 이벤트가 발행된다")
+    void cancelsOwnRequest() {
+        RideRequest request = savedWaitingRequest();
+        given(rideRequestRepository.findById(10L)).willReturn(Optional.of(request));
+
+        service.cancel(USER_ID, 10L);
+
+        assertThat(request.getStatus()).isEqualTo(RideRequestStatus.CANCELLED);
+        ArgumentCaptor<Object> event = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher).publishEvent(event.capture());
+        assertThat(event.getValue()).isInstanceOf(RideRequestCancelled.class);
+    }
+
+    @Test
+    @DisplayName("남의 요청은 취소할 수 없다")
+    void cannotCancelOthersRequest() {
+        given(rideRequestRepository.findById(10L)).willReturn(Optional.of(savedWaitingRequest()));
+
+        assertThatThrownBy(() -> service.cancel(999L, 10L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.FORBIDDEN);
+
+        verify(eventPublisher, never()).publishEvent(any(Object.class));
+    }
+
+    @Test
+    @DisplayName("없는 요청을 취소하면 NOT_FOUND")
+    void cancelUnknownRequest() {
+        given(rideRequestRepository.findById(10L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.cancel(USER_ID, 10L))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.NOT_FOUND);
+    }
+
+    @Test
+    @DisplayName("이미 취소된 요청은 다시 취소할 수 없다")
+    void cannotCancelTwice() {
+        RideRequest request = savedWaitingRequest();
+        request.cancel();
+        given(rideRequestRepository.findById(10L)).willReturn(Optional.of(request));
+
+        assertThatThrownBy(() -> service.cancel(USER_ID, 10L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("이미 종료된 요청");
+    }
+
+    /** 저장된 것처럼 id 가 붙은 대기 요청 */
+    private RideRequest savedWaitingRequest() {
+        RideRequest request =
+                RideRequest.create(
+                        USER_ID,
+                        HUB_ID,
+                        "광주송정역",
+                        35.1378d,
+                        126.7902d,
+                        LocalDateTime.now().plusMinutes(5),
+                        10,
+                        true,
+                        new BigDecimal("0.20"),
+                        15_466,
+                        15_300,
+                        true,
+                        LocalDateTime.now());
+        org.springframework.test.util.ReflectionTestUtils.setField(request, "id", 10L);
+        return request;
     }
 
     @Test

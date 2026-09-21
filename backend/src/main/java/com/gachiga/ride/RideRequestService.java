@@ -3,6 +3,7 @@ package com.gachiga.ride;
 import com.gachiga.common.exception.BusinessException;
 import com.gachiga.common.exception.ErrorCode;
 import com.gachiga.common.util.GeoUtils;
+import com.gachiga.contract.event.RideRequestCancelled;
 import com.gachiga.contract.event.RideRequestCreated;
 import com.gachiga.contract.route.Coordinate;
 import com.gachiga.contract.route.HubInfo;
@@ -16,6 +17,7 @@ import com.gachiga.ride.dto.CreateRideRequestRequest;
 import com.gachiga.ride.dto.RideRequestResponse;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -104,6 +106,54 @@ public class RideRequestService {
                 saved.isEstimated());
 
         return RideRequestResponse.of(saved, hub, candidateCount(saved), now);
+    }
+
+    /**
+     * 내 진행 중인 요청 (FR-09).
+     *
+     * <p>1인 1건이므로 최대 한 건이다. <b>없으면 빈 값이다 — 404 가 아니다.</b>
+     * 대기 화면이 처음 들어올 때와 WebSocket 이 끊겼을 때의 폴백으로 쓴다.
+     */
+    @Transactional(readOnly = true)
+    public Optional<RideRequestResponse> findMyRequest(Long userId) {
+        LocalDateTime now = LocalDateTime.now();
+        return rideRequestRepository
+                .findFirstByUserIdAndStatusInOrderByCreatedAtDesc(userId, IN_PROGRESS)
+                .map(request -> toResponse(request, now));
+    }
+
+    /**
+     * 요청을 취소한다 (FR-08).
+     *
+     * <p>본인 요청만 취소할 수 있다. 이미 끝난 요청이면 엔티티가 거절한다.
+     * 확정된 그룹에서 빠지는 것은 취소가 아니라 {@code POST /api/groups/{id}/reject} 다.
+     */
+    @Transactional
+    public void cancel(Long userId, Long requestId) {
+        RideRequest request =
+                rideRequestRepository
+                        .findById(requestId)
+                        .orElseThrow(
+                                () ->
+                                        new BusinessException(
+                                                ErrorCode.NOT_FOUND, "요청을 찾을 수 없습니다."));
+
+        if (!request.isOwnedBy(userId)) {
+            // 남의 요청이 존재한다는 사실도 알려 주지 않는다
+            throw new BusinessException(ErrorCode.FORBIDDEN, "본인 요청만 취소할 수 있습니다.");
+        }
+
+        request.cancel();
+
+        // 커밋된 뒤에 realtime 이 받아 대기 화면을 닫는다
+        eventPublisher.publishEvent(new RideRequestCancelled(request.getId(), userId));
+        log.info("매칭 요청 취소 requestId={} userId={}", requestId, userId);
+    }
+
+    /** 엔티티 → 응답. 거점 정보와 후보 수를 함께 채운다 */
+    private RideRequestResponse toResponse(RideRequest request, LocalDateTime now) {
+        HubInfo hub = findHub(request.getHubId());
+        return RideRequestResponse.of(request, hub, candidateCount(request), now);
     }
 
     // ── 검증 ────────────────────────────────────────────────
