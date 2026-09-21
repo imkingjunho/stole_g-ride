@@ -16,6 +16,11 @@ gachiga:
     verify-max-fail-count: 5
     # 잠금이 풀릴 때까지의 시간(분). Redis verify:fail:{email} TTL
     verify-lock-minutes: 30
+  chat:
+    # 방이 열린 뒤 메시지를 보관하는 시간. 지나면 물리 삭제된다 (FR-21)
+    retention-hours: 3
+    # 삭제 스케줄러 주기(초)
+    cleanup-interval-seconds: 60
 
 # ⚠️ MAIL_USERNAME·MAIL_PASSWORD 는 [.env 항목 요청]으로 .env.example 에 추가해 달라고 이승민에게
 # 요청해야 한다 (CLAUDE.md §2). 그 전까지는 기본값(localhost)으로 기동만 되고, local 프로파일에서는

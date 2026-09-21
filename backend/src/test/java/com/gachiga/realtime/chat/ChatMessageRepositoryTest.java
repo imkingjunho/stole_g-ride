@@ -65,4 +65,39 @@ class ChatMessageRepositoryTest {
 
         assertThat(found).extracting(ChatMessage::getContent).containsExactly("이전");
     }
+
+    @Test
+    @DisplayName("deleteByGroupId — 그룹의 메시지를 전부 지우고 건수를 돌려준다")
+    void deletesAllMessagesOfGroup() {
+        repository.saveAndFlush(ChatMessage.from(17L, 1L, ChatMessageType.TEXT, "그룹17-1", NOW));
+        repository.saveAndFlush(
+                ChatMessage.from(17L, 1L, ChatMessageType.TEXT, "그룹17-2", NOW.plusMinutes(1)));
+        repository.saveAndFlush(ChatMessage.from(99L, 1L, ChatMessageType.TEXT, "그룹99", NOW));
+
+        long deleted = repository.deleteByGroupId(17L);
+
+        assertThat(deleted).isEqualTo(2);
+        assertThat(repository.findByGroupIdAndCreatedAtLessThanOrderByCreatedAtDesc(
+                        17L, NOW.plusMinutes(10), PageRequest.of(0, 10)))
+                .isEmpty();
+        assertThat(repository.findByGroupIdAndCreatedAtLessThanOrderByCreatedAtDesc(
+                        99L, NOW.plusMinutes(10), PageRequest.of(0, 10)))
+                .hasSize(1);
+    }
+
+    @Test
+    @DisplayName("findExpiredGroupIds — 가장 오래된 메시지가 cutoff 이전인 그룹만 돌려준다")
+    void findsExpiredGroupIds() {
+        // 그룹 17: 가장 오래된 메시지가 cutoff 이전 → 대상
+        repository.saveAndFlush(ChatMessage.from(17L, 1L, ChatMessageType.TEXT, "오래됨", NOW));
+        repository.saveAndFlush(
+                ChatMessage.from(17L, 1L, ChatMessageType.TEXT, "최근", NOW.plusHours(4)));
+        // 그룹 99: 가장 오래된 메시지도 cutoff 이후 → 대상 아님
+        repository.saveAndFlush(
+                ChatMessage.from(99L, 1L, ChatMessageType.TEXT, "안 지남", NOW.plusHours(5)));
+
+        List<Long> expired = repository.findExpiredGroupIds(NOW.plusHours(3));
+
+        assertThat(expired).containsExactly(17L);
+    }
 }
