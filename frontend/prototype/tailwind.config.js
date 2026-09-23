@@ -3,13 +3,15 @@ export default {
   theme: {
     extend: {
       colors: {
-        brand: 'var(--brand)',
-        ink: 'var(--ink)',
-        surface: 'var(--surface)',
+        brand: 'var(--blue)',
+        ink: '#191f28',
+        surface: '#ffffff',
         canvas: 'var(--canvas)',
       },
-      fontFamily: { sans: ['system-ui', 'Apple SD Gothic Neo', 'Malgun Gothic', 'sans-serif'] },
-      borderRadius: { card: 'var(--radius-card)' },
+      fontFamily: {
+        sans: ['Pretendard', 'system-ui', 'Noto Sans KR', 'Malgun Gothic', 'sans-serif'],
+      },
+      borderRadius: { card: '18px' },
     },
   },
   plugins: [],

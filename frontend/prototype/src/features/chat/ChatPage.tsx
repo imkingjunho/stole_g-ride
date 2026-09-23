@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent, KeyboardEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { Avatar, Badge, Button, Card, Icon } from '../../shared/ui';
+import { Avatar, Icon } from '../../shared/ui';
 import { PreviewState } from '../../shared/preview/PreviewState';
 
 export function ChatPage() {
-  // 입력 문장을 이 탭에 전시할 뿐 서버나 다른 사용자에게 전송하지 않는다.
+  // 입력 문장을 이 탭에만 표시한다. 서버나 다른 사용자에게 전송하지 않는다.
   const [bubbles, setBubbles] = useState<string[]>([]);
   const [draft, setDraft] = useState('');
   const list = useRef<HTMLDivElement>(null);
+  const input = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     if (list.current) list.current.scrollTop = list.current.scrollHeight;
   }, [bubbles]);
@@ -32,72 +33,95 @@ export function ChatPage() {
   }
   return (
     <div className="page-enter chat-page">
-      <div className="page-heading">
-        <span className="eyebrow">만날 장소를 함께 정해요</span>
-        <h1>오늘의 동행 채팅</h1>
-        <p>닉네임으로 편하게 이야기해요.</p>
-      </div>
+      <h1 className="sr-only">오늘의 동행 채팅</h1>
       <PreviewState emptyTitle="아직 대화가 없어요">
-        <Card className="chat-card">
-          <header className="chat-header">
-            <div className="stacked-avatars">
-              <Avatar label="후문" small />
-              <Avatar label="초록" tone="peach" small />
-              <Avatar label="노을" tone="lavender" small />
+        <div className="chat-privacy">
+          <Icon name="lock" />
+          <p>
+            <strong>편하게 만나고, 안전하게 이동해요</strong>
+            <span>이 대화는 시안이에요. 새로고침하면 입력한 말풍선이 사라져요.</span>
+          </p>
+        </div>
+        <div
+          className="chat-messages"
+          ref={list}
+          role="log"
+          aria-label="예시 대화"
+          aria-live="polite"
+          aria-relevant="additions"
+        >
+          <p className="chat-date">
+            <span>9월 18일 · 예시 대화</span>
+          </p>
+          <Link to="/groups/demo" className="system-message">
+            <span className="success-icon">
+              <Icon name="check" />
+            </span>
+            <span>
+              <strong>매칭이 성사됐어요</strong>
+              <small>전남대 후문에서 함께 출발해요</small>
+            </span>
+            <Icon name="chevron" />
+          </Link>
+          <div className="chat-row">
+            <Avatar label="초록" tone="peach" small />
+            <div className="message-content">
+              <span className="sender-label">초록발걸음</span>
+              <div className="bubble">안녕하세요! 후문 앞 편의점에서 만날까요?</div>
             </div>
-            <div>
-              <h2>전남대 후문에서 함께</h2>
-              <p>후문산책러 · 초록발걸음 · 노을따라</p>
-            </div>
-            <Link to="/groups/demo" className="icon-button" aria-label="동승 정보 보기">
-              <Icon name="info" />
-            </Link>
-          </header>
-          <div className="chat-privacy">
-            <Icon name="lock" />
-            <span>대화 보관·삭제 안내가 표시될 자리예요.</span>
-            <Badge tone="neutral">시안</Badge>
+            <time>17:20</time>
           </div>
-          <div
-            className="chat-messages"
-            ref={list}
-            role="log"
-            aria-label="예시 대화"
-            aria-live="polite"
-            aria-relevant="additions"
-          >
-            <p className="chat-date">화면 구성을 위한 예시 대화</p>
-            <div className="system-message">세 명의 동행이 모였어요. 반갑게 인사해 볼까요?</div>
-            <div className="chat-row">
-              <Avatar label="초록" tone="peach" small />
-              <div>
-                <span className="sender-label">초록발걸음</span>
-                <div className="bubble">안녕하세요! 후문 앞 편의점에서 만날까요?</div>
-              </div>
-              <time>17:20</time>
+          <div className="chat-row chat-row-me">
+            <time>17:21</time>
+            <div className="message-content">
+              <span className="sr-only">나 · 예시</span>
+              <div className="bubble">좋아요! 저는 편의점 앞에 있어요.</div>
             </div>
-            <div className="chat-row chat-row-me">
-              <time>17:21</time>
-              <div>
-                <span className="sender-label">나 · 예시</span>
-                <div className="bubble">좋아요! 저는 편의점 앞에 있어요.</div>
+          </div>
+          <div className="chat-row">
+            <Avatar label="노을" tone="lavender" small />
+            <div className="message-content">
+              <span className="sender-label">노을따라</span>
+              <div className="bubble">
+                저도 5분 안에 도착해요.
+                <br />
+                같이 가요!
               </div>
             </div>
-            <div className="chat-row">
-              <Avatar label="노을" tone="lavender" small />
-              <div>
-                <span className="sender-label">노을따라</span>
-                <div className="bubble">저도 곧 도착해요. 같이 가요!</div>
+            <time>17:21</time>
+          </div>
+          <p className="chat-inline-note">
+            <Icon name="shield" width="14" height="14" />
+            만날 장소는 공개된 곳으로 정해 주세요.
+          </p>
+          {bubbles.map((text, index) => (
+            <div className="chat-row chat-row-me" key={index}>
+              <div className="message-content">
+                <span className="sender-label">내 말풍선 미리보기</span>
+                <div className="bubble">{text}</div>
               </div>
-              <time>17:21</time>
             </div>
-            {bubbles.map((text, index) => (
-              <div className="chat-row chat-row-me" key={index}>
-                <div>
-                  <span className="sender-label">내 말풍선 미리보기</span>
-                  <div className="bubble">{text}</div>
-                </div>
-              </div>
+          ))}
+        </div>
+        <div className="composer-area">
+          <div className="quick-replies" aria-label="빠른 문장 선택">
+            {(
+              [
+                { text: '도착했어요', icon: 'check' },
+                { text: '5분 늦어요', icon: 'clock' },
+                { text: '출발할까요?', icon: 'car' },
+              ] as const
+            ).map(({ text, icon }) => (
+              <button
+                key={text}
+                type="button"
+                onClick={() => {
+                  setDraft(text);
+                  input.current?.focus();
+                }}
+              >
+                {text} <Icon name={icon} width="12" height="12" />
+              </button>
             ))}
           </div>
           <form className="chat-composer" onSubmit={addPreview}>
@@ -105,23 +129,29 @@ export function ChatPage() {
               말풍선에 넣어 볼 문장
             </label>
             <textarea
+              ref={input}
               id="chat-draft"
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               onKeyDown={onKeyDown}
               maxLength={500}
-              rows={2}
-              placeholder="문장을 입력해 말풍선을 확인해 보세요"
+              rows={1}
+              placeholder="메시지를 입력해 보세요"
             />
-            <Button type="submit" disabled={!draft.trim()} aria-label="말풍선 미리보기 추가">
-              <Icon name="send" />
-            </Button>
+            <button
+              className="send-button"
+              type="submit"
+              disabled={!draft.trim()}
+              aria-label="말풍선 미리보기 추가"
+            >
+              <Icon name="arrow" />
+            </button>
             <div className="composer-note">
-              <span>이 화면에만 표시되며 실제로 전송되지 않아요.</span>
+              <span>이 화면에만 표시돼요 · 실제 전송 없음</span>
               <span>{draft.length}/500</span>
             </div>
           </form>
-        </Card>
+        </div>
       </PreviewState>
     </div>
   );

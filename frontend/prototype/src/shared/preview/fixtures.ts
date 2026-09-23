@@ -11,7 +11,7 @@ export const fareExhibit = {
   segments: [
     {
       id: 'S1',
-      route: '전남대 후문 → 첫 번째 하차',
+      route: '전남대 후문 → 경신여고',
       distance: '3.0 km',
       people: 3,
       fare: '4,500',
@@ -20,7 +20,7 @@ export const fareExhibit = {
     },
     {
       id: 'S2',
-      route: '첫 번째 하차 → 내 하차',
+      route: '경신여고 → 유스퀘어',
       distance: '3.0 km',
       people: 2,
       fare: '4,500',
@@ -29,7 +29,7 @@ export const fareExhibit = {
     },
     {
       id: 'S3',
-      route: '내 하차 → 마지막 하차',
+      route: '유스퀘어 → 광주송정역',
       distance: '4.0 km',
       people: 1,
       fare: '6,000',
@@ -38,6 +38,33 @@ export const fareExhibit = {
     },
   ],
 } as const;
+
+export const participants = [
+  {
+    name: '초록발걸음',
+    tone: 'peach',
+    destination: '경신여고',
+    fare: '1,500',
+    amount: 1500,
+    mine: false,
+  },
+  {
+    name: '후문산책러',
+    tone: 'mint',
+    destination: '유스퀘어',
+    fare: '3,800',
+    amount: 3800,
+    mine: true,
+  },
+  {
+    name: '노을따라',
+    tone: 'lavender',
+    destination: '광주송정역',
+    fare: '9,700',
+    amount: 9700,
+    mine: false,
+  },
+] as const;
 
 export const historyExhibit = [
   {

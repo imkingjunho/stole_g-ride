@@ -52,7 +52,7 @@ export function Badge({
   tone = 'green',
   children,
 }: {
-  tone?: 'green' | 'neutral' | 'amber';
+  tone?: 'green' | 'neutral' | 'amber' | 'blue';
   children: ReactNode;
 }) {
   return <span className={`badge badge-${tone}`}>{children}</span>;

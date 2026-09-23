@@ -1,160 +1,123 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Avatar, Badge, Button, Card, Icon, Modal, useToast } from '../../shared/ui';
-import { fareExhibit } from '../../shared/preview/fixtures';
+import { fareExhibit, participants } from '../../shared/preview/fixtures';
 import { PreviewState } from '../../shared/preview/PreviewState';
-
-function PageHeading({
-  eyebrow,
-  title,
-  description,
-}: {
-  eyebrow: string;
-  title: string;
-  description: string;
-}) {
-  return (
-    <div className="page-heading">
-      <span className="eyebrow">{eyebrow}</span>
-      <h1>{title}</h1>
-      <p>{description}</p>
-    </div>
-  );
-}
 
 export function GroupPage() {
   const [completeOpen, setCompleteOpen] = useState(false);
   const [completed, setCompleted] = useState(false);
   const notify = useToast();
   return (
-    <div className="page-enter">
-      <PageHeading
-        eyebrow="같은 방향으로, 함께"
-        title={completed ? '동행을 마쳤어요.' : '동승자가 모였어요!'}
-        description="전남대 후문에서 함께 출발하는 동행이에요."
-      />
+    <div className="page-enter group-page">
+      <div className="match-heading">
+        <span className="success-icon">
+          <Icon name="check" />
+        </span>
+        <h1>{completed ? '동행을 마쳤어요.' : '함께 갈 학우를 찾았어요!'}</h1>
+        <p>같은 출발지에서 시작하는 가벼운 동행</p>
+        <Badge tone="blue">
+          <Icon name="pin" width="13" height="13" />
+          전남대 후문
+        </Badge>
+      </div>
       <PreviewState emptyTitle="아직 성사된 동승이 없어요">
-        <div className="group-layout">
-          <div className="group-primary">
-            <section className="savings-card" aria-label="예상 분담액">
-              <div className="savings-top">
-                <span>
-                  <Icon name="spark" />
-                  함께 나누는 이동
-                </span>
-                <Badge tone="neutral">예시 요금</Badge>
-              </div>
-              <p>내 예상 분담액</p>
-              <div className="savings-amount">
-                {fareExhibit.share}
-                <span>원</span>
-                <span className="saving-percent">
-                  {fareExhibit.savingPercent}%<small>절약</small>
-                </span>
-              </div>
-              <div className="savings-compare">
-                <span>
-                  혼자라면 <del>{fareExhibit.solo}원</del>
-                </span>
-                <strong>{fareExhibit.saving}원 가벼워졌어요</strong>
-              </div>
-              <Link to="/groups/demo/fare" className="savings-detail">
-                내 분담액은 어떻게 정해졌나요?
-                <Icon name="arrow" />
-              </Link>
-            </section>
-            <Card className="route-card">
-              <div className="section-title">
-                <h2>
-                  <Icon name="pin" />
-                  함께 가는 경로
-                </h2>
-                <span>경로 예시</span>
-              </div>
-              <div className="route-endpoints">
-                <div>
-                  <small>함께 출발</small>
-                  <strong>전남대 후문</strong>
-                </div>
-                <Icon name="arrow" />
-                <div>
-                  <small>내 목적지</small>
-                  <strong>유스퀘어</strong>
-                </div>
-              </div>
-              <div className="map-placeholder">
-                <span>
-                  <Icon name="map" width="32" height="32" />
-                </span>
-                <strong>경로 지도가 들어갈 자리</strong>
-                <p>지도 연동 전, 화면 배치만 확인해요.</p>
-              </div>
-              <div className="route-footnote">
-                <Icon name="info" />
-                <span>실제 경로·도착 시간은 지도 연결 후 표시돼요.</span>
-              </div>
-            </Card>
+        <Card className="fare-hero" aria-label="예상 분담액">
+          <Badge tone="blue">
+            <Icon name="people" width="14" height="14" />
+            3명 매칭 완료
+          </Badge>
+          <p>내 예상 분담액</p>
+          <span className="solo-fare">
+            혼자 탈 때 <del>{fareExhibit.solo}원</del>
+          </span>
+          <div className="hero-amount">
+            {fareExhibit.share}
+            <span>원</span>
           </div>
-          <div className="group-secondary">
-            <Card className="companions-card">
-              <div className="section-title">
-                <h2>오늘의 동행</h2>
-                <Badge>3명</Badge>
+          <span className="saving-pill">
+            <Icon name="spark" width="15" height="15" />
+            {fareExhibit.saving}원 아꼈어요 <b>{fareExhibit.savingPercent}%</b>
+          </span>
+          <p className="micro-note">구간별 요금 분담을 적용한 예시 금액이에요.</p>
+        </Card>
+        <Card className="route-card">
+          <div className="section-title">
+            <h2>함께 가는 경로</h2>
+            <span>총 10.0 km · 예시</span>
+          </div>
+          <div
+            className="route-track"
+            aria-label="전남대 후문 출발, 경신여고 1번 하차, 유스퀘어 내 하차, 광주송정역 3번 하차"
+          >
+            {['전남대 후문', '경신여고', '유스퀘어', '광주송정역'].map((stop, index) => (
+              <div key={stop} className={index === 2 ? 'stop stop-mine' : 'stop'}>
+                <span className="stop-dot">
+                  {index === 0 ? <Icon name="car" width="15" height="15" /> : index}
+                </span>
+                <strong>{stop}</strong>
+                <small>
+                  {index === 0 ? '함께 출발' : index === 2 ? '내 하차' : `${index}번째 하차`}
+                </small>
               </div>
-              <p className="muted small">모두 전남대 후문에서 함께 탑승해요.</p>
-              <div className="companion">
-                <Avatar label="초록" tone="peach" />
-                <div>
-                  <strong>초록발걸음</strong>
-                  <span>첫 번째 하차 · 1,500원</span>
-                </div>
-                <span className="order-number">1</span>
-              </div>
-              <div className="companion companion-me">
-                <Avatar label="후문" />
-                <div>
+            ))}
+          </div>
+        </Card>
+        <section className="companions-section">
+          <div className="section-title">
+            <h2>
+              오늘의 동행 <span className="blue-text">3</span>
+            </h2>
+            <span>탑승 순서 · 모두 후문 출발</span>
+          </div>
+          <div className="companion-list">
+            {participants.map((person, index) => (
+              <Card key={person.name} className={`companion ${person.mine ? 'companion-me' : ''}`}>
+                <Avatar label={person.name} tone={person.tone} />
+                <div className="companion-info">
                   <strong>
-                    후문산책러 <span className="me-label">나</span>
+                    {person.name}
+                    {person.mine && <span className="me-label">나</span>}
                   </strong>
-                  <span>두 번째 하차 · 3,800원</span>
+                  <span>
+                    {index + 1}번째 하차 · {person.destination}
+                  </span>
                 </div>
-                <span className="order-number">2</span>
-              </div>
-              <div className="companion">
-                <Avatar label="노을" tone="lavender" />
-                <div>
-                  <strong>노을따라</strong>
-                  <span>세 번째 하차 · 9,700원</span>
+                <div className="companion-fare">
+                  <strong>
+                    {person.fare}
+                    <small>원</small>
+                  </strong>
+                  <span>예상 분담액</span>
                 </div>
-                <span className="order-number">3</span>
-              </div>
-              <div className="group-total">
-                <span>예상 요금 합계</span>
-                <strong>{fareExhibit.total}원</strong>
-              </div>
-            </Card>
-            <Card className="meeting-note">
-              <span className="note-icon">
-                <Icon name="chat" />
-              </span>
-              <h2>만날 장소를 정해 볼까요?</h2>
-              <p>동승자와 대화하며 정확한 탑승 장소를 정할 수 있어요.</p>
-              <Link to="/groups/demo/chat" className="button button-primary full-width">
-                <Icon name="chat" />
-                채팅 화면 보기
-                <Icon name="arrow" />
-              </Link>
-            </Card>
-            <Button
-              variant="secondary"
-              className="full-width"
-              onClick={() => (completed ? setCompleted(false) : setCompleteOpen(true))}
-            >
-              {completed ? '성사 화면으로 되돌리기' : '탑승 완료 안내 보기'}
-              <Icon name="check" />
-            </Button>
-            <p className="micro-note">모든 인물과 금액은 화면 구성을 위한 예시예요.</p>
+              </Card>
+            ))}
           </div>
+        </section>
+        <Link to="/groups/demo/fare" className="card explanation-link">
+          <span className="benefit-icon">
+            <Icon name="calculator" />
+          </span>
+          <span>
+            <strong>내 요금은 어떻게 정해졌나요?</strong>
+            <small>함께 탄 구간만 공정하게 나눠요</small>
+          </span>
+          <Icon name="chevron" />
+        </Link>
+        <div className="group-actions">
+          <Link to="/groups/demo/chat" className="button button-primary full-width">
+            <Icon name="chat" />
+            동승자와 채팅하기
+          </Link>
+          <Button
+            variant="secondary"
+            className="full-width"
+            aria-label={completed ? '성사 화면으로 되돌리기' : '탑승 완료 안내 보기'}
+            onClick={() => (completed ? setCompleted(false) : setCompleteOpen(true))}
+          >
+            <Icon name={completed ? 'refresh' : 'check'} />
+            {completed ? '성사 화면으로 되돌리기' : '탑승을 완료했어요'}
+          </Button>
         </div>
       </PreviewState>
       <Modal open={completeOpen} onClose={() => setCompleteOpen(false)} title="동행을 마치셨나요?">
@@ -162,8 +125,7 @@ export function GroupPage() {
           <Icon name="check" width="30" height="30" />
         </div>
         <p className="dialog-copy">
-          실제 서비스에서는 동승 완료를 확인하는 단계예요. 지금은 완료 상태의 화면만 미리 볼 수
-          있어요.
+          지금은 완료 상태의 화면만 미리 볼 수 있어요. 실제 이용 상태는 바뀌지 않아요.
         </p>
         <div className="dialog-actions">
           <Button variant="secondary" onClick={() => setCompleteOpen(false)}>
@@ -173,7 +135,7 @@ export function GroupPage() {
             onClick={() => {
               setCompleted(true);
               setCompleteOpen(false);
-              notify('완료 화면 시안입니다. 실제 이용 상태는 변경하지 않았어요.');
+              notify('동승 완료 화면의 시안이에요.');
             }}
           >
             완료 화면 보기
@@ -187,127 +149,142 @@ export function GroupPage() {
 export function FarePage() {
   const [helpOpen, setHelpOpen] = useState(false);
   return (
-    <div className="page-enter">
-      <Link className="back-link" to="/groups/demo">
-        <Icon name="back" />
-        매칭 성사 화면
-      </Link>
-      <PageHeading
-        eyebrow="어디까지 함께 탔는지에 따라"
-        title="내가 탄 만큼, 공정하게."
-        description="각 구간의 요금을 함께 탄 인원으로 나눠요."
-      />
+    <div className="page-enter fare-page">
+      <div className="page-heading">
+        <h1>
+          실제로 탄 구간만
+          <br />
+          나눠서 계산했어요
+        </h1>
+        <p>내가 내린 뒤의 요금은 부담하지 않아요.</p>
+        <div className="fare-overview">
+          <Badge tone="neutral">총 10.0 km</Badge>
+          <strong>{fareExhibit.total}원</strong>
+          <span>예시 요금</span>
+        </div>
+      </div>
       <PreviewState>
-        <div className="fare-layout">
-          <Card className="fare-main">
-            <div className="section-title">
-              <h2>구간별 요금 안내</h2>
-              <Badge tone="neutral">예시</Badge>
-            </div>
-            <div className="fare-legend">
-              <span>
-                <i />
-                내가 탑승한 구간
-              </span>
-              <span>
-                <i />
-                내가 내린 이후
-              </span>
-            </div>
-            <div className="distance-bar" aria-label="첫 두 구간 6km 탑승, 마지막 4km 미탑승">
-              <div style={{ flex: 3 }}>S1 · 3 km</div>
-              <div style={{ flex: 3 }}>S2 · 3 km</div>
-              <div style={{ flex: 4 }}>S3 · 4 km</div>
-            </div>
-            <div className="segments">
-              {fareExhibit.segments.map((segment) => (
-                <section
-                  key={segment.id}
-                  className={`segment ${segment.active ? 'segment-active' : ''}`}
-                >
-                  <div className="segment-index">{segment.id}</div>
-                  <div className="segment-info">
-                    <h3>{segment.route}</h3>
-                    <p>
-                      {segment.distance}
-                      <span>·</span>
-                      <Icon name="people" />
-                      {segment.people}명 탑승
-                    </p>
-                    <div className="segment-calculation">
-                      <span>구간 요금 {segment.fare}원</span>
-                      <strong>내 몫 {segment.mine}원</strong>
-                    </div>
-                  </div>
-                </section>
-              ))}
-            </div>
-            <div className="fare-explanation">
-              <Icon name="info" />
-              <p>
-                내가 내린 뒤의 구간 요금은 부담하지 않아요.
-                <br />
-                나는 S1과 S2 구간에만 함께 탔어요.
-              </p>
-            </div>
-          </Card>
-          <div className="fare-side">
-            <Card className="receipt-card">
-              <span className="eyebrow">MY SHARE</span>
-              <h2>내 예상 분담액</h2>
-              <dl>
-                <div>
-                  <dt>S1 · 3명과 함께</dt>
-                  <dd>1,500원</dd>
-                </div>
-                <div>
-                  <dt>S2 · 2명과 함께</dt>
-                  <dd>2,250원</dd>
-                </div>
-                <div>
-                  <dt>S3 · 하차 후</dt>
-                  <dd>0원</dd>
-                </div>
-                <div className="receipt-subtotal">
-                  <dt>구간 분담액 합계</dt>
-                  <dd>{fareExhibit.beforeRounding}원</dd>
-                </div>
-                <div>
-                  <dt>
-                    <button className="inline-info" onClick={() => setHelpOpen(true)}>
-                      100원 단위 보정 <Icon name="info" width="16" height="16" />
-                    </button>
-                  </dt>
-                  <dd>{fareExhibit.adjustment}원</dd>
-                </div>
-              </dl>
-              <div className="receipt-total">
-                <span>최종 분담액</span>
+        <Card className="distance-card">
+          <div className="distance-bar" aria-label="첫 두 구간 6km 탑승, 마지막 4km 미탑승">
+            <div style={{ flex: 3 }}>3 km</div>
+            <div style={{ flex: 3 }}>3 km</div>
+            <div style={{ flex: 4 }}>4 km</div>
+          </div>
+          <div className="distance-labels">
+            <span>후문 (출발)</span>
+            <span>경신여고</span>
+            <span className="blue-text">유스퀘어 (나)</span>
+            <span>송정역</span>
+          </div>
+        </Card>
+        <div className="segments">
+          {fareExhibit.segments.map((segment, index) => (
+            <Card
+              key={segment.id}
+              className={`segment ${!segment.active ? 'segment-inactive' : ''}`}
+            >
+              <div className="segment-heading">
+                <h2>
+                  <i />
+                  구간 {index + 1} · {segment.route}
+                </h2>
+                <Badge tone={segment.active ? 'blue' : 'neutral'}>{segment.people}명</Badge>
+              </div>
+              <div className="segment-calculation">
+                <span>
+                  {segment.distance} · {segment.fare}원 ÷ {segment.people}명
+                </span>
                 <strong>
-                  {fareExhibit.share}
-                  <small>원</small>
+                  <small>내 몫</small>
+                  {segment.mine}원
                 </strong>
               </div>
-              <p className="receipt-saving">
-                <Icon name="spark" />
-                혼자 탈 때보다 {fareExhibit.saving}원 절약
-              </p>
+              {!segment.active && <p className="segment-note">하차 후 구간 · 내 분담액 0원</p>}
             </Card>
-            <p className="micro-note">
-              계산 결과를 보여주는 화면 시안이에요.
+          ))}
+        </div>
+        <section className="fare-people">
+          <div className="section-title">
+            <h2>사람별 합계</h2>
+            <span>100원 단위 보정 후</span>
+          </div>
+          <Card>
+            {participants.map((person) => (
+              <div
+                key={person.name}
+                className={`person-total ${person.mine ? 'person-total-me' : ''}`}
+              >
+                <div>
+                  <Avatar label={person.name} tone={person.tone} small />
+                  <strong>{person.name}</strong>
+                  {person.mine && <span className="me-label">나</span>}
+                  <b>{person.fare}원</b>
+                </div>
+                <div className="fare-progress" aria-hidden="true">
+                  <span style={{ width: `${(person.amount / 15000) * 100}%` }} />
+                </div>
+              </div>
+            ))}
+            <div className="group-total">
+              <span>전체 분담액 합계</span>
+              <strong>{fareExhibit.total}원</strong>
+            </div>
+          </Card>
+        </section>
+        <Card className="receipt-card">
+          <h2>내 요금 계산</h2>
+          <dl>
+            <div>
+              <dt>함께 탄 S1 + S2 구간</dt>
+              <dd>{fareExhibit.beforeRounding}원</dd>
+            </div>
+            <div>
+              <dt>
+                <button className="inline-info" onClick={() => setHelpOpen(true)}>
+                  100원 단위 보정
+                  <Icon name="info" width="16" height="16" />
+                </button>
+              </dt>
+              <dd>{fareExhibit.adjustment}원</dd>
+            </div>
+          </dl>
+          <div className="receipt-total">
+            <span>최종 분담액</span>
+            <strong>
+              {fareExhibit.share}
+              <small>원</small>
+            </strong>
+          </div>
+        </Card>
+        <div className="fair-note">
+          <span className="benefit-icon">
+            <Icon name="calculator" />
+          </span>
+          <div>
+            <strong>똑같이 나누면 한 명당 5,000원</strong>
+            <p>
+              먼저 내린 사람은 적게 부담해요.
               <br />
-              실제 정산 계산이나 결제는 진행하지 않아요.
+              가치가는 함께 탄 구간만 나눠 내요.
             </p>
-            <Link to="/groups/demo" className="button button-secondary full-width">
-              동승 정보로 돌아가기
-            </Link>
           </div>
         </div>
+        <div className="dark-saving">
+          <span>
+            <Icon name="spark" />
+            혼자 탈 때보다 아낀 금액
+          </span>
+          <strong>{fareExhibit.saving}원</strong>
+        </div>
+        <p className="micro-note">고정된 계산 예시이며, 실제 정산·결제는 진행하지 않아요.</p>
+        <Link to="/groups/demo" className="button button-secondary full-width">
+          동승 정보로 돌아가기
+        </Link>
       </PreviewState>
       <Modal open={helpOpen} onClose={() => setHelpOpen(false)} title="100원 단위 보정이란?">
         <p className="dialog-copy">
-          예시에서 내 구간 분담액 3,750원을 100원 단위로 올려 3,800원으로 표시했어요. 전체 요금보다
-          늘어난 금액은 분담액이 가장 큰 동승자에게서 차감해요.
+          내 구간 분담액 3,750원을 100원 단위로 올려 3,800원으로 표시했어요. 전체 요금보다 늘어난
+          금액은 분담액이 가장 큰 동승자에게서 차감해요.
         </p>
         <div className="info-box">1,500원 + 3,800원 + 9,700원 = 15,000원</div>
         <Button className="full-width" onClick={() => setHelpOpen(false)}>

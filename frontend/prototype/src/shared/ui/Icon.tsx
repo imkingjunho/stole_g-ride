@@ -1,6 +1,12 @@
 import type { SVGProps } from 'react';
 
 const paths = {
+  car: 'm5 7 2-4h10l2 4M4 7h16v11H4V7Zm2 11v3m12-3v3M7 11h2m6 0h2M8 15h8M9 3V1h6v2',
+  shield: 'm12 2 8 3v6c0 5-8 11-8 11S4 16 4 11V5l8-3Zm-4 9 3 3 5-6',
+  eye: 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Zm13 0a3 3 0 1 1-6 0 3 3 0 0 1 6 0',
+  eyeOff:
+    'm3 3 18 18M9 5a12 12 0 0 1 3 0c6 0 10 7 10 7a19 19 0 0 1-3 4M6 6a22 22 0 0 0-4 6s4 7 10 7a13 13 0 0 0 5-1M10 10a3 3 0 0 0 4 4',
+  calculator: 'M5 2h14v20H5V2Zm3 3h8v4H8V5Zm0 8h1m6 0h1m-8 4h1m6 0h1',
   arrow: 'M5 12h14m-6-6 6 6-6 6',
   back: 'M19 12H5m6-6-6 6 6 6',
   chevron: 'm9 5 7 7-7 7',
