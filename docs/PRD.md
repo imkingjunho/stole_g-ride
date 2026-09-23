@@ -917,8 +917,11 @@ public interface RideRequestPort {
 public record QueueStatus(Long requestId, String status, int remainingSeconds, int candidateCount) {}
 
 public interface QueueStatusPort {
-    /** 사용자의 진행 중 요청 상태. 없으면 empty. realtime 이 5초마다 호출 */
+    /** 사용자 한 명의 진행 중 요청 상태. 없으면 empty. 이벤트 즉시 push 에 쓴다 */
     Optional<QueueStatus> statusOf(Long userId);
+    /** 여러 사용자를 한 번에. 진행 중 요청이 있는 사용자만 키로 들어간다. realtime 5초 주기 push 용
+     *  (realtime 반영 대기 — 임승현). 500명까지 쿼리 2개 (T2-3) — 사람마다 statusOf 를 부르면 사람 수 × 2 */
+    Map<Long, QueueStatus> statusOfAll(Collection<Long> userIds);
 }
 
 // ── contract/matching ──────────────────────────────────────────

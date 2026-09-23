@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import com.gachiga.contract.ride.QueueStatus;
 import com.gachiga.contract.ride.WaitingRequest;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 /**
  * {@link RideRequestAdapter} 검증 — 다른 모듈이 보는 창구다.
@@ -38,6 +40,7 @@ class RideRequestAdapterTest {
 
     @Mock private RideRequestRepository rideRequestRepository;
     @Mock private RideCandidateCounter candidateCounter;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     private RideRequestAdapter adapter;
 
@@ -53,7 +56,7 @@ class RideRequestAdapterTest {
                         30);
         adapter =
                 new RideRequestAdapter(
-                        rideRequestRepository, properties, candidateCounter, FIXED);
+                        rideRequestRepository, properties, candidateCounter, eventPublisher, FIXED);
     }
 
     private RideRequest request(Long id) {
@@ -114,19 +117,53 @@ class RideRequestAdapterTest {
     }
 
     @Test
-    @DisplayName("배정에 성공하면 true — 조건부 UPDATE 가 1건을 바꿨을 때")
+    @DisplayName("배정에 성공하면 true — 조건부 UPDATE 가 1건을 바꿨을 때. 대기열에서 빼라는 신호를 낸다")
     void matchSucceedsWhenRowUpdated() {
         given(rideRequestRepository.markMatchedIfVersionMatches(7L, 0)).willReturn(1);
 
         assertThat(adapter.tryMarkMatched(7L, 0)).isTrue();
+        verify(eventPublisher).publishEvent(new RideRequestStatusChanged(7L));
     }
 
     @Test
-    @DisplayName("남이 먼저 가져갔으면 false — 0건 갱신 (E-02 중복 배정 차단)")
+    @DisplayName("남이 먼저 가져갔으면 false — 0건 갱신 (E-02 중복 배정 차단). 대기열은 건드리지 않는다")
     void matchFailsWhenAlreadyTaken() {
         given(rideRequestRepository.markMatchedIfVersionMatches(7L, 0)).willReturn(0);
 
         assertThat(adapter.tryMarkMatched(7L, 0)).isFalse();
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    @DisplayName("재대기·확정·완료로 바꾸면 대기열을 맞추라는 신호를 낸다")
+    void transitionsSignalQueueSync() {
+        RideRequest matched = request(7L);
+        matched.markMatched();
+        given(rideRequestRepository.findById(7L)).willReturn(Optional.of(matched));
+
+        adapter.markConfirmed(7L);
+
+        verify(eventPublisher).publishEvent(new RideRequestStatusChanged(7L));
+    }
+
+    @Test
+    @DisplayName("그룹에 없는 요청을 대기로 되돌리라 해도 예외 없이 건너뛴다 — 끝난 요청이 되살아나면 1인 1건이 깨진다")
+    void invalidTransitionIsSkipped() {
+        RideRequest cancelled = request(7L);
+        cancelled.cancel();
+        given(rideRequestRepository.findById(7L)).willReturn(Optional.of(cancelled));
+
+        adapter.markWaiting(7L);
+
+        assertThat(cancelled.getStatus()).isEqualTo(RideRequestStatus.CANCELLED);
+        verifyNoInteractions(eventPublisher);
+    }
+
+    @Test
+    @DisplayName("일괄 조회에 빈 목록을 주면 쿼리 없이 빈 맵이다")
+    void statusOfAllWithNoUsers() {
+        assertThat(adapter.statusOfAll(List.of())).isEmpty();
+        verifyNoInteractions(rideRequestRepository);
     }
 
     @Test

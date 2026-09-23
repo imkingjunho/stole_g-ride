@@ -6,13 +6,16 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.gachiga.common.exception.BusinessException;
 import com.gachiga.common.exception.ErrorCode;
 import com.gachiga.contract.event.RideRequestCancelled;
 import com.gachiga.contract.event.RideRequestCreated;
+import com.gachiga.contract.event.RideRequestExpired;
 import com.gachiga.contract.route.Coordinate;
 import com.gachiga.contract.route.HubInfo;
 import com.gachiga.contract.route.HubPort;
@@ -40,6 +43,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.SimpleTransactionStatus;
 
@@ -372,6 +376,24 @@ class RideRequestServiceTest {
         assertThat(response.status()).isEqualTo("WAITING");
         assertThat(response.hub().name()).isEqualTo("전남대 후문");
         assertThat(response.candidateCount()).isEqualTo(1);
+        assertThat(response.groupId()).isNull();
+    }
+
+    @Test
+    @DisplayName("매칭된 요청은 그룹 id 를 함께 준다 — 대기 화면이 이 값으로 그룹 화면에 넘어간다 (REQ-1)")
+    void findsMyRequestWithGroupId() {
+        givenHubExists();
+        RideRequest matched = savedWaitingRequest();
+        matched.markMatched();
+        matched.assignGroup(17L);
+        given(rideRequestRepository.findFirstByUserIdAndStatusInOrderByCreatedAtDesc(
+                        eq(USER_ID), anyList()))
+                .willReturn(Optional.of(matched));
+
+        RideRequestResponse response = service.findMyRequest(USER_ID).orElseThrow();
+
+        assertThat(response.status()).isEqualTo("MATCHED");
+        assertThat(response.groupId()).isEqualTo(17L);
     }
 
     @Test
@@ -457,5 +479,108 @@ class RideRequestServiceTest {
         RideRequestResponse response = service.create(USER_ID, validRequest());
 
         assertThat(response.candidateCount()).isEqualTo(2);
+    }
+
+    // ── 지난 요청 즉시 만료 (REQ-4) · 취소 경합 (REQ-6) ─────────────
+
+    /** 고정 시각(08:00) 기준으로 만든 대기 요청. 최대 대기 10분 */
+    private RideRequest waitingRequestCreatedAt(LocalDateTime createdAt) {
+        RideRequest request =
+                RideRequest.create(
+                        USER_ID,
+                        HUB_ID,
+                        "광주송정역",
+                        35.1378d,
+                        126.7902d,
+                        createdAt.plusMinutes(5),
+                        10,
+                        false,
+                        new BigDecimal("0.20"),
+                        15_466,
+                        15_300,
+                        true,
+                        createdAt);
+        org.springframework.test.util.ReflectionTestUtils.setField(request, "id", 10L);
+        return request;
+    }
+
+    @Test
+    @DisplayName("대기 시간이 지났는데 아직 정리 안 된 내 요청은 재요청 때 바로 만료시키고 새로 받는다 (FR-10)")
+    void expiresOverdueRequestBeforeCreating() {
+        givenActiveUser();
+        givenHubExists();
+        givenRoute(10_591, 12_400, true);
+        givenSaveEchoesBack();
+        // 07:40 에 만들어 07:50 에 만료됐어야 할 요청 — 스케줄러가 아직 안 돌았다
+        RideRequest overdue = waitingRequestCreatedAt(LocalDateTime.of(2026, 10, 20, 7, 40));
+        given(
+                        rideRequestRepository.findFirstByUserIdAndStatusInOrderByCreatedAtDesc(
+                                USER_ID, List.of(RideRequestStatus.WAITING)))
+                .willReturn(Optional.of(overdue));
+
+        RideRequestResponse response = service.create(USER_ID, validRequest());
+
+        assertThat(overdue.getStatus()).isEqualTo(RideRequestStatus.EXPIRED);
+        assertThat(response.status()).isEqualTo("WAITING");
+        ArgumentCaptor<Object> events = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher, times(2)).publishEvent(events.capture());
+        assertThat(events.getAllValues().get(0)).isInstanceOf(RideRequestExpired.class);
+        assertThat(events.getAllValues().get(1)).isInstanceOf(RideRequestCreated.class);
+    }
+
+    @Test
+    @DisplayName("시간이 남은 대기 요청은 건드리지 않고 ALREADY_IN_QUEUE 로 거절한다")
+    void keepsLiveRequest() {
+        givenActiveUser();
+        RideRequest live = waitingRequestCreatedAt(LocalDateTime.of(2026, 10, 20, 7, 55));
+        given(
+                        rideRequestRepository.findFirstByUserIdAndStatusInOrderByCreatedAtDesc(
+                                USER_ID, List.of(RideRequestStatus.WAITING)))
+                .willReturn(Optional.of(live));
+        given(rideRequestRepository.existsByUserIdAndStatusIn(eq(USER_ID), anyList())).willReturn(true);
+
+        assertThatThrownBy(() -> service.create(USER_ID, validRequest()))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.ALREADY_IN_QUEUE);
+        assertThat(live.getStatus()).isEqualTo(RideRequestStatus.WAITING);
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    @DisplayName("스케줄러가 같은 요청을 먼저 만료시켜 버전이 충돌해도 새 요청은 그대로 받는다")
+    void overdueExpiryRaceIsIgnored() {
+        givenActiveUser();
+        givenHubExists();
+        givenRoute(10_591, 12_400, true);
+        givenSaveEchoesBack();
+        RideRequest overdue = waitingRequestCreatedAt(LocalDateTime.of(2026, 10, 20, 7, 40));
+        given(
+                        rideRequestRepository.findFirstByUserIdAndStatusInOrderByCreatedAtDesc(
+                                USER_ID, List.of(RideRequestStatus.WAITING)))
+                .willReturn(Optional.of(overdue));
+        doThrow(new ObjectOptimisticLockingFailureException(RideRequest.class, 10L))
+                .when(rideRequestRepository)
+                .flush();
+
+        RideRequestResponse response = service.create(USER_ID, validRequest());
+
+        assertThat(response.status()).isEqualTo("WAITING");
+        verify(eventPublisher, never()).publishEvent(any(RideRequestExpired.class));
+    }
+
+    @Test
+    @DisplayName("취소와 매칭 배정이 겹쳐 버전이 충돌하면 500 이 아니라 400 INVALID_INPUT, 취소 이벤트도 없다")
+    void cancelRaceGivesInvalidInput() {
+        RideRequest request = savedWaitingRequest();
+        given(rideRequestRepository.findById(10L)).willReturn(Optional.of(request));
+        given(rideRequestRepository.saveAndFlush(request))
+                .willThrow(new ObjectOptimisticLockingFailureException(RideRequest.class, 10L));
+
+        assertThatThrownBy(() -> service.cancel(USER_ID, 10L))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(ErrorCode.INVALID_INPUT);
+        verify(eventPublisher, never()).publishEvent(any());
     }
 }

@@ -1,6 +1,9 @@
 package com.gachiga.config;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import java.time.LocalDateTime;
 import java.util.TimeZone;
 import org.springframework.boot.autoconfigure.jackson.Jackson2ObjectMapperBuilderCustomizer;
 import org.springframework.context.annotation.Bean;
@@ -25,8 +28,20 @@ public class JacksonConfig {
     public Jackson2ObjectMapperBuilderCustomizer jsonCustomizer() {
         return builder -> {
             builder.timeZone(TimeZone.getTimeZone("Asia/Seoul"));
-            // LocalDateTime 등을 [2026,10,20,8,31] 배열이 아니라 ISO 문자열로 쓴다
-            builder.featuresToDisable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+            builder.featuresToDisable(
+                    // LocalDateTime 등을 [2026,10,20,8,31] 배열이 아니라 ISO 문자열로 쓴다
+                    SerializationFeature.WRITE_DATES_AS_TIMESTAMPS,
+                    // 정수 필드에 10.7 이 오면 10 으로 잘라 받지 않고 400 으로 거절한다.
+                    // 명세가 integer 로 정한 값이다 (api-spec maxWaitMin·grade 등)
+                    DeserializationFeature.ACCEPT_FLOAT_AS_INT);
+            // "2026-10-20T08:30:00Z" 를 받으면 Z 를 떼고 08:30 으로 읽는다 — 한국 시각으로는 17:30 인데
+            // 9시간 어긋난 채 저장된다. 브라우저의 toISOString() 이 바로 이 형식이다.
+            // 엄격 모드로 두면 오프셋(Z·+09:00)이 붙은 값은 400 이 된다 (api-spec 머리말 "시각 형식")
+            builder.postConfigurer(
+                    objectMapper ->
+                            objectMapper
+                                    .configOverride(LocalDateTime.class)
+                                    .setFormat(JsonFormat.Value.forLeniency(false)));
         };
     }
 }

@@ -131,4 +131,38 @@ class RideQueueSynchronizerTest {
                 .doesNotThrowAnyException();
         verify(rideQueue, never()).remove(anyLong(), anyLong());
     }
+
+    @Test
+    @DisplayName("상태 변경 신호: 지금 WAITING 이면 대기열에 넣는다 — 그룹 해체 뒤 재대기 (E-01)")
+    void statusChangedToWaitingAdds() {
+        given(rideRequestRepository.findById(7L)).willReturn(Optional.of(request(7L, 2L)));
+
+        synchronizer.on(new RideRequestStatusChanged(7L));
+
+        verify(rideQueue).add(2L, 7L, DEPART_AT);
+        verify(rideQueue, org.mockito.Mockito.never()).remove(any(), any());
+    }
+
+    @Test
+    @DisplayName("상태 변경 신호: WAITING 이 아니면 대기열에서 뺀다 — 매칭 배정·확정·완료")
+    void statusChangedAwayFromWaitingRemoves() {
+        RideRequest matched = request(7L, 2L);
+        matched.markMatched();
+        given(rideRequestRepository.findById(7L)).willReturn(Optional.of(matched));
+
+        synchronizer.on(new RideRequestStatusChanged(7L));
+
+        verify(rideQueue).remove(2L, 7L);
+        verify(rideQueue, org.mockito.Mockito.never()).add(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("상태 변경 신호 처리가 실패해도 예외를 밖으로 내지 않는다")
+    void statusChangedFailureIsSwallowed() {
+        given(rideRequestRepository.findById(7L)).willThrow(new IllegalStateException("db down"));
+
+        org.assertj.core.api.Assertions.assertThatCode(
+                        () -> synchronizer.on(new RideRequestStatusChanged(7L)))
+                .doesNotThrowAnyException();
+    }
 }

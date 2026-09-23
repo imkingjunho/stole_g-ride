@@ -26,6 +26,17 @@ class RideCandidateCounter {
         long sameHubWaiting =
                 rideRequestRepository.countByHubIdAndStatus(
                         request.getHubId(), RideRequestStatus.WAITING);
+        return othersWaiting(request, sameHubWaiting);
+    }
+
+    /**
+     * 이미 센 거점 대기 인원으로 계산한다. 여러 사람을 한 번에 조회할 때 쓴다.
+     *
+     * <p>1을 빼는 규칙은 여기 한 곳에만 둔다. 단건·일괄 경로가 같은 숫자를 내야 한다.
+     *
+     * @param sameHubWaiting 그 거점의 WAITING 요청 수(나 포함)
+     */
+    int othersWaiting(RideRequest request, long sameHubWaiting) {
         long others =
                 request.getStatus() == RideRequestStatus.WAITING
                         ? sameHubWaiting - 1

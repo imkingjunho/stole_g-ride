@@ -1,10 +1,12 @@
 package com.gachiga.config;
 
+import com.gachiga.contract.auth.CurrentUser;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
+import org.springdoc.core.utils.SpringDocUtils;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -30,6 +32,13 @@ import org.springframework.context.annotation.Configuration;
 public class SwaggerConfig {
 
     private static final String BEARER_SCHEME = "bearerAuth";
+
+    static {
+        // @CurrentUser Long userId 를 springdoc 이 필수 쿼리 파라미터로 오해해, Swagger 에 userId 입력칸이
+        // 생긴다. 서버는 그 값을 쓰지 않으므로(인증 또는 X-Dev-User 로 정해진다) 다른 사용자로 시험하는
+        // 줄 착각하게 된다. api-spec 에도 없는 파라미터다
+        SpringDocUtils.getConfig().addAnnotationsToIgnore(CurrentUser.class);
+    }
 
     @Bean
     public OpenAPI gachigaOpenApi() {

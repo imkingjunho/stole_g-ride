@@ -9,6 +9,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.json.JsonTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 
 /**
@@ -20,11 +21,16 @@ import org.springframework.test.context.ActiveProfiles;
  */
 @ActiveProfiles("test")
 @JsonTest
+// @JsonTest 는 @Configuration 의 커스터마이저를 가져오지 않는다. 명시하지 않으면 스프링 부트 기본값을
+// 시험하게 되고, 이 파일의 규칙을 지워도 테스트가 통과한다
+@Import(JacksonConfig.class)
 class JacksonConfigTest {
 
     @Autowired private ObjectMapper objectMapper;
 
     private record Sample(LocalDateTime departAt) {}
+
+    private record IntSample(Integer maxWaitMin) {}
 
     @Test
     @DisplayName("LocalDateTime 은 오프셋 없는 ISO 문자열로 나간다")
@@ -58,5 +64,44 @@ class JacksonConfigTest {
                                 objectMapper.readValue(
                                         "{\"departAt\":\"2026-10-20T08:30:00+09:00\"}", Sample.class))
                 .hasMessageContaining("LocalDateTime");
+    }
+
+    @Test
+    @DisplayName("Z 가 붙은 문자열도 거절한다 — 받아 주면 UTC 값이 9시간 어긋난 채 저장된다")
+    void rejectsZuluSuffix() {
+        assertThatThrownBy(
+                        () ->
+                                objectMapper.readValue(
+                                        "{\"departAt\":\"2026-10-20T08:30:00Z\"}", Sample.class))
+                .hasMessageContaining("LocalDateTime");
+    }
+
+    @Test
+    @DisplayName("소수 초는 받아들인다 — 오프셋만 막고 정상 형식은 막지 않는다")
+    void acceptsFractionalSeconds() throws Exception {
+        Sample sample = objectMapper.readValue("{\"departAt\":\"2026-10-20T08:30:00.500\"}", Sample.class);
+
+        assertThat(sample.departAt()).isEqualTo(LocalDateTime.of(2026, 10, 20, 8, 30, 0, 500_000_000));
+    }
+
+    @Test
+    @DisplayName("초가 없는 문자열도 받아들인다 — 브라우저 datetime-local 입력이 이 형식으로 보낸다")
+    void acceptsWithoutSeconds() throws Exception {
+        Sample sample = objectMapper.readValue("{\"departAt\":\"2026-10-20T08:30\"}", Sample.class);
+
+        assertThat(sample.departAt()).isEqualTo(LocalDateTime.of(2026, 10, 20, 8, 30));
+    }
+
+    @Test
+    @DisplayName("정수 필드에 소수가 오면 잘라 받지 않고 거절한다")
+    void rejectsFloatForInteger() {
+        assertThatThrownBy(() -> objectMapper.readValue("{\"maxWaitMin\":10.7}", IntSample.class))
+                .isInstanceOf(com.fasterxml.jackson.databind.exc.MismatchedInputException.class);
+    }
+
+    @Test
+    @DisplayName("정수는 그대로 받는다")
+    void acceptsInteger() throws Exception {
+        assertThat(objectMapper.readValue("{\"maxWaitMin\":10}", IntSample.class).maxWaitMin()).isEqualTo(10);
     }
 }

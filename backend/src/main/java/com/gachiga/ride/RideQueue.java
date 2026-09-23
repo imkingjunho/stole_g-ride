@@ -85,8 +85,10 @@ public class RideQueue {
      *
      * <p>Redis 가 재시작됐거나 DB 와 어긋났을 때 쓴다. 기존 키를 지우고 새로 채우므로
      * 중간 상태가 잠깐 보일 수 있지만, 대기열은 색인일 뿐이라 문제되지 않는다.
+     *
+     * @return 성공했으면 true. 실패해도 던지지 않는다 — 부르는 쪽이 "완료" 로그를 거짓으로 찍지 않게 알려 줄 뿐이다
      */
-    public void rebuild(Long hubId, List<RideRequest> waitingRequests) {
+    public boolean rebuild(Long hubId, List<RideRequest> waitingRequests) {
         try {
             redisTemplate.delete(key(hubId));
             for (RideRequest request : waitingRequests) {
@@ -96,8 +98,10 @@ public class RideQueue {
                                 toScore(request.getDepartAt()));
             }
             log.info("대기열 재구성 hubId={} {}건", hubId, waitingRequests.size());
+            return true;
         } catch (RuntimeException e) {
             log.warn("대기열 재구성 실패 hubId={}", hubId, e);
+            return false;
         }
     }
 

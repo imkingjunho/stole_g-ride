@@ -56,6 +56,37 @@ public class RideQueueSynchronizer {
         removeFromQueue("만료", event.requestId());
     }
 
+    /**
+     * 그 밖의 상태 전이(매칭 배정·확정·완료·해체 뒤 재대기) 뒤에 대기열을 지금 상태에 맞춘다.
+     *
+     * <p>전이마다 넣을지 뺄지를 따로 정하지 않고 <b>현재 상태만 본다</b> — WAITING 이면 넣고 아니면
+     * 뺀다. 같은 신호가 두 번 와도 결과가 같다.
+     *
+     * <p>{@code fallbackExecution} 을 켠 이유: {@code matching} 이 트랜잭션 없이
+     * {@code tryMarkMatched} 를 부르면(그 메서드가 자기 트랜잭션을 연다) 여기까지 신호가 안 올 수
+     * 있다. 켜 두면 트랜잭션이 없을 때 곧바로 처리한다.
+     */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
+    public void on(RideRequestStatusChanged event) {
+        safely(
+                "상태 변경",
+                event.requestId(),
+                () ->
+                        rideRequestRepository
+                                .findById(event.requestId())
+                                .ifPresent(
+                                        request -> {
+                                            if (request.getStatus() == RideRequestStatus.WAITING) {
+                                                rideQueue.add(
+                                                        request.getHubId(),
+                                                        request.getId(),
+                                                        request.getDepartAt());
+                                            } else {
+                                                rideQueue.remove(request.getHubId(), request.getId());
+                                            }
+                                        }));
+    }
+
     /** 거점 id 를 알아야 키를 만들 수 있으므로 요청을 다시 읽는다 */
     private void removeFromQueue(String reason, Long requestId) {
         safely(

@@ -247,4 +247,66 @@ class RideRequestTest {
             assertThat(RideRequestStatus.COMPLETED.isInProgress()).isFalse();
         }
     }
+
+    @org.junit.jupiter.api.Nested
+    @DisplayName("그룹 id")
+    class GroupId {
+
+        @Test
+        @DisplayName("진행 중인 요청에는 그룹 id 를 적는다")
+        void assignsWhileInProgress() {
+            RideRequest request = waitingRequest();
+            request.markMatched();
+
+            assertThat(request.assignGroup(17L)).isTrue();
+            assertThat(request.getGroupId()).isEqualTo(17L);
+        }
+
+        @Test
+        @DisplayName("이미 끝난 요청에는 적지 않는다 — 늦게 온 그룹 이벤트와 관계없다")
+        void ignoresFinishedRequest() {
+            RideRequest request = waitingRequest();
+            request.cancel();
+
+            assertThat(request.assignGroup(17L)).isFalse();
+            assertThat(request.getGroupId()).isNull();
+        }
+
+        @Test
+        @DisplayName("그룹이 해체돼 대기로 돌아오면 그룹 id 를 비운다")
+        void markWaitingClearsGroup() {
+            RideRequest request = waitingRequest();
+            request.markMatched();
+            request.assignGroup(17L);
+
+            request.markWaiting();
+
+            assertThat(request.getGroupId()).isNull();
+        }
+    }
+
+    @org.junit.jupiter.api.Nested
+    @DisplayName("그룹 전이는 그룹에 배정된 요청에만")
+    class InGroupOnly {
+
+        @Test
+        @DisplayName("끝난 요청은 대기로 되돌릴 수 없다 — activeUserId 없이 WAITING 이 되면 1인 1건이 깨진다")
+        void finishedCannotReturnToWaiting() {
+            RideRequest request = waitingRequest();
+            request.cancel();
+
+            assertThatThrownBy(request::markWaiting).isInstanceOf(BusinessException.class);
+            assertThat(request.getStatus()).isEqualTo(RideRequestStatus.CANCELLED);
+        }
+
+        @Test
+        @DisplayName("대기 중인 요청은 바로 확정·완료할 수 없다 — 배정을 거쳐야 한다")
+        void waitingCannotSkipMatching() {
+            RideRequest request = waitingRequest();
+
+            assertThatThrownBy(request::markConfirmed).isInstanceOf(BusinessException.class);
+            assertThatThrownBy(request::markCompleted).isInstanceOf(BusinessException.class);
+            assertThat(request.getStatus()).isEqualTo(RideRequestStatus.WAITING);
+        }
+    }
 }

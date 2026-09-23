@@ -1053,6 +1053,18 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
+            /**
+             * @description 인증 실패가 쌓여 잠긴 주소 (`VERIFY_LOCKED`). 잠긴 동안에는 코드를 다시 보내지 않는다.
+             *     잠금은 `/api/auth/verify` 에서 5회 틀리면 걸리고 30분 뒤 풀린다.
+             */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
             500: components["responses"]["InternalError"];
         };
     };
@@ -1205,6 +1217,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -1234,6 +1247,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
             500: components["responses"]["InternalError"];
         };
     };
@@ -1610,6 +1624,7 @@ export interface operations {
                     };
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             /** @description 그룹 구성원이 아님 (`GROUP_NOT_MEMBER`) */
             403: {

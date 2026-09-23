@@ -3,6 +3,9 @@
 # ⚠️ 이 파일이 API 의 단일 진실 공급원(SSOT)이다 (PRD §14.4).
 #    - 프론트: npm run gen:api → src/generated/api.d.ts 를 만든다. 손으로 타입을 중복 정의하지 않는다.
 #    - 백엔드: 구현한 뒤 Swagger(/v3/api-docs)와 대조한다. 스펙과 구현이 다르면 구현이 틀린 것이다.
+#      대조 기준(T2-2): 경로·메서드·파라미터 이름·요청/응답 필드 이름과 타입은 /v3/api-docs 와 맞아야 한다.
+#      required·enum·에러 응답 목록은 이 파일이 기준이다. springdoc 산출물에 빠져 있다는 이유만으로 불일치로
+#      보지 않고, 실제 응답(MockMvc 등)으로 확인한다 — DTO 마다 @Schema 를 달아 복제하면 두 곳이 어긋난다.
 #
 # ⚠️ 수정은 이승민만 한다. 필요하면 단톡방에 [계약 변경 요청] 한 줄 (PRD §14.8).
 #    추가는 쉽고(기존 코드를 안 깨뜨림) 이름 변경·삭제는 어렵다.
@@ -27,6 +30,9 @@ info:
     **에러 처리** — 실패 응답의 `error.code` 로 분기한다. HTTP 상태만 보고 판단하지 않는다.
     같은 401 이라도 `UNAUTHORIZED`(로그인 필요)와 `INVALID_TOKEN`(갱신 필요)은 대응이 다르다.
     에러 코드마다 HTTP 상태가 하나로 정해져 있다 — 같은 코드를 다른 상태로 내보낼 수 없다.
+    예외: 스프링 MVC 가 요청 형식 단계에서 거절하는 405(메서드)·415(Content-Type)는 그 상태를 그대로 쓰고
+    `code` 는 `INVALID_INPUT` 이다. 406 은 `Accept` 가 JSON 을 받지 않겠다는 뜻이라 **본문 없이** 나간다.
+    정상 클라이언트는 밟지 않는 경로다.
 
     **날짜·시각** — `format: date-time` 필드는 **오프셋 없는** ISO 문자열이다.
     예: `2026-10-20T08:30:00`. 서버가 `LocalDateTime`(시간대 없는 타입)을 쓰기 때문이며,
@@ -93,6 +99,14 @@ paths:
           description: |
             전남대 웹메일이 아님 (`EMAIL_DOMAIN_NOT_ALLOWED`) 또는 형식 오류·이미 가입된 주소
             (`INVALID_INPUT`)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "429":
+          description: |
+            인증 실패가 쌓여 잠긴 주소 (`VERIFY_LOCKED`). 잠긴 동안에는 코드를 다시 보내지 않는다.
+            잠금은 `/api/auth/verify` 에서 5회 틀리면 걸리고 30분 뒤 풀린다.
           content:
             application/json:
               schema:
@@ -251,6 +265,8 @@ paths:
                         $ref: "#/components/schemas/UserProfile"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
     patch:
@@ -280,6 +296,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -700,6 +718,8 @@ paths:
                         type: array
                         items:
                           $ref: "#/components/schemas/ChatMessage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":

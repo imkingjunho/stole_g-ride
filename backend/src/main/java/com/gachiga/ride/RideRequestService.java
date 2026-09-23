@@ -5,6 +5,7 @@ import com.gachiga.common.exception.ErrorCode;
 import com.gachiga.common.util.GeoUtils;
 import com.gachiga.contract.event.RideRequestCancelled;
 import com.gachiga.contract.event.RideRequestCreated;
+import com.gachiga.contract.event.RideRequestExpired;
 import com.gachiga.contract.route.Coordinate;
 import com.gachiga.contract.route.HubInfo;
 import com.gachiga.contract.route.HubPort;
@@ -23,6 +24,7 @@ import java.util.Optional;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
@@ -104,6 +106,7 @@ public class RideRequestService {
         validateMaxWaitMinutes(command.maxWaitMin());
         validateDetourRatio(command.maxDetourRatio());
         requireActiveUser(userId);
+        expireIfOverdue(userId, now);
         requireNoRequestInProgress(userId);
 
         HubInfo hub = findHub(command.hubId());
@@ -214,6 +217,15 @@ public class RideRequestService {
         }
 
         request.cancel();
+        try {
+            // 커밋 때가 아니라 여기서 버전을 대조한다. 그래야 경합을 400 으로 바꿀 수 있다
+            rideRequestRepository.saveAndFlush(request);
+        } catch (OptimisticLockingFailureException e) {
+            // 읽은 뒤 커밋하기 전에 매칭 배정(tryMarkMatched)이나 만료 처리가 먼저 끝났다.
+            // 잡지 않으면 500 이 나간다. 명세는 이 경우를 400 INVALID_INPUT 으로 정했다
+            throw new BusinessException(
+                    ErrorCode.INVALID_INPUT, "요청 상태가 방금 바뀌어 취소하지 못했습니다. 화면을 새로고침해 주세요.");
+        }
 
         // 커밋된 뒤에 realtime 이 받아 대기 화면을 닫는다
         eventPublisher.publishEvent(new RideRequestCancelled(request.getId(), userId));
@@ -262,6 +274,41 @@ public class RideRequestService {
                                                 ErrorCode.NOT_FOUND, "사용자를 찾을 수 없습니다."));
         if (user.status() == UserStatus.SUSPENDED) {
             throw new BusinessException(ErrorCode.USER_SUSPENDED);
+        }
+    }
+
+    /**
+     * 대기 시간이 지났는데 만료 스케줄러가 아직 정리하지 않은 내 요청을 지금 만료시킨다 (FR-10).
+     *
+     * <p>스케줄러는 30초마다 돈다. 그 사이에 카운트다운이 0 이 된 사용자가 다시 요청하면, 이미 끝난
+     * 요청 때문에 최대 30초 동안 {@code ALREADY_IN_QUEUE} 를 받는다. 여기서 먼저 정리해 그 틈을 없앤다.
+     * 만료 이벤트도 스케줄러와 똑같이 발행하므로 대기열·대기 화면이 같은 방식으로 정리된다.
+     *
+     * <p>스케줄러가 같은 요청을 동시에 만료시키면 한쪽이 버전 충돌로 실패한다. 결과가 같으므로
+     * 여기서는 무시한다. 스케줄러 쪽이 지면 그 회차가 통째로 롤백돼 다른 요청의 만료가 다음 회차로
+     * 밀리지만, 같은 요청을 두 곳이 같은 순간에 잡아야만 생기는 일이다.
+     */
+    private void expireIfOverdue(Long userId, LocalDateTime now) {
+        try {
+            transactionTemplate.executeWithoutResult(
+                    status ->
+                            rideRequestRepository
+                                    .findFirstByUserIdAndStatusInOrderByCreatedAtDesc(
+                                            userId, List.of(RideRequestStatus.WAITING))
+                                    .filter(request -> request.isExpiredAt(now))
+                                    .ifPresent(
+                                            request -> {
+                                                request.expire();
+                                                rideRequestRepository.flush();
+                                                eventPublisher.publishEvent(
+                                                        new RideRequestExpired(request.getId(), userId));
+                                                log.info(
+                                                        "재요청 전에 지난 요청을 만료 처리 requestId={} userId={}",
+                                                        request.getId(),
+                                                        userId);
+                                            }));
+        } catch (OptimisticLockingFailureException e) {
+            log.debug("지난 요청을 스케줄러가 먼저 만료시켰다 userId={}", userId);
         }
     }
 

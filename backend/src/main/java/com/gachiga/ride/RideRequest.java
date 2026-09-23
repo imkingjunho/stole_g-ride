@@ -120,6 +120,18 @@ public class RideRequest {
     private RideRequestStatus status;
 
     /**
+     * 배정된 그룹 id. 매칭되기 전과 그룹이 해체돼 대기로 돌아온 뒤에는 null 이다.
+     *
+     * <p>대기 화면은 이 값이 생기면 그룹 화면으로 넘어간다(api-spec {@code RideRequestDetail.groupId}).
+     * WebSocket 알림을 놓치고 새로고침한 사용자가 {@code GET /api/requests/me} 만으로 그룹을 찾을 수
+     * 있어야 하므로 요청에 같이 적어 둔다. 값은 {@code matching} 이 발행하는 그룹 이벤트에서 온다.
+     *
+     * <p>{@code matching} 의 그룹 엔티티를 참조하지 않고 id 만 둔다 (PRD §7.2).
+     */
+    @Column(name = "group_id")
+    private Long groupId;
+
+    /**
      * 낙관적 락 버전 (E-02).
      *
      * <p>두 그룹이 같은 요청을 동시에 집어 가려 할 때 나중 쪽이 실패하도록 만드는 장치다.
@@ -186,18 +198,42 @@ public class RideRequest {
         this.status = RideRequestStatus.MATCHED;
     }
 
-    /** 그룹이 해체돼 대기열로 돌아왔다 (E-01). 남은 시간({@code expiresAt})은 그대로 둔다 */
+    /**
+     * 그룹이 해체돼 대기열로 돌아왔다 (E-01). 남은 시간({@code expiresAt})은 그대로 둔다.
+     *
+     * <p>그룹은 사라졌으므로 {@code groupId} 도 비운다. 남겨 두면 대기 화면이 없어진 그룹으로 넘어간다.
+     */
     public void markWaiting() {
+        requireInGroup("대기로 되돌릴");
         this.status = RideRequestStatus.WAITING;
+        this.groupId = null;
     }
 
-    /** 그룹이 확정됐다 */
+    /**
+     * 그룹 id 를 적는다. 그룹이 만들어지거나 확정됐다는 이벤트를 받을 때 부른다.
+     *
+     * <p>종료된 요청에는 적지 않는다. 이벤트가 늦게 도착해 이미 취소·만료된 요청이면 그 그룹과는
+     * 관계가 없다.
+     *
+     * @return 적었으면 true
+     */
+    public boolean assignGroup(Long groupId) {
+        if (status.isFinished()) {
+            return false;
+        }
+        this.groupId = groupId;
+        return true;
+    }
+
+    /** 그룹이 확정됐다. 그룹에 배정된 요청만 가능하다 */
     public void markConfirmed() {
+        requireInGroup("확정할");
         this.status = RideRequestStatus.CONFIRMED;
     }
 
-    /** 탑승이 끝났다 */
+    /** 탑승이 끝났다. 그룹에 배정된 요청만 가능하다 */
     public void markCompleted() {
+        requireInGroup("완료할");
         finish(RideRequestStatus.COMPLETED);
     }
 
@@ -257,6 +293,20 @@ public class RideRequest {
     /** 본인 요청인지. 남의 요청을 취소하지 못하게 막는 데 쓴다 */
     public boolean isOwnedBy(Long candidateUserId) {
         return userId.equals(candidateUserId);
+    }
+
+    /**
+     * 그룹에 들어가 있어야(MATCHED·CONFIRMED) 하는 전이를 지킨다.
+     *
+     * <p>특히 끝난 요청을 대기로 되돌리면 {@code activeUserId} 가 빈 채로 WAITING 이 되어, 그 사용자가
+     * 요청을 하나 더 만들 수 있게 된다(1인 1건이 깨진다). 대기 중인 요청을 확정·완료하는 것도 그룹을
+     * 거치지 않은 전이라 막는다.
+     */
+    private void requireInGroup(String action) {
+        if (status != RideRequestStatus.MATCHED && status != RideRequestStatus.CONFIRMED) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_INPUT, "그룹에 배정되지 않은 요청은 " + action + " 수 없습니다. 현재 상태: " + status);
+        }
     }
 
     private void requireStatus(RideRequestStatus expected) {
