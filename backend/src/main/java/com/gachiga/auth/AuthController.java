@@ -31,9 +31,8 @@ public class AuthController {
             summary = "[P0] 웹메일 인증 코드 발송",
             description =
                     "`@jnu.ac.kr` 주소로만 가입할 수 있다 (FR-01). 6자리 코드를 메일로 보내고 10분간 "
-                            + "유효하다. 도메인이 다르면 EMAIL_DOMAIN_NOT_ALLOWED, 인증 실패가 쌓여 "
-                            + "잠겼으면 VERIFY_LOCKED 가 난다. "
-                            + "(TODO: 이미 가입된 주소 거절은 UserPort.existsByEmail 계약 확정 뒤 추가)")
+                            + "유효하다. 도메인이 다르면 EMAIL_DOMAIN_NOT_ALLOWED, 이미 가입된 주소면 "
+                            + "INVALID_INPUT, 인증 실패가 쌓여 잠겼으면 VERIFY_LOCKED 가 난다.")
     @PostMapping("/signup")
     public ApiResponse<SignupResponse> signup(@Valid @RequestBody SignupRequest request) {
         return ApiResponse.ok(signupService.requestCode(request));

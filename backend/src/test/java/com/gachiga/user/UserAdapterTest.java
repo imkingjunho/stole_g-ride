@@ -47,4 +47,31 @@ class UserAdapterTest {
 
         assertThat(adapter.findById(99L)).isEmpty();
     }
+
+    @Test
+    @DisplayName("existsByEmail — 가입된 주소면 true")
+    void existsByEmailTrue() {
+        adapter = new UserAdapter(userRepository);
+        given(userRepository.existsByEmail("gachiga@jnu.ac.kr")).willReturn(true);
+
+        assertThat(adapter.existsByEmail("gachiga@jnu.ac.kr")).isTrue();
+    }
+
+    @Test
+    @DisplayName("existsByEmail — 가입되지 않은 주소면 false")
+    void existsByEmailFalse() {
+        adapter = new UserAdapter(userRepository);
+        given(userRepository.existsByEmail("new@jnu.ac.kr")).willReturn(false);
+
+        assertThat(adapter.existsByEmail("new@jnu.ac.kr")).isFalse();
+    }
+
+    @Test
+    @DisplayName("existsByEmail — null·공백은 리포지토리를 부르지 않고 false")
+    void existsByEmailBlank() {
+        adapter = new UserAdapter(userRepository);
+
+        assertThat(adapter.existsByEmail(null)).isFalse();
+        assertThat(adapter.existsByEmail("  ")).isFalse();
+    }
 }

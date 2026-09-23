@@ -14,6 +14,7 @@ import com.gachiga.auth.dto.SignupRequest;
 import com.gachiga.auth.dto.SignupResponse;
 import com.gachiga.common.exception.BusinessException;
 import com.gachiga.common.exception.ErrorCode;
+import com.gachiga.contract.user.UserPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -32,12 +33,13 @@ class SignupServiceTest {
 
     @Mock private VerificationCodeStore codeStore;
     @Mock private VerificationMailSender mailSender;
+    @Mock private UserPort userPort;
 
     private SignupService signupService;
 
     @BeforeEach
     void setUp() {
-        signupService = new SignupService(PROPERTIES, codeStore, mailSender);
+        signupService = new SignupService(PROPERTIES, codeStore, mailSender, userPort);
     }
 
     @Nested
@@ -80,6 +82,23 @@ class SignupServiceTest {
         }
 
         @Test
+        @DisplayName("이미 가입된 주소면 거절한다")
+        void rejectsAlreadyRegisteredEmail() {
+            given(userPort.existsByEmail("gachiga@jnu.ac.kr")).willReturn(true);
+
+            assertThatThrownBy(
+                            () ->
+                                    signupService.requestCode(
+                                            new SignupRequest("gachiga@jnu.ac.kr")))
+                    .isInstanceOf(BusinessException.class)
+                    .extracting(e -> ((BusinessException) e).getErrorCode())
+                    .isEqualTo(ErrorCode.INVALID_INPUT);
+
+            verify(codeStore, never()).save(any(), any());
+            verify(mailSender, never()).send(any(), any(), anyInt());
+        }
+
+        @Test
         @DisplayName("잠긴 계정이면 코드를 다시 보내지 않는다")
         void rejectsWhenLocked() {
             given(codeStore.isLocked("gachiga@jnu.ac.kr")).willReturn(true);
@@ -96,14 +115,16 @@ class SignupServiceTest {
         }
 
         @Test
-        @DisplayName("도메인은 대소문자를 가리지 않는다")
+        @DisplayName("도메인은 대소문자를 가리지 않고, 이메일은 소문자로 정규화된다")
         void domainIsCaseInsensitive() {
-            given(codeStore.isLocked("gachiga@JNU.AC.KR")).willReturn(false);
+            given(codeStore.isLocked("gachiga@jnu.ac.kr")).willReturn(false);
 
             SignupResponse response =
                     signupService.requestCode(new SignupRequest("gachiga@JNU.AC.KR"));
 
-            assertThat(response.email()).isEqualTo("gachiga@JNU.AC.KR");
+            assertThat(response.email()).isEqualTo("gachiga@jnu.ac.kr");
+            verify(userPort).existsByEmail("gachiga@jnu.ac.kr");
+            verify(codeStore).save(eq("gachiga@jnu.ac.kr"), matches("\\d{6}"));
         }
     }
 }

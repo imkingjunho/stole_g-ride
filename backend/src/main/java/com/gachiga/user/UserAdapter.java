@@ -29,4 +29,12 @@ public class UserAdapter implements UserPort {
                                         user.getGender(),
                                         user.getStatus()));
     }
+
+    @Override
+    public boolean existsByEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return false;
+        }
+        return userRepository.existsByEmail(email);
+    }
 }
