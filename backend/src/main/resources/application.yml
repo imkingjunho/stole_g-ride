@@ -1,16 +1,11 @@
-# 전 프로파일 공통 설정. 환경별 값은 application-{profile}.yml 에 둔다.
 spring:
   application:
     name: gachiga
   profiles:
-    # 기본은 로컬. 운영은 SPRING_PROFILES_ACTIVE=prod 로 덮어쓴다
     default: local
   jpa:
     hibernate:
-      # 스키마는 마이그레이션 SQL(db/migration)이 단일 진실 공급원이다.
-      # 애플리케이션이 스키마를 만들지 않는다.
-      ddl-auto: validate
-    # 트랜잭션 밖 지연 로딩을 막아 N+1 을 조기에 드러낸다
+      ddl-auto: create
     open-in-view: false
     properties:
       hibernate:
@@ -26,7 +21,6 @@ server:
   port: ${SERVER_PORT:8080}
   shutdown: graceful
 
-# Swagger UI 는 T1-5 에서 상세 설정한다
 springdoc:
   swagger-ui:
     path: /swagger-ui.html

@@ -36,6 +36,7 @@ public class MatchGroup {
     @Column(nullable = false)
     @Builder.Default
     private Boolean estimated = false;
+    
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -49,7 +50,7 @@ public class MatchGroup {
 
     private LocalDateTime closedAt;
 
-    @OneToMany(mappedBy = "group", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "group", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @Builder.Default
     private List<MatchMember> members = new ArrayList<>();
 
