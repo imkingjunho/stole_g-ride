@@ -888,11 +888,24 @@ public enum Gender { M, F }
 public enum UserStatus { ACTIVE, SUSPENDED }
 public record UserSummary(Long id, String nickname, Gender gender, UserStatus status) {}
 
-public interface UserPort {
+public interface UserPort {          // 읽기 전용 — 모든 모듈이 주입받는다
     Optional<UserSummary> findById(Long userId);
-    /** 이미 가입한 주소인지 (FR-01). 앞뒤 공백 제거 + 소문자로 맞춰 비교하고, 같은 형태로 저장한다.
-     *  최종 방어선은 users.email UNIQUE — false 가 가입 성공을 보장하지 않는다 */
+    /** 이미 가입한 주소인지 (FR-01). trim + 소문자로 비교·저장. 참고값 — 최종 판정은 UserAccountPort.register */
     boolean existsByEmail(String email);
+}
+
+// 계정 수명주기 — auth 만 부르고 user 만 구현한다 (ArchitectureTest 가 강제). 비밀번호 해시는 user 안에서만
+public record NewAccount(String email, String rawPassword, String nickname, Gender gender,
+                         String department, Integer grade) {}          // toString 은 비밀번호를 가린다
+public record AccountProfile(Long id, String email, String nickname, Gender gender, String department,
+                             Integer grade, UserStatus status, LocalDateTime suspendedUntil) {}  // = api-spec UserProfile
+
+public interface UserAccountPort {
+    /** 가입 (T1-3). 인증 코드 검증은 auth 가 끝낸 뒤. 이메일·닉네임 중복(경합 포함)은 INVALID_INPUT */
+    AccountProfile register(NewAccount account);
+    /** 로그인 검증 (T1-4). 없는 이메일·틀린 비밀번호 모두 empty(구분 안 함). 정지 계정도 맞으면 값을 주고
+     *  403 판정은 auth 가 status 로. 이메일은 existsByEmail 과 같은 정식 형태(trim + 소문자) */
+    Optional<AccountProfile> authenticate(String email, String rawPassword);
 }
 
 // ── contract/ride ──────────────────────────────────────────────
@@ -942,7 +955,8 @@ public @interface CurrentUser {}
 |---|---|---|
 | `RouteProvider` | 송준호 `route/` | 서준(조합 평가), 이승민(단독 요금 캐시) |
 | `HubPort` | 송준호 `route/` | 서준(출발 좌표), 이승민(요청 검증) |
-| `UserPort` | 임승현 `user/` | 서준(성별 필터), 임승현 `realtime/`(닉네임)·`auth/`(가입 중복 확인) |
+| `UserPort` | 임승현 `user/` | 서준(성별 필터), 임승현 `realtime/`(닉네임)·`auth/`(가입 중복 확인), 이승민 `ride/`(이용 제한) |
+| `UserAccountPort` | 임승현 `user/` | 임승현 `auth/`(가입·로그인) — **auth 외 사용 금지** |
 | `RideRequestPort` | 이승민 `ride/` | 서준(대기열 읽기·상태 변경) |
 | `QueueStatusPort` | 이승민 `ride/` | 임승현 `realtime/`(대기 상태 push) |
 | `MatchHistoryPort` | 서준 `matching/` | 임승현 `realtime/`(채팅 인가), `user/`(신고 검증) |
