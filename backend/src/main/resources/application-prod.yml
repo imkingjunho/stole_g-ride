@@ -22,6 +22,10 @@ spring:
       ddl-auto: validate
     show-sql: false
 
+server:
+  # Caddy(HTTPS 종단) 뒤에서 뜬다. X-Forwarded-Proto/For 를 읽어야 리다이렉트·로그의 주소가 https 로 나온다
+  forward-headers-strategy: framework
+
 # 운영에서는 명세 UI 를 노출하지 않는다
 springdoc:
   swagger-ui:

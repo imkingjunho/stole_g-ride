@@ -279,6 +279,10 @@ docker compose down -v && docker compose up -d --wait     # DB 초기화
 | `docs/roles/내이름.md` | **내 작업 체크리스트** | 매번 작업 시작할 때 |
 | `docs/api-spec.yaml` | API 계약 (OpenAPI) | 프론트-백엔드 연동할 때. 프론트는 `npm run gen:api`로 타입 생성 |
 | `CLAUDE.md` | AI 규칙 | 볼 일 없음 (AI가 알아서 읽음) |
+| `docs/schema.sql` | 실제 DB 스키마(DDL). 베타 서버는 이걸로 테이블을 만들고 `validate` 로 뜬다 | 엔티티를 바꿨을 때 (이승민이 다시 뽑는다) |
+| `docs/deploy.md` | 베타 배포 절차 — 서버 준비, `.env`, 프론트 빌드, `docker compose -f docker-compose.prod.yml` | 배포·업데이트·되돌리기 할 때 |
+| `docs/performance.md` | 부하 테스트 결과와 개선 전후 수치 | 발표 자료 만들 때, 느려졌다 싶을 때 |
+| `load/` | k6 부하 테스트 스크립트와 실행 방법 | 성능을 다시 잴 때 |
 
 ---
 

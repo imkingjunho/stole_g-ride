@@ -1,0 +1,32 @@
+# 가치가 베타 — HTTPS 종단 + 정적 프론트 + API/WebSocket 프록시 (T3-3)
+# 인증서는 Caddy 가 Let's Encrypt 에서 자동으로 받는다. 도메인의 A 레코드가 이 서버를 가리키고 80/443 이 열려 있어야 한다.
+{$BETA_DOMAIN} {
+	encode gzip zstd
+
+	# 백엔드. WebSocket(/ws, SockJS 하위 경로 포함)은 reverse_proxy 가 알아서 업그레이드한다
+	@backend path /api/* /ws /ws/*
+	handle @backend {
+		reverse_proxy backend:8080 {
+			header_up X-Forwarded-Proto {scheme}
+		}
+	}
+
+	# 정적 프론트(frontend/dist). 없는 경로는 index.html 로 — React Router 가 처리한다
+	handle {
+		root * /srv/frontend
+		try_files {path} /index.html
+		file_server
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
