@@ -4,6 +4,7 @@ import com.gachiga.contract.ride.RideRequestPort;
 import com.gachiga.contract.ride.WaitingRequest;
 import com.gachiga.contract.route.RouteProvider;
 import com.gachiga.contract.user.UserPort;
+import com.gachiga.contract.route.RouteResult;
 import com.gachiga.matching.algorithm.*;
 import com.gachiga.matching.domain.MatchGroup;
 import com.gachiga.matching.domain.GroupStatus;
@@ -89,35 +90,47 @@ public class MatchingEngine {
      * 그룹 생성 및 자동 성사
      */
     private void createAndConfirmGroup(List<WaitingRequest> combination) {
-        // 1. MatchGroup 생성
-        MatchGroup group = MatchGroup.builder()
-            .hubId(combination.get(0).hubId())
-            .totalFare(10000)
-            .totalDistance(5000)
-            .totalDuration(600)
-            .estimated(false)
-            .status(GroupStatus.PENDING)
+    // RouteProvider로 실제 경로 조회
+    List<com.gachiga.contract.route.Coordinate> waypoints = new ArrayList<>();
+    for (int i = 1; i < combination.size() - 1; i++) {
+        waypoints.add(combination.get(i).destination());
+    }
+    
+    RouteResult route = routeProvider.findRoute(
+        combination.get(0).destination(),
+        waypoints,
+        combination.get(combination.size() - 1).destination()
+    );
+    
+    // 1. MatchGroup 생성
+    MatchGroup group = MatchGroup.builder()
+        .hubId(combination.get(0).hubId())
+        .totalFare(route.totalFare())
+        .totalDistance(route.totalDistance())
+        .totalDuration(route.totalDuration())
+        .estimated(route.estimated())
+        .status(GroupStatus.PENDING)
+        .build();
+
+    MatchGroup saved = groupRepository.save(group);
+    log.info("Created group {}", saved.getId());
+
+    // 2. 멤버 추가
+    for (int i = 0; i < combination.size(); i++) {
+        WaitingRequest req = combination.get(i);
+        MatchMember member = MatchMember.builder()
+            .group(saved)
+            .requestId(req.requestId())
+            .userId(req.userId())
+            .boardingOrder(i)
+            .dropoffOrder(i)
+            .sharedDistance(0)
+            .shareAmount(0)
+            .savingAmount(0)
+            .accepted(false)
             .build();
-
-        MatchGroup saved = groupRepository.save(group);
-        log.info("Created group {}", saved.getId());
-
-        // 2. 멤버 추가
-        for (int i = 0; i < combination.size(); i++) {
-            WaitingRequest req = combination.get(i);
-            MatchMember member = MatchMember.builder()
-                .group(saved)
-                .requestId(req.requestId())
-                .userId(req.userId())
-                .boardingOrder(i)
-                .dropoffOrder(i)
-                .sharedDistance(0)
-                .shareAmount(0)
-                .savingAmount(0)
-                .accepted(false)
-                .build();
-            memberRepository.save(member);
-        }
+        memberRepository.save(member);
+    }
 
         // 3. CONFIRMED로 변경
         saved.confirm();
