@@ -8,7 +8,7 @@ export default tseslint.config(
   // 생성물·빌드 산출물은 검사하지 않는다
   //  - src/generated  : npm run gen:api 가 만든다 (손으로 고치지 않는다)
   //  - public/mockServiceWorker.js : npx msw init 이 만든다
-  { ignores: ['dist', 'src/generated', 'public/mockServiceWorker.js'] },
+  { ignores: ['dist', 'src/generated', 'public/mockServiceWorker.js', 'prototype/**'] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ['**/*.{ts,tsx}'],

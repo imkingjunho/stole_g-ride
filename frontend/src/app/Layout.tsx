@@ -18,7 +18,7 @@ export function Layout() {
   const { pathname } = useLocation();
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-md flex-col bg-white">
+    <div className="mx-auto flex min-h-dvh max-w-md flex-col bg-white">
       <header className="flex items-center justify-between border-b px-4 py-3">
         <Link to="/request" className="font-bold">
           가치가
