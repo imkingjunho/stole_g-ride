@@ -515,7 +515,11 @@ export interface components {
              * @example 482913
              */
             code: string;
-            /** Format: password */
+            /**
+             * Format: password
+             * @description 8~64자. 단 **UTF-8 로 72바이트 이내**여야 한다 (한글은 3바이트라 24자) — 서버가 쓰는 BCrypt 는
+             *     72바이트 뒤를 조용히 버려서, 더 긴 비밀번호는 앞부분만 맞아도 로그인된다. 넘으면 `INVALID_INPUT`.
+             */
             password: string;
             /** @example 후문호랑이 */
             nickname: string;

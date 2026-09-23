@@ -8,7 +8,7 @@ package com.gachiga.contract.user;
  * <p><b>{@code toString} 은 비밀번호를 가린다.</b> 레코드 기본 {@code toString} 은 모든 필드를 찍어서, 누가 이
  * 객체를 로그에 남기면 평문 비밀번호가 그대로 나간다.
  *
- * @param email       웹메일 주소. 받는 쪽이 정식 형태(trim + 소문자)로 맞춘다. null 아님
+ * @param email       웹메일 주소. 생성자가 {@link CanonicalEmail#of} 로 정식 형태로 맞춘다. null 아님
  * @param rawPassword 평문 비밀번호. 받는 쪽이 해시한다. null 아님
  * @param nickname    닉네임. 전체에서 유일해야 한다. null 아님
  * @param gender      성별. 가입 후 바꿀 수 없다(동성 매칭의 근거). null 아님
@@ -22,6 +22,11 @@ public record NewAccount(
         Gender gender,
         String department,
         Integer grade) {
+
+    /** 이메일을 정식 형태로 맞춘다. 부르는 쪽이 잊어도 저장 형태가 어긋나지 않게 하려는 것이다 */
+    public NewAccount {
+        email = CanonicalEmail.of(email);
+    }
 
     @Override
     public String toString() {

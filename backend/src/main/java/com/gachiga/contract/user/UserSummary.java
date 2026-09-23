@@ -9,6 +9,8 @@ package com.gachiga.contract.user;
  * @param id       사용자 id. null 아님
  * @param nickname 화면에 보이는 이름. 예: {@code "후문호랑이"}. null 아님
  * @param gender   성별. null 아님
- * @param status   계정 상태. null 아님
+ * @param status   <b>지금 기준</b> 계정 상태 — 저장값이 SUSPENDED 여도 suspendedUntil 이 지났으면 ACTIVE 다(FR-04).
+ *                 {@code ride} 가 이 값으로 요청을 막으므로, {@link AccountProfile#status()} 와 같은 계산이어야
+ *                 한다. 갈리면 로그인은 되는데 매칭 요청은 영원히 막힌다. null 아님
  */
 public record UserSummary(Long id, String nickname, Gender gender, UserStatus status) {}

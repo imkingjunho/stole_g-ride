@@ -159,32 +159,36 @@ class ArchitectureTest {
     }
 
     /**
-     * 공용 패키지 목록은 규칙 자체에는 쓰이지 않지만, 무엇이 허용되는지 코드로 남겨 둔다.
-     * 새 공용 패키지를 만들 일이 생기면 여기와 위 규칙을 함께 고쳐야 한다.
-     */
-    /**
      * 계정 port 는 auth·user 만 쓴다.
      *
      * <p>{@code contract} 는 전원에게 열려 있어서, 계정 생성·비밀번호 검증 port 를 두면 어느 모듈이든 부를 수 있다.
      * 가입·로그인은 auth 의 일이고 구현은 user 의 일이므로, 그 둘 밖에서 이 타입들을 건드리면 여기서 막는다.
+     * {@code config}·{@code common} 도 대상이다 — 도메인이 아니라도 계정을 만들 이유는 없다.
+     *
+     * <p>{@code contract.user} 에 계정 관련 타입을 추가하면 아래 정규식도 같이 고친다.
      */
     @Test
-    @DisplayName("계정 port(UserAccountPort·NewAccount·AccountProfile)는 auth·user 밖에서 쓰지 않는다")
+    @DisplayName("계정 port(UserAccountPort·NewAccount·AccountProfile·CanonicalEmail)는 auth·user 밖에서 쓰지 않는다")
     void accountPortIsOnlyForAuthAndUser() {
-        String[] others =
-                java.util.Arrays.stream(DOMAIN_MODULES)
-                        .filter(m -> !m.equals("auth") && !m.equals("user"))
-                        .map(m -> ROOT + "." + m + "..")
-                        .toArray(String[]::new);
+        java.util.List<String> others =
+                new java.util.ArrayList<>(
+                        java.util.Arrays.stream(DOMAIN_MODULES)
+                                .filter(m -> !m.equals("auth") && !m.equals("user"))
+                                .map(m -> ROOT + "." + m + "..")
+                                .toList());
+        others.add(ROOT + ".config..");
+        others.add(ROOT + ".common..");
 
         ArchRule rule =
                 noClasses()
                         .that()
-                        .resideInAnyPackage(others)
+                        .resideInAnyPackage(others.toArray(String[]::new))
                         .should()
                         .dependOnClassesThat()
                         .haveNameMatching(
-                                ROOT + "\\.contract\\.user\\.(UserAccountPort|NewAccount|AccountProfile)")
+                                ROOT
+                                        + "\\.contract\\.user\\."
+                                        + "(UserAccountPort|NewAccount|AccountProfile|CanonicalEmail)")
                         .because(
                                 "계정 생성·비밀번호 검증은 auth 가 부르고 user 가 구현한다. 다른 모듈은 "
                                         + "UserPort(읽기)만 쓴다 (PRD §14.1)")
@@ -193,6 +197,10 @@ class ArchitectureTest {
         rule.check(classes);
     }
 
+    /**
+     * 공용 패키지 목록은 규칙 자체에는 쓰이지 않지만, 무엇이 허용되는지 코드로 남겨 둔다.
+     * 새 공용 패키지를 만들 일이 생기면 여기와 위 규칙을 함께 고쳐야 한다.
+     */
     @Test
     @DisplayName("허용된 공용 패키지(contract·common)가 실제로 존재한다")
     void sharedPackagesExist() {

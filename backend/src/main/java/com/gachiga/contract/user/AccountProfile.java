@@ -16,8 +16,9 @@ import java.time.LocalDateTime;
  * @param gender         성별. null 아님
  * @param department     학과. null 일 수 있다
  * @param grade          학년. null 일 수 있다
- * @param status         <b>지금 기준</b> 계정 상태. 7일 이용 제한이 끝났으면 ACTIVE 다(FR-04). null 아님
- * @param suspendedUntil 이용 제한이 풀리는 시각. {@code status} 가 SUSPENDED 일 때만 값이 있다
+ * @param status         <b>지금 기준</b> 계정 상태 — 저장값이 SUSPENDED 여도 {@code suspendedUntil} 이 지났으면
+ *                       ACTIVE 다(FR-04). {@link UserSummary#status()} 와 같은 계산이어야 한다. null 아님
+ * @param suspendedUntil 이용 제한이 풀리는 시각. {@code status} 가 SUSPENDED 일 때만 값이 있고, 아니면 null
  */
 public record AccountProfile(
         Long id,

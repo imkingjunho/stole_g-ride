@@ -888,23 +888,31 @@ public enum Gender { M, F }
 public enum UserStatus { ACTIVE, SUSPENDED }
 public record UserSummary(Long id, String nickname, Gender gender, UserStatus status) {}
 
+// status 는 두 port 모두 "지금 기준" — 저장값이 SUSPENDED 여도 suspendedUntil 이 지났으면 ACTIVE (FR-04).
+// user 가 한 메서드로 계산해 UserSummary·AccountProfile·GET /api/users/me 가 같은 답을 낸다.
 public interface UserPort {          // 읽기 전용 — 모든 모듈이 주입받는다
     Optional<UserSummary> findById(Long userId);
-    /** 이미 가입한 주소인지 (FR-01). trim + 소문자로 비교·저장. 참고값 — 최종 판정은 UserAccountPort.register */
+    /** 이미 가입한 주소인지 (FR-01). CanonicalEmail.of 로 비교·저장. 참고값 — 최종 판정은 UserAccountPort.register */
     boolean existsByEmail(String email);
 }
 
+/** 이메일 정식 형태(trim + Locale.ROOT 소문자). existsByEmail·register·authenticate 와 auth 의 Redis 키
+ *  (verify:{email}·verify:fail:{email})는 모두 이 함수 결과를 쓴다 — 각자 구현하면 어긋난다 */
+public final class CanonicalEmail { public static String of(String raw) {...} }
+
 // 계정 수명주기 — auth 만 부르고 user 만 구현한다 (ArchitectureTest 가 강제). 비밀번호 해시는 user 안에서만
 public record NewAccount(String email, String rawPassword, String nickname, Gender gender,
-                         String department, Integer grade) {}          // toString 은 비밀번호를 가린다
+                         String department, Integer grade) {}          // 생성자가 email 정식화, toString 은 비밀번호 가림
 public record AccountProfile(Long id, String email, String nickname, Gender gender, String department,
                              Integer grade, UserStatus status, LocalDateTime suspendedUntil) {}  // = api-spec UserProfile
 
 public interface UserAccountPort {
-    /** 가입 (T1-3). 인증 코드 검증은 auth 가 끝낸 뒤. 이메일·닉네임 중복(경합 포함)은 INVALID_INPUT */
+    /** 가입 (T1-3). 인증 코드 검증은 auth 가 끝낸 뒤. 이메일·닉네임 중복(경합 포함)·72바이트 초과 비밀번호는 INVALID_INPUT */
     AccountProfile register(NewAccount account);
-    /** 로그인 검증 (T1-4). 없는 이메일·틀린 비밀번호 모두 empty(구분 안 함). 정지 계정도 맞으면 값을 주고
-     *  403 판정은 auth 가 status 로. 이메일은 existsByEmail 과 같은 정식 형태(trim + 소문자) */
+    /** 토큰 재발급(refresh) 응답의 user 를 채운다 (T1-4) */
+    Optional<AccountProfile> findAccountById(Long userId);
+    /** 로그인 검증 (T1-4). 없는 이메일·틀린 비밀번호 모두 empty(구분 안 함) — 없는 이메일도 더미 해시와 비교해
+     *  시간을 맞춘다. 정지 계정도 맞으면 값을 주고 403 판정은 auth 가 status 로 */
     Optional<AccountProfile> authenticate(String email, String rawPassword);
 }
 
@@ -956,7 +964,7 @@ public @interface CurrentUser {}
 | `RouteProvider` | 송준호 `route/` | 서준(조합 평가), 이승민(단독 요금 캐시) |
 | `HubPort` | 송준호 `route/` | 서준(출발 좌표), 이승민(요청 검증) |
 | `UserPort` | 임승현 `user/` | 서준(성별 필터), 임승현 `realtime/`(닉네임)·`auth/`(가입 중복 확인), 이승민 `ride/`(이용 제한) |
-| `UserAccountPort` | 임승현 `user/` | 임승현 `auth/`(가입·로그인) — **auth 외 사용 금지** |
+| `UserAccountPort`·`CanonicalEmail` | 임승현 `user/` | 임승현 `auth/`(가입·로그인·재발급) — **auth 외 사용 금지** |
 | `RideRequestPort` | 이승민 `ride/` | 서준(대기열 읽기·상태 변경) |
 | `QueueStatusPort` | 이승민 `ride/` | 임승현 `realtime/`(대기 상태 push) |
 | `MatchHistoryPort` | 서준 `matching/` | 임승현 `realtime/`(채팅 인가), `user/`(신고 검증) |
