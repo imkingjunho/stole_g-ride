@@ -1,21 +1,23 @@
+# syntax=docker/dockerfile:1
 # 가치가 백엔드 이미지 (T3-3). 저장소 루트에서:  docker compose -f docker-compose.prod.yml build backend
 #
 # 1단계: 빌드. 테스트는 CI 가 이미 돌렸으므로 여기서는 jar 만 만든다 (-x test).
+# Gradle 캐시는 BuildKit 캐시 마운트에 둔다 — 소스가 바뀌어도 의존성을 다시 받지 않는다.
 FROM eclipse-temurin:17-jdk AS build
 WORKDIR /src
-# 의존성 캐시 — 소스가 바뀌어도 이 레이어는 다시 안 받는다
 COPY gradlew build.gradle settings.gradle ./
 COPY gradle ./gradle
-RUN chmod +x gradlew && ./gradlew --no-daemon dependencies -q > /dev/null 2>&1 || true
 COPY src ./src
-RUN ./gradlew --no-daemon bootJar -x test -q
+RUN --mount=type=cache,target=/root/.gradle \
+    chmod +x gradlew && ./gradlew --no-daemon bootJar -x test -q
 
-# 2단계: 실행. JRE 만 들어간 작은 이미지. bash 가 있어야 아래 healthcheck 가 돈다
+# 2단계: 실행. JRE 만 들어간 이미지. bash 가 있어야 아래 healthcheck 가 돈다
 FROM eclipse-temurin:17-jre
 RUN useradd --system --create-home --shell /usr/sbin/nologin gachiga
 USER gachiga
 WORKDIR /app
 COPY --from=build /src/build/libs/*.jar app.jar
+# MaxRAMPercentage 는 컨테이너 메모리 한도 기준이다 — compose 의 deploy.resources.limits.memory 가 있어야 의미가 있다
 ENV SPRING_PROFILES_ACTIVE=prod \
     TZ=Asia/Seoul \
     JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75 -Duser.timezone=Asia/Seoul"

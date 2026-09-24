@@ -33,3 +33,4 @@ Thumbs.db
 # Claude Code 개인 설정 (훅·권한). 팀 공용은 .claude/settings.json
 .claude/settings.local.json
 load/k6/last-result.json
+load/k6/result-*.json

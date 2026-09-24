@@ -7,7 +7,7 @@
 
 1. `brew install k6`
 2. Docker 로 MySQL·Redis 를 띄운다: `docker compose up -d --wait`
-3. **측정용 백엔드를 8081 에 조용한 로그로** 띄운다. local 프로파일 기본 로그(SQL TRACE)는 지연을 몇 배로 부풀린다.
+3. **측정용 백엔드를 8081 에 따로** 띄운다(개발 서버와 분리). SQL 로그는 끄는 편이 낫다 — 지연에는 영향이 없었지만(`docs/performance.md` §1) 100초에 200MB 가 쌓인다.
    ```bash
    cd backend && SERVER_PORT=8081 ./gradlew bootRun --args='--spring.jpa.show-sql=false --logging.level.com.gachiga=INFO --logging.level.org.hibernate.orm.jdbc.bind=WARN'
    ```
@@ -15,21 +15,25 @@
    ```bash
    docker compose exec -T mysql sh -c 'mysql -ugachiga -pgachiga gachiga' < load/seed-users.sql
    ```
-   id 11~210 에 `load011@jnu.ac.kr`~ 이 들어간다. 이미 있으면 건너뛴다(`insert ignore`).
+   **id 11~210 으로 고정**해서 넣는다(`load011@jnu.ac.kr`~). 이미 있으면 건너뛴다. k6 는 시작할 때 첫·마지막 사용자가 있는지 확인하고 없으면 멈춘다.
+5. **8080 개발 서버는 내린다.** 측정 서버(8081)가 같은 Redis 대기열(`queue:*`)을 기동 시 다시 만들고, 같은 DB 에 회차마다 CANCELLED 행을 남긴다.
+   끝난 뒤 정리: `delete from ride_requests where dest_name like '부하 목적지 %';`
 
 ## 실행
 
+**저장소 루트에서** 실행한다 (요약 파일 경로가 루트 기준이다):
 ```bash
 k6 run load/k6/ride-requests.js
 ```
 
-옵션: `-e BASE_URL=... -e VUS=200 -e HOLD=60s -e FIRST_USER_ID=11`
+옵션: `-e BASE_URL=... -e VUS=200 -e HOLD=60s -e FIRST_USER_ID=11 -e RESULT_FILE=load/k6/last-result.json`
 
-끝나면 `load/k6/last-result.json` 에 요약이 남는다(Git 에 올리지 않는다).
+끝나면 요약이 `load/k6/last-result.json` 에 남는다(Git 에 올리지 않는다). `create_409` 가 0 이 아니면 이전 실행의 잔여 요청이 있었다는 뜻이다 —
+정리하고 다시 돈다. 그 실행의 create 수치는 거절이 섞여 실제보다 좋게 나온다.
 
 ## 시나리오
 
 각 VU(=사용자) 가 반복: `POST /api/requests` → `GET /api/requests/me` ×3 (0.3초 간격, 대기 화면 폴링) → `DELETE /api/requests/{id}`.
-30초 동안 200명까지 올리고 60초 유지, 10초 내린다. 생성은 201 또는 409(직전 회차 요청이 아직 살아 있을 때)를 정상으로 본다.
+30초 동안 200명까지 올리고 60초 유지, 10초 내린다. 생성은 201 만 정상이다. 409 는 중단된 이전 실행이 남긴 요청이 있을 때만 나오며 따로 센다.
 
 인증은 Phase 0 방식(`X-Dev-User` 헤더)이다. JWT(T1-5)가 붙으면 `headers()` 를 토큰으로 바꿔야 한다.

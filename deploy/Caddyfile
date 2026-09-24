@@ -6,9 +6,8 @@
 	# 백엔드. WebSocket(/ws, SockJS 하위 경로 포함)은 reverse_proxy 가 알아서 업그레이드한다
 	@backend path /api/* /ws /ws/*
 	handle @backend {
-		reverse_proxy backend:8080 {
-			header_up X-Forwarded-Proto {scheme}
-		}
+		# Caddy 가 X-Forwarded-For/Proto/Host 를 알아서 붙이고, 클라이언트가 보낸 같은 헤더는 덮어쓴다
+		reverse_proxy backend:8080
 	}
 
 	# 정적 프론트(frontend/dist). 없는 경로는 index.html 로 — React Router 가 처리한다

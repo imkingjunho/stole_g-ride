@@ -1,17 +1,32 @@
 # 베타 배포 구성 (T3-3) — 서버 1대에 MySQL·Redis·백엔드·Caddy(HTTPS + 정적 프론트) 를 함께 띄운다.
 #
-#   cp .env.example .env  →  BETA_DOMAIN, DB_PASSWORD, MYSQL_ROOT_PASSWORD, REDIS_PASSWORD, KAKAO_*, MAIL_* 채우기
-#   (cd frontend && VITE_API_MODE=real VITE_API_BASE_URL=https://$BETA_DOMAIN npm ci && npm run build)
+#   cp .env.example .env  →  BETA_DOMAIN, DB_PASSWORD, MYSQL_ROOT_PASSWORD, REDIS_PASSWORD, KAKAO_REST_API_KEY, MAIL_* 채우기
+#   프론트 빌드와 나머지 절차는 docs/deploy.md §1 — 환경변수는 `npm run build` 앞에 붙여야 한다 (npm ci 앞이 아니다)
 #   docker compose -f docker-compose.prod.yml up -d --build
+#
+# 비어 있으면 기동을 거절하는 값(:?)은 7개다. 단 .env.example 의 예시값(gachiga·root)을 바꿨는지는 거절 못 한다 — 사람이 확인.
 #
 # 로컬 개발용 docker-compose.yml 과 다른 점: DB·Redis 포트를 호스트에 열지 않고, Redis 에 비밀번호를 걸고,
 # 스키마는 docs/schema.sql 로 미리 만들어 백엔드는 validate 로만 뜬다 (PRD §7.3). 자세한 절차는 docs/deploy.md.
 name: gachiga-beta
 
+# 컨테이너 로그 상한. 없으면 json-file 로그가 디스크를 채운다
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
 services:
   mysql:
     image: mysql:8.0
     restart: unless-stopped
+    logging: *default-logging
+    # 4GB 서버 기준. 백엔드 1.5G + MySQL 1G + Redis 256M + Caddy·OS 여유
+    deploy:
+      resources:
+        limits:
+          memory: 1g
     environment:
       MYSQL_DATABASE: ${DB_NAME:-gachiga}
       MYSQL_USER: ${DB_USERNAME:-gachiga}
@@ -22,6 +37,9 @@ services:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
       - --default-time-zone=+09:00
+      # 단일 서버, 복제 없음 — 바이너리 로그(기본 30일 보관)가 디스크만 먹는다
+      - --skip-log-bin
+      - --innodb-buffer-pool-size=256M
     volumes:
       - mysql-data:/var/lib/mysql
       # 첫 기동 때만 실행된다. 이미 데이터가 있으면 무시 — 그 뒤 스키마 변경은 docs/deploy.md 절차로
@@ -34,8 +52,13 @@ services:
       start_period: 30s
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.4-alpine
     restart: unless-stopped
+    logging: *default-logging
+    deploy:
+      resources:
+        limits:
+          memory: 256m
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD 를 .env 에 넣어라}", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
     volumes:
       - redis-data:/data
@@ -48,6 +71,12 @@ services:
   backend:
     build: ./backend
     restart: unless-stopped
+    logging: *default-logging
+    # 한도가 있어야 Dockerfile 의 -XX:MaxRAMPercentage=75 가 이 값 기준으로 힙을 잡는다 (없으면 호스트 전체 RAM 기준)
+    deploy:
+      resources:
+        limits:
+          memory: 1536m
     depends_on:
       mysql:
         condition: service_healthy
@@ -64,19 +93,20 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       REDIS_PASSWORD: ${REDIS_PASSWORD}
-      KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY}
+      KAKAO_REST_API_KEY: ${KAKAO_REST_API_KEY:?KAKAO_REST_API_KEY 를 .env 에 넣어라}
       MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
       MAIL_PORT: ${MAIL_PORT:-587}
-      MAIL_USERNAME: ${MAIL_USERNAME}
-      MAIL_PASSWORD: ${MAIL_PASSWORD}
-      # 프론트를 같은 도메인에서 서빙하므로 출처는 이 하나다
-      GACHIGA_CORS_ALLOWED_ORIGINS: https://${BETA_DOMAIN:?BETA_DOMAIN 을 .env 에 넣어라}
+      MAIL_USERNAME: ${MAIL_USERNAME:?MAIL_USERNAME 을 .env 에 넣어라}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:?MAIL_PASSWORD 를 .env 에 넣어라}
+      # 프론트를 같은 도메인에서 서빙하므로 기본은 그 하나. 다른 출처가 필요하면 .env 의 GACHIGA_CORS_ALLOWED_ORIGINS 에 쉼표로
+      GACHIGA_CORS_ALLOWED_ORIGINS: ${GACHIGA_CORS_ALLOWED_ORIGINS:-https://${BETA_DOMAIN:?BETA_DOMAIN 을 .env 에 넣어라}}
     expose:
       - "8080"
 
   caddy:
-    image: caddy:2-alpine
+    image: caddy:2.11-alpine
     restart: unless-stopped
+    logging: *default-logging
     depends_on:
       - backend
     ports:
