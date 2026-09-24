@@ -772,6 +772,17 @@ export interface components {
             /** @description 지도에 그릴 좌표들. 추정치일 때는 시작·끝 두 점만 올 수 있다 */
             path: components["schemas"]["Coordinate"][];
         };
+        /** @description 한 사람의 한 구간 몫 (§5.2 구간 분할). `GroupMember.breakdown` 의 항목 */
+        FareBreakdownItem: {
+            /** @description `route.sections` 의 인덱스 (0부터) */
+            sectionIndex: number;
+            /** @description 이 구간의 요금(원) = 총 요금 × 구간 거리 / 총 거리 */
+            sectionFare: number;
+            /** @description 이 구간에 타고 있던 사람 수. 구간 요금을 이 수로 나눈다 */
+            onboardCount: number;
+            /** @description 이 사람의 이 구간 몫(원) = sectionFare / onboardCount (보정 전) */
+            share: number;
+        };
         /**
          * @description `shareAmount` 는 구간 분할 정산 결과다 (PRD §5.2). 먼저 내리는 사람이 적게 낸다 —
          *     단순 1/N 이 아니라는 점이 이 서비스의 핵심이므로 화면에서 그 차이를 보여 준다.
@@ -821,6 +832,27 @@ export interface components {
             detourRatio: number;
             /** @description P1 수락 여부. P0 에서는 항상 true (FR-13) */
             accepted: boolean;
+            /**
+             * Format: double
+             * @description 목적지 위도. 지도(RouteMap)의 하차 마커 위치 (FR-19). 서준 matching 이 요청의 좌표를 그대로 넘긴다
+             */
+            destLat?: number;
+            /**
+             * Format: double
+             * @description 목적지 경도
+             */
+            destLng?: number;
+            /**
+             * @description 이 사람의 분담액이 어떻게 나왔는지 — 구간별 (§5.2). 정산 상세 화면이 "구간 1 4,500원 ÷ 3명 = 1,500원" 처럼
+             *     그린다. 순서는 `route.sections` 와 같고, 이 사람이 타지 않은 구간은 들어 있지 않다.
+             *     `Σ share + roundingAdjustment == shareAmount` 가 항상 성립한다. 서준 `fare` 모듈이 채운다.
+             */
+            breakdown?: components["schemas"]["FareBreakdownItem"][];
+            /**
+             * @description 100원 단위 보정액(원). 구간 몫의 합을 100원 단위로 올린 뒤 총액이 맞도록 최대 분담자에게서 뺀 값이다 (§5.2).
+             *     0 이면 보정 없음. 음수일 수 있다. 화면에는 "반올림 보정 +50원" 처럼 보여 준다
+             */
+            roundingAdjustment?: number;
         };
         /** @description 구독 `/user/queue/status` 의 본문. 5초마다 + 변경 즉시 */
         QueueStatus: {
@@ -1646,6 +1678,11 @@ export interface operations {
     getHistory: {
         parameters: {
             query?: {
+                /**
+                 * @description 이 달의 이력만 (이력 화면의 기간 필터, FR-24). 형식 `YYYY-MM`, 한국 시간 기준. 없으면 전체.
+                 *     요약 카드(누적 절감액·횟수)는 이 목록을 합산하지 말고 `GET /api/stats/me` 를 쓴다 — 페이지 하나만 더한 값이 된다
+                 */
+                yearMonth?: string;
                 page?: number;
                 size?: number;
             };

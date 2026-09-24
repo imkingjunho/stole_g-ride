@@ -1038,9 +1038,21 @@ public record GroupCompleted(Long groupId, List<Long> userIds) {}
 | `/login`, `/signup`, `/signup/verify`, `/signup/profile` | 인증 | 오승원 |
 | `/` → `/request` | 매칭 요청 | 송준호 |
 | `/waiting` | 대기 | 송준호 |
-| `/groups/:groupId` | 매칭 성사·정산 상세 | 오승원 |
+| `/groups/:groupId` | 매칭 성사 (지도·분담액·하차 순서) | 오승원 |
+| `/groups/:groupId/fare` | 정산 상세 (구간별 몫·100원 보정 설명) — 2026-09-24 시안 확정으로 추가 | 오승원 |
 | `/groups/:groupId/chat` | 채팅 | 오승원 |
 | `/history`, `/me` | 이력·대시보드·프로필 | 오승원 |
+
+**디자인 기준** (2026-09-24 확정)
+
+- 확정 시안: `frontend/prototype/` (오승원, `13e0f4d`). Stitch 산출물 `toss_mobility_campus_transit` 을 React 로 옮긴 것이다. **토큰의 정본은 시안 `styles.css` 의 `:root`** 다 — 주요 동작 `#1769d4`(brand), 강조 `#3182f6`(accent, 장식용), 절감액 초록 `#087d4c`, 본문 `#191f28`, 보조 `#6b7684`, 선 `#e5e8eb`, 배경 `#f2f4f6`, 카드 흰색, 여백 20px, 최대 폭 440px, 고정 하단 탭, Pretendard(없으면 시스템 한글). DESIGN.md 의 frontmatter 값(`#0059b9` 등)은 본문과도 어긋나므로 쓰지 않는다. 오승원이 이 값을 `frontend/tailwind.config.js` 의 `theme.extend.colors`(brand·accent·saving·ink·muted·line·canvas)로 옮긴다.
+- `frontend/prototype` 은 **미리보기 전용**이다. 서버·지도·인증이 없고 fixtures 로 그리며, CI 는 검사하지 않는다(루트 eslint 가 `prototype/**` 을 무시). 실제 화면은 `frontend/src` 에 만들며, 옮길 때 지킬 것: 타입은 `src/generated/api.d.ts` 만(CLAUDE.md §5), 공통 UI 는 `shared/ui` 하나로(시안의 `shared/ui` 10개를 흡수), 색·간격은 Tailwind 토큰으로 옮기고 수작업 CSS(`styles.css` 2,018줄)는 남기지 않는다, 모바일 우선 360px·터치 44px·글자 최소 12px.
+- 하단 탭은 §14.6 라우트 표대로 **요청·대기·이력·내 정보** 를 유지한다(시안의 동승·채팅 탭은 채택하지 않음 — 그룹·채팅은 성사 뒤에만 의미가 있다). 시안의 탭 스타일만 흡수한다. 정산 상세는 `/groups/:groupId/fare` 하위 라우트로 둔다(아래 표에 추가).
+- 시안에 없는 화면(매칭 요청·대기, 송준호)은 Stitch 원본 이미지 **요청 `_2`, 대기 `_9`** 를 기준으로 같은 토큰·컴포넌트로 만든다. 단 `_2` 의 "혼자 가면 12,400원 · 3인 동승 시 약 4,100원" 사전 안내와 `_9` 의 "매칭 우선순위 높음 · 성사 확률" 배지는 뒷받침하는 API 가 없어 채택하지 않는다(필요하면 계약 변경 요청).
+- **법적 고지는 §2.2 원문 한 가지만** 쓴다: "본 서비스는 동승자 매칭 및 요금 분담 계산만 제공하며, 택시 호출·운송·결제를 중개하지 않습니다." 시안의 `LegalNotice` 가 이 문구이므로 본 앱 `Layout` footer 를 그것으로 교체하고, `Layout` 밖의 인증 화면(`/login`, `/signup*`)에도 둔다. Stitch·DESIGN.md 의 "이동 중개 도구", "직접 송금하여 정산" 표현은 쓰지 않는다.
+- Stitch 원본의 PRD 범위 밖 요소는 채택하지 않는다: 연락처 마스킹 표시 `010-••••-1234`(연락처를 받지 않는다, FR-03), "학생증 인증" 태그(웹메일 인증이다), 잔여 좌석·예약 표현(배치 매칭이라 좌석이 없다).
+- 시안이 요구해서 계약에 추가한 것(2026-09-24): `GroupMember.breakdown[]`·`roundingAdjustment`(정산 상세의 구간별 몫·100원 보정, 서준 `fare`), `GroupMember.destLat/destLng`(지도 하차 마커, 서준), `GET /api/history?yearMonth`(이력 월 필터, 서준 `stats`). 시안의 "예상 분담액 사전 안내"·"매칭 확률"은 추가하지 않았다.
+- 본 앱 화면이 모두 옮겨진 뒤 `frontend/prototype` 은 삭제한다(두 코드가 어긋나는 것을 막기 위해). 그때까지 시안을 고치면 본 앱에도 반영한다.
 
 **공유 모듈** (`src/shared/`, 오승원 소유. Phase 0에서 초기 버전 제공)
 - `api/client.ts` — `openapi-fetch` 클라이언트, 토큰 헤더, 401 시 refresh 후 재시도
