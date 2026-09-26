@@ -1,0 +1,6 @@
+src/generated/
+prototype/
+public/mockServiceWorker.js
+dist/
+qa-output/
+*.tsbuildinfo

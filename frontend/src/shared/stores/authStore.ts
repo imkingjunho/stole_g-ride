@@ -5,6 +5,7 @@ import type { components } from '@/generated/api';
 type UserProfile = components['schemas']['UserProfile'];
 
 interface AuthState {
+  sessionVersion: number;
   accessToken: string | null;
   refreshToken: string | null;
   user: UserProfile | null;
@@ -12,20 +13,28 @@ interface AuthState {
   logout: () => void;
 }
 
-/**
- * 로그인 상태. 새로고침해도 유지되도록 localStorage 에 보관한다.
- *
- * Phase 0 에는 인증이 꺼져 있어 비어 있는 것이 정상이다.
- * 실제 로그인 연결은 오승원이 T1-2·T1-5 에서 한다.
- */
+/** 토큰 회전과 명시적인 로그인/로그아웃 세대를 구분한다. 비밀번호는 저장하지 않는다. */
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
+      sessionVersion: 0,
       accessToken: null,
       refreshToken: null,
       user: null,
-      setTokens: (accessToken, refreshToken, user) => set({ accessToken, refreshToken, user }),
-      logout: () => set({ accessToken: null, refreshToken: null, user: null }),
+      setTokens: (accessToken, refreshToken, user) =>
+        set((state) => ({
+          accessToken,
+          refreshToken,
+          user,
+          sessionVersion: state.sessionVersion + 1,
+        })),
+      logout: () =>
+        set((state) => ({
+          accessToken: null,
+          refreshToken: null,
+          user: null,
+          sessionVersion: state.sessionVersion + 1,
+        })),
     }),
     { name: 'gachiga-auth' },
   ),

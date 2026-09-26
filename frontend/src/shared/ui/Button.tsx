@@ -1,23 +1,37 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
-
+import { Spinner } from './Spinner';
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   children: ReactNode;
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
+  loading?: boolean;
+  fullWidth?: boolean;
 }
-
-/**
- * 공통 버튼 — Phase 0 뼈대.
- *
- * 디자인 토큰과 variant(primary/secondary/ghost), 크기, 로딩 상태는 오승원이 T1-1 에서 채운다.
- * 지금은 **터치 대상 최소 44px**(PRD §10)만 지켜 둔다.
- *
- * 다른 사람은 `shared/ui` 의 컴포넌트만 쓴다. 각자 버튼을 새로 만들지 않는다 (CLAUDE.md §5).
- */
-export function Button({ children, className = '', ...rest }: ButtonProps) {
+/** 폼 제출 버튼은 type="submit"을 명시한다. */
+export function Button({
+  children,
+  variant = 'primary',
+  loading = false,
+  fullWidth = false,
+  disabled,
+  type = 'button',
+  className = '',
+  ...props
+}: ButtonProps) {
+  const variants = {
+    primary: 'bg-brand text-white hover:bg-brand-hover',
+    secondary: 'border border-slate-500 bg-white text-ink hover:bg-brand-soft',
+    ghost: 'text-brand hover:bg-brand-soft',
+    danger: 'bg-danger text-white hover:bg-red-800',
+  };
   return (
     <button
-      className={`min-h-touch min-w-touch rounded-lg bg-slate-900 px-4 py-2 text-white disabled:opacity-40 ${className}`}
-      {...rest}
+      {...props}
+      type={type}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
+      className={`inline-flex min-h-touch min-w-touch items-center justify-center gap-2 rounded-control px-4 py-3 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${variants[variant]} ${fullWidth ? 'w-full' : ''} ${className}`}
     >
+      {loading && <Spinner label="처리 중" />}
       {children}
     </button>
   );

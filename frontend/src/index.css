@@ -1,19 +1,48 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* 모바일 우선. 상세한 디자인 토큰은 오승원이 T1-1 에서 채운다. */
 :root {
   color-scheme: light;
+  color: #191f28;
+  background: #f2f4f6;
+  font-family: Pretendard, 'Apple SD Gothic Neo', system-ui, sans-serif;
 }
-
+* {
+  box-sizing: border-box;
+}
 body {
   margin: 0;
-  font-family:
-    'Pretendard',
-    -apple-system,
-    BlinkMacSystemFont,
-    'Apple SD Gothic Neo',
-    system-ui,
-    sans-serif;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+button:not(:disabled) {
+  cursor: pointer;
+}
+:focus-visible {
+  outline: 3px solid #1769d4;
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+@layer components {
+  .page {
+    @apply space-y-5 p-page;
+  }
+  .field {
+    @apply min-h-touch w-full rounded-control border border-slate-500 bg-white px-3 py-3 text-base text-ink;
+  }
+  .link {
+    @apply inline-flex min-h-touch items-center justify-center rounded-control px-3 text-sm font-semibold text-brand;
+  }
 }

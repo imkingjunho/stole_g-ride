@@ -3,14 +3,28 @@ export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
-      // 디자인 토큰은 오승원이 T1-1 에서 채운다. 여기는 뼈대만 둔다.
-      minHeight: {
-        // 터치 대상 최소 크기 (PRD §10 접근성)
-        touch: '44px',
+      colors: {
+        brand: { DEFAULT: '#1769d4', hover: '#1258b5', soft: '#eaf3ff' },
+        accent: '#3182f6',
+        saving: '#087d4c',
+        ink: '#191f28',
+        muted: '#6b7684',
+        line: '#e5e8eb',
+        canvas: '#f2f4f6',
+        danger: '#b91c1c',
       },
-      minWidth: {
-        touch: '44px',
+      fontFamily: { sans: ['Pretendard', 'Apple SD Gothic Neo', 'system-ui', 'sans-serif'] },
+      fontSize: {
+        caption: ['0.75rem', '1.5'],
+        body: ['0.9375rem', '1.6'],
+        title: ['1.5rem', '1.3'],
       },
+      spacing: { page: '20px' },
+      maxWidth: { app: '440px' },
+      borderRadius: { card: '20px', control: '14px' },
+      boxShadow: { card: '0 4px 24px rgb(25 31 40 / 0.04)' },
+      minHeight: { touch: '44px' },
+      minWidth: { touch: '44px' },
     },
   },
   plugins: [],

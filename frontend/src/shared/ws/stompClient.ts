@@ -1,157 +1,157 @@
-import { Client, type IMessage } from '@stomp/stompjs';
+import { Client, type StompSubscription } from '@stomp/stompjs';
 import type { components } from '@/generated/api';
-import { isMockMode } from '@/shared/api/client';
+import { isMockMode, apiBaseUrl } from '@/shared/api/config';
 import { useAuthStore } from '@/shared/stores/authStore';
-
+import { useConnectionStore } from './connectionStore';
+import { addMockChat, listenMock } from '@/shared/mocks/state';
 type MessageHandler = (body: unknown) => void;
-
-/**
- * 구독 주소별 본문 타입 (PRD §14.5). `docs/api-spec.yaml` 에서 생성된 것을 쓴다 —
- * 손으로 만들지 않는다 (CLAUDE.md §5).
- */
 export type QueueStatusPayload = components['schemas']['QueueStatus'];
 export type MatchNotification = components['schemas']['MatchNotification'];
 export type ChatMessagePayload = components['schemas']['ChatMessage'];
 export type ChatSendBody = components['schemas']['ChatSendRequest'];
-
-/**
- * STOMP over WebSocket 래퍼 (PRD §14.5).
- *
- * 구독 주소
- * - `/user/queue/status` 내 대기 상태 (5초마다 + 변경 즉시)
- * - `/user/queue/match` 매칭 알림
- * - `/topic/chat/{groupId}` 채팅
- *
- * 발신 주소
- * - `/app/chat/{groupId}`
- *
- * `VITE_API_MODE=mock` 이면 실제로 연결하지 않고 {@link MockStompClient} 가 대신 동작한다.
- * 화면 코드는 두 경우를 구분하지 않아도 된다.
- *
- * Phase 0 에는 서버가 아무것도 보내지 않는다. 연결·구독만 된다.
- * 실제 push 는 임승현이 Phase 1 에서 붙인다.
- */
 export interface StompClient {
   connect(): void;
   disconnect(): void;
   subscribe(destination: string, handler: MessageHandler): () => void;
-  send(destination: string, body: unknown): void;
+  send(destination: string, body: ChatSendBody): void;
 }
-
 class RealStompClient implements StompClient {
   private client: Client | null = null;
-  private readonly pending = new Map<string, MessageHandler>();
-
-  connect(): void {
-    if (this.client) {
-      return;
-    }
-    const base = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080';
+  private nextId = 0;
+  private subscriptions = new Map<
+    number,
+    { destination: string; handler: MessageHandler; active?: StompSubscription }
+  >();
+  connect() {
+    if (this.client) return;
+    useConnectionStore.setState({ status: 'connecting' });
     const client = new Client({
-      brokerURL: `${base.replace(/^http/, 'ws')}/ws`,
-      // CONNECT 프레임에 토큰을 싣는다 (PRD §14.5). Phase 0 서버는 검사하지 않는다
-      connectHeaders: tokenHeader(),
-      reconnectDelay: 3_000,
-      onConnect: () => {
-        for (const [destination, handler] of this.pending) {
-          this.doSubscribe(destination, handler);
-        }
+      brokerURL: `${apiBaseUrl.replace(/^http/, 'ws')}/ws`,
+      reconnectDelay: 3000,
+      heartbeatIncoming: 10000,
+      heartbeatOutgoing: 10000,
+      beforeConnect: () => {
+        const token = useAuthStore.getState().accessToken;
+        client.connectHeaders = token ? { Authorization: `Bearer ${token}` } : {};
       },
+      onConnect: () => {
+        useConnectionStore.setState({ status: 'connected' });
+        for (const id of this.subscriptions.keys()) this.attach(id);
+      },
+      onWebSocketClose: () => {
+        useConnectionStore.setState({ status: 'disconnected' });
+        for (const entry of this.subscriptions.values()) entry.active = undefined;
+      },
+      onStompError: () => useConnectionStore.setState({ status: 'disconnected' }),
     });
-    client.activate();
     this.client = client;
+    client.activate();
   }
-
-  disconnect(): void {
-    void this.client?.deactivate();
-    this.client = null;
-    this.pending.clear();
-  }
-
-  subscribe(destination: string, handler: MessageHandler): () => void {
-    this.pending.set(destination, handler);
-    if (this.client?.connected) {
-      return this.doSubscribe(destination, handler);
-    }
-    // 아직 연결 전이면 onConnect 에서 이어 구독한다
-    return () => this.pending.delete(destination);
-  }
-
-  send(destination: string, body: unknown): void {
-    this.client?.publish({ destination, body: JSON.stringify(body) });
-  }
-
-  private doSubscribe(destination: string, handler: MessageHandler): () => void {
-    const subscription = this.client?.subscribe(destination, (message: IMessage) => {
-      handler(parseBody(message.body));
+  private attach(id: number) {
+    const entry = this.subscriptions.get(id);
+    if (!entry || !this.client?.connected) return;
+    entry.active?.unsubscribe();
+    entry.active = this.client.subscribe(entry.destination, (frame) => {
+      try {
+        entry.handler(JSON.parse(frame.body));
+      } catch {
+        useConnectionStore.setState({ status: 'disconnected' });
+      }
     });
+  }
+  subscribe(destination: string, handler: MessageHandler) {
+    const id = ++this.nextId;
+    this.subscriptions.set(id, { destination, handler });
+    this.attach(id);
     return () => {
-      subscription?.unsubscribe();
-      this.pending.delete(destination);
+      this.subscriptions.get(id)?.active?.unsubscribe();
+      this.subscriptions.delete(id);
     };
   }
+  send(destination: string, body: ChatSendBody) {
+    if (!this.client?.connected) throw new Error('연결이 끊겼어요. 재연결 후 전송해 주세요.');
+    this.client.publish({ destination, body: JSON.stringify(body) });
+  }
+  disconnect() {
+    const client = this.client;
+    this.client = null;
+    this.subscriptions.clear();
+    useConnectionStore.setState({ status: 'disconnected' });
+    void client?.deactivate();
+  }
 }
-
-/**
- * 목 모드용. 실제 연결 없이 타이머로 그럴싸한 메시지를 흘려 준다.
- * 대기 화면·채팅 화면을 백엔드 없이 만들 수 있게 하는 것이 목적이다.
- */
 class MockStompClient implements StompClient {
-  private readonly timers = new Set<ReturnType<typeof setInterval>>();
-
-  connect(): void {
-    // 연결할 곳이 없다
+  private cleanups = new Set<() => void>();
+  connect() {
+    useConnectionStore.setState({ status: 'connected' });
   }
-
-  disconnect(): void {
-    for (const timer of this.timers) {
-      clearInterval(timer);
-    }
-    this.timers.clear();
+  disconnect() {
+    this.cleanups.forEach((fn) => fn());
+    this.cleanups.clear();
+    useConnectionStore.setState({ status: 'disconnected' });
   }
-
-  subscribe(destination: string, handler: MessageHandler): () => void {
-    if (destination !== '/user/queue/status') {
-      // 그 밖의 주소는 조용히 둔다. 필요해지면 여기에 시나리오를 추가한다
-      return () => {};
+  subscribe(destination: string, handler: MessageHandler) {
+    const removeListener = listenMock(destination, handler);
+    let timer: ReturnType<typeof setInterval> | undefined;
+    if (destination === '/user/queue/status') {
+      const deadline = Date.now() + 600000;
+      timer = setInterval(() => {
+        const remainingSeconds = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+        handler({
+          requestId: 1,
+          status: remainingSeconds > 0 ? 'WAITING' : 'EXPIRED',
+          remainingSeconds,
+          candidateCount: 2,
+        } satisfies QueueStatusPayload);
+      }, 5000);
     }
-    // 대기 화면이 카운트다운을 그릴 수 있도록 남은 시간을 줄여 가며 보낸다.
-    // 타입을 붙여 두면 스펙이 바뀌었을 때 빌드가 잡아 준다.
-    let remainingSeconds = 600;
-    const timer = setInterval(() => {
-      remainingSeconds = Math.max(0, remainingSeconds - 5);
-      const payload: QueueStatusPayload = {
-        requestId: 1,
-        status: 'WAITING',
-        remainingSeconds,
-        candidateCount: 2,
-      };
-      handler(payload);
-    }, 5_000);
-    this.timers.add(timer);
+    const off = () => {
+      removeListener();
+      if (timer) clearInterval(timer);
+    };
+    this.cleanups.add(off);
     return () => {
-      clearInterval(timer);
-      this.timers.delete(timer);
+      off();
+      this.cleanups.delete(off);
     };
   }
-
-  send(destination: string, body: unknown): void {
-    console.info('[mock stomp] send', destination, body);
+  send(destination: string, body: ChatSendBody) {
+    if (useConnectionStore.getState().status !== 'connected') throw new Error('연결이 끊겼어요.');
+    if (!/^\/app\/chat\/\d+$/.test(destination)) throw new Error('잘못된 채팅 주소예요.');
+    addMockChat(body);
   }
 }
-
-function tokenHeader(): Record<string, string> {
-  const token = useAuthStore.getState().accessToken;
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
-function parseBody(raw: string): unknown {
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return raw;
-  }
-}
-
-/** 화면에서는 이것만 쓰면 된다. 모드에 따라 알아서 갈린다. */
 export const stompClient: StompClient = isMockMode ? new MockStompClient() : new RealStompClient();
+export function isMatchNotification(value: unknown): value is MatchNotification {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'groupId' in value &&
+    typeof value.groupId === 'number' &&
+    'message' in value &&
+    typeof value.message === 'string' &&
+    'type' in value &&
+    typeof value.type === 'string' &&
+    ['PROPOSED', 'CONFIRMED', 'RECALCULATED', 'DISSOLVED', 'COMPLETED'].includes(value.type)
+  );
+}
+export function isChatMessage(value: unknown): value is ChatMessagePayload {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'id' in value &&
+    typeof value.id === 'number' &&
+    'groupId' in value &&
+    typeof value.groupId === 'number' &&
+    'content' in value &&
+    typeof value.content === 'string' &&
+    'senderId' in value &&
+    typeof value.senderId === 'number' &&
+    'senderNickname' in value &&
+    typeof value.senderNickname === 'string' &&
+    'createdAt' in value &&
+    typeof value.createdAt === 'string' &&
+    'type' in value &&
+    ['TEXT', 'SYSTEM', 'QUICK'].includes(String(value.type))
+  );
+}
