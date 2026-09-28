@@ -74,8 +74,8 @@ public class MatchingEngine {
                         .ifPresent(combination::add);
                 }
                 if (combination.size() == candidate.requestIds().size()) {
-                    createAndConfirmGroup(combination);
-                }
+                    createAndConfirmGroup(combination, candidate);  // ← candidate 전달
+                    }
             }
 
             long duration = System.currentTimeMillis() - startTime;
@@ -89,7 +89,7 @@ public class MatchingEngine {
     /**
      * 그룹 생성 및 자동 성사
      */
-    private void createAndConfirmGroup(List<WaitingRequest> combination) {
+    private void createAndConfirmGroup(List<WaitingRequest> combination, com.gachiga.matching.domain.MatchCandidate candidate) {
     // RouteProvider로 실제 경로 조회
     List<com.gachiga.contract.route.Coordinate> waypoints = new ArrayList<>();
     for (int i = 1; i < combination.size() - 1; i++) {
@@ -125,8 +125,8 @@ public class MatchingEngine {
             .boardingOrder(i)
             .dropoffOrder(i)
             .sharedDistance(0)
-            .shareAmount(0)
-            .savingAmount(0)
+            .shareAmount(candidate.shares().get(req.userId()))      // ← 변경
+            .savingAmount(candidate.savings().get(req.userId()))    // ← 변경
             .accepted(false)
             .build();
         memberRepository.save(member);

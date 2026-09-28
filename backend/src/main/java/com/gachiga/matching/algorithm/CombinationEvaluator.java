@@ -79,8 +79,10 @@ public class CombinationEvaluator {
                 savingSum,
                 avgDetourRatio,
                 maxWaitTime,
-                score
-            );
+                score,
+                shares,    // ← 추가
+                savings    // ← 추가
+                );
 
         } catch (Exception e) {
             return null;

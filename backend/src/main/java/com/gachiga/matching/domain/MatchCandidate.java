@@ -1,16 +1,19 @@
 package com.gachiga.matching.domain;
 
 import java.util.List;
+import java.util.Map;
 
 /**
- * 조합 평가 후보 (값 객체)
+ * 議고빀 ?됯? ?꾨낫 (媛?媛앹껜)
  */
 public record MatchCandidate(
-    List<Long> requestIds,      // 조합 요청 ID들
-    long savingSum,             // 총 절감액
-    double avgDetourRatio,      // 평균 우회율
-    int maxWaitTime,            // 최대 대기 시간(초)
-    long score                  // 최종 점수
+    List<Long> requestIds,           // 議고빀 ?붿껌 ID??
+    long savingSum,                  // 珥??덇컧??
+    double avgDetourRatio,           // ?됯퇏 ?고쉶??
+    int maxWaitTime,                 // 理쒕? ?湲??쒓컙(珥?
+    long score,                      // 理쒖쥌 ?먯닔
+    Map<Long, Integer> shares,       // userId -> shareAmount
+    Map<Long, Integer> savings       // userId -> savingAmount
 ) {
     public int size() {
         return requestIds.size();
