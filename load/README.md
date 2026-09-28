@@ -36,4 +36,6 @@ k6 run load/k6/ride-requests.js
 각 VU(=사용자) 가 반복: `POST /api/requests` → `GET /api/requests/me` ×3 (0.3초 간격, 대기 화면 폴링) → `DELETE /api/requests/{id}`.
 30초 동안 200명까지 올리고 60초 유지, 10초 내린다. 생성은 201 만 정상이다. 409 는 중단된 이전 실행이 남긴 요청이 있을 때만 나오며 따로 센다.
 
-인증은 Phase 0 방식(`X-Dev-User` 헤더)이다. JWT(T1-5)가 붙으면 `headers()` 를 토큰으로 바꿔야 한다.
+**⚠️ 2026-09-28 부터 이 스크립트는 그대로 돌지 않는다.** 임승현 T1-5·T1-6(`d5b2712`)으로 `X-Dev-User` 헤더가 사라지고 모든 API 가 JWT 를 요구한다.
+다시 재려면 (1) 시드 사용자에 실제 BCrypt 해시(`password_hash`)를 넣고 (2) k6 `setup()` 에서 VU 마다 `POST /api/auth/login` 으로 토큰을 받아
+`headers()` 에 `Authorization: Bearer` 로 넣어야 한다. `docs/performance.md` §1 의 수치는 인증이 없던 시점의 값이다.

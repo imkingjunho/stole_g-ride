@@ -18,7 +18,10 @@ import com.gachiga.ride.dto.HubResponse;
 import com.gachiga.ride.dto.RideRequestResponse;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +30,8 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
@@ -35,6 +40,9 @@ import org.springframework.test.web.servlet.MockMvc;
  * <p>{@code docs/api-spec.yaml} 이 약속한 상태 코드와 응답 모양을 지키는지 본다. 서비스는
  * Mock 이므로 로직이 아니라 <b>껍데기</b>만 검사한다 — 상태 코드, ApiResponse 래핑,
  * {@code @CurrentUser} 로 사용자가 넘어가는지.
+ *
+ * <p>{@code @CurrentUser} 는 {@code SecurityContext} 의 principal(userId)에서 온다 (임승현 T1-6).
+ * {@code addFilters = false} 라 JWT 필터가 돌지 않으므로 테스트가 직접 인증을 심는다.
  */
 @ActiveProfiles("test")
 @WebMvcTest(RideRequestController.class)
@@ -51,6 +59,22 @@ class RideRequestControllerTest {
     @Autowired private MockMvc mockMvc;
 
     @MockBean private RideRequestService rideRequestService;
+
+    @BeforeEach
+    void authenticateAsUser1() {
+        authenticateAs(1L);
+    }
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
+
+    /** JwtAuthenticationFilter 가 하는 일 — principal 자리에 userId 를 그대로 둔다 */
+    private static void authenticateAs(Long userId) {
+        SecurityContextHolder.getContext()
+                .setAuthentication(new UsernamePasswordAuthenticationToken(userId, null, List.of()));
+    }
 
     private RideRequestResponse sampleResponse() {
         return new RideRequestResponse(
@@ -89,13 +113,13 @@ class RideRequestControllerTest {
     }
 
     @Test
-    @DisplayName("X-Dev-User 헤더의 사용자가 서비스로 넘어간다")
+    @DisplayName("인증된 사용자(SecurityContext)의 id 가 서비스로 넘어간다")
     void passesCurrentUser() throws Exception {
+        authenticateAs(3L);
         given(rideRequestService.create(eq(3L), any())).willReturn(sampleResponse());
 
         mockMvc.perform(
                         post("/api/requests")
-                                .header("X-Dev-User", "3")
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(BODY))
                 .andExpect(status().isCreated());
