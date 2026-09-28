@@ -16,6 +16,9 @@ import com.gachiga.contract.user.Gender;
 import com.gachiga.contract.user.UserStatus;
 import com.gachiga.user.dto.UpdateProfileRequest;
 import com.gachiga.user.dto.UserProfileResponse;
+import java.util.List;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,12 +26,18 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 /**
  * {@link UserController} 의 HTTP 계약 검증. {@code docs/api-spec.yaml} 의 {@code UserProfile} 모양을
  * 지키는지 본다. 서비스는 Mock 이다.
+ *
+ * <p>{@code @CurrentUser} 는 {@code SecurityContext} 의 인증 정보에서 userId 를 꺼낸다(T1-6) —
+ * {@code addFilters = false} 라 진짜 {@code JwtAuthenticationFilter} 가 안 도므로, 여기서 직접
+ * {@link SecurityContextHolder} 에 인증을 심어 둔다.
  */
 @ActiveProfiles("test")
 @WebMvcTest(UserController.class)
@@ -38,6 +47,21 @@ class UserControllerTest {
     @Autowired private MockMvc mockMvc;
 
     @MockBean private UserService userService;
+
+    @BeforeEach
+    void authenticateAsUser1() {
+        authenticateAs(1L);
+    }
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
+
+    private void authenticateAs(Long userId) {
+        SecurityContextHolder.getContext()
+                .setAuthentication(new UsernamePasswordAuthenticationToken(userId, null, List.of()));
+    }
 
     @Test
     @DisplayName("내 프로필을 ApiResponse 로 감싸 돌려준다")
@@ -64,8 +88,9 @@ class UserControllerTest {
     }
 
     @Test
-    @DisplayName("X-Dev-User 헤더의 사용자가 서비스로 넘어간다")
+    @DisplayName("인증된 사용자 id가 서비스로 넘어간다")
     void passesCurrentUser() throws Exception {
+        authenticateAs(3L);
         given(userService.myProfile(3L))
                 .willReturn(
                         new UserProfileResponse(
@@ -78,7 +103,7 @@ class UserControllerTest {
                                 UserStatus.ACTIVE,
                                 null));
 
-        mockMvc.perform(get("/api/users/me").header("X-Dev-User", "3")).andExpect(status().isOk());
+        mockMvc.perform(get("/api/users/me")).andExpect(status().isOk());
 
         verify(userService).myProfile(3L);
     }

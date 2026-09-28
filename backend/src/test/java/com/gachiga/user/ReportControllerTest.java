@@ -11,6 +11,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.gachiga.common.exception.BusinessException;
 import com.gachiga.common.exception.ErrorCode;
 import com.gachiga.user.dto.ReportRequest;
+import java.util.List;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,10 +21,18 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
-/** {@link ReportController} 의 HTTP 계약 검증. 서비스는 Mock 이다. */
+/**
+ * {@link ReportController} 의 HTTP 계약 검증. 서비스는 Mock 이다.
+ *
+ * <p>{@code @CurrentUser} 는 {@code SecurityContext} 의 인증 정보에서 userId 를 꺼낸다(T1-6) —
+ * {@code addFilters = false} 라 진짜 {@code JwtAuthenticationFilter} 가 안 도므로, 여기서 직접
+ * {@link SecurityContextHolder} 에 인증을 심어 둔다.
+ */
 @ActiveProfiles("test")
 @WebMvcTest(ReportController.class)
 @AutoConfigureMockMvc(addFilters = false)
@@ -34,6 +45,21 @@ class ReportControllerTest {
 
     @MockBean private ReportService reportService;
 
+    @BeforeEach
+    void authenticateAsUser1() {
+        authenticateAs(1L);
+    }
+
+    @AfterEach
+    void clearSecurityContext() {
+        SecurityContextHolder.clearContext();
+    }
+
+    private void authenticateAs(Long userId) {
+        SecurityContextHolder.getContext()
+                .setAuthentication(new UsernamePasswordAuthenticationToken(userId, null, List.of()));
+    }
+
     @Test
     @DisplayName("신고에 성공하면 200과 빈 본문을 돌려준다")
     void reportSucceeds() throws Exception {
@@ -45,13 +71,11 @@ class ReportControllerTest {
     }
 
     @Test
-    @DisplayName("X-Dev-User 헤더의 사용자가 신고자로 넘어간다")
+    @DisplayName("인증된 사용자 id가 신고자로 넘어간다")
     void passesCurrentUserAsReporter() throws Exception {
-        mockMvc.perform(
-                        post("/api/reports")
-                                .header("X-Dev-User", "3")
-                                .contentType(MediaType.APPLICATION_JSON)
-                                .content(BODY))
+        authenticateAs(3L);
+
+        mockMvc.perform(post("/api/reports").contentType(MediaType.APPLICATION_JSON).content(BODY))
                 .andExpect(status().isOk());
 
         verify(reportService).report(eq(3L), any(ReportRequest.class));
