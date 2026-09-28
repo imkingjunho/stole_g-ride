@@ -74,4 +74,13 @@ class UserAdapterTest {
         assertThat(adapter.existsByEmail(null)).isFalse();
         assertThat(adapter.existsByEmail("  ")).isFalse();
     }
+
+    @Test
+    @DisplayName("existsByEmail — CanonicalEmail로 정규화해서 비교한다")
+    void existsByEmailNormalizes() {
+        adapter = new UserAdapter(userRepository);
+        given(userRepository.existsByEmail("gachiga@jnu.ac.kr")).willReturn(true);
+
+        assertThat(adapter.existsByEmail("  Gachiga@JNU.AC.KR  ")).isTrue();
+    }
 }

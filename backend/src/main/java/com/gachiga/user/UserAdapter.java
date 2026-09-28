@@ -1,7 +1,9 @@
 package com.gachiga.user;
 
+import com.gachiga.contract.user.CanonicalEmail;
 import com.gachiga.contract.user.UserPort;
 import com.gachiga.contract.user.UserSummary;
+import java.time.LocalDateTime;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -19,6 +21,7 @@ public class UserAdapter implements UserPort {
 
     @Override
     public Optional<UserSummary> findById(Long userId) {
+        LocalDateTime now = LocalDateTime.now();
         return userRepository
                 .findById(userId)
                 .map(
@@ -27,14 +30,15 @@ public class UserAdapter implements UserPort {
                                         user.getId(),
                                         user.getNickname(),
                                         user.getGender(),
-                                        user.getStatus()));
+                                        user.currentStatus(now)));
     }
 
     @Override
     public boolean existsByEmail(String email) {
-        if (email == null || email.isBlank()) {
+        String canonical = CanonicalEmail.of(email);
+        if (canonical == null) {
             return false;
         }
-        return userRepository.existsByEmail(email);
+        return userRepository.existsByEmail(canonical);
     }
 }

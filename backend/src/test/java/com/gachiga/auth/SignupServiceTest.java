@@ -29,7 +29,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class SignupServiceTest {
 
-    private static final AuthProperties PROPERTIES = new AuthProperties("jnu.ac.kr", 10, 5, 30);
+    private static final AuthProperties PROPERTIES =
+            new AuthProperties("jnu.ac.kr", 10, 5, 30, "test-secret-at-least-32-bytes-long!!", 30, 14);
 
     @Mock private VerificationCodeStore codeStore;
     @Mock private VerificationMailSender mailSender;

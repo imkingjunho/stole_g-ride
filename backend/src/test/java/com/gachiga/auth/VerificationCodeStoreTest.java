@@ -29,7 +29,8 @@ import org.springframework.data.redis.core.ValueOperations;
 class VerificationCodeStoreTest {
 
     private static final String EMAIL = "gachiga@jnu.ac.kr";
-    private static final AuthProperties PROPERTIES = new AuthProperties("jnu.ac.kr", 10, 5, 30);
+    private static final AuthProperties PROPERTIES =
+            new AuthProperties("jnu.ac.kr", 10, 5, 30, "test-secret-at-least-32-bytes-long!!", 30, 14);
 
     @Mock private StringRedisTemplate redisTemplate;
     @Mock private ValueOperations<String, String> valueOps;

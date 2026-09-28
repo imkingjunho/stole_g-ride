@@ -151,4 +151,71 @@ class UserTest {
             assertThat(user.getSuspendedUntil()).isEqualTo(later.plusDays(7));
         }
     }
+
+    @Nested
+    @DisplayName("지금 기준 상태 — currentStatus/currentSuspendedUntil (리뷰 반영)")
+    class CurrentStatus {
+
+        @Test
+        @DisplayName("ACTIVE 사용자는 그대로 ACTIVE")
+        void activeStaysActive() {
+            User user = verifiedUser();
+
+            assertThat(user.currentStatus(NOW)).isEqualTo(UserStatus.ACTIVE);
+            assertThat(user.currentSuspendedUntil(NOW)).isNull();
+        }
+
+        @Test
+        @DisplayName("정지 기간이 아직 안 지났으면 저장값 그대로 SUSPENDED")
+        void suspendedBeforeExpiry() {
+            User user = verifiedUser();
+            user.applyReport(NOW);
+            user.applyReport(NOW);
+            user.applyReport(NOW); // suspendedUntil = NOW + 7일
+
+            LocalDateTime beforeExpiry = NOW.plusDays(6);
+
+            assertThat(user.currentStatus(beforeExpiry)).isEqualTo(UserStatus.SUSPENDED);
+            assertThat(user.currentSuspendedUntil(beforeExpiry)).isEqualTo(NOW.plusDays(7));
+        }
+
+        @Test
+        @DisplayName("정지 기간이 지났으면 저장값이 SUSPENDED여도 지금 기준 ACTIVE, suspendedUntil은 null")
+        void suspendedAfterExpiryBecomesActive() {
+            User user = verifiedUser();
+            user.applyReport(NOW);
+            user.applyReport(NOW);
+            user.applyReport(NOW); // suspendedUntil = NOW + 7일
+
+            LocalDateTime afterExpiry = NOW.plusDays(7).plusSeconds(1);
+
+            assertThat(user.currentStatus(afterExpiry)).isEqualTo(UserStatus.ACTIVE);
+            assertThat(user.currentSuspendedUntil(afterExpiry)).isNull();
+        }
+
+        @Test
+        @DisplayName("만료 시각과 정확히 같은 순간부터 ACTIVE (경계값)")
+        void suspendedExactlyAtExpiryBecomesActive() {
+            User user = verifiedUser();
+            user.applyReport(NOW);
+            user.applyReport(NOW);
+            user.applyReport(NOW); // suspendedUntil = NOW + 7일
+
+            assertThat(user.currentStatus(NOW.plusDays(7))).isEqualTo(UserStatus.ACTIVE);
+        }
+
+        @Test
+        @DisplayName("저장값이 그대로 바뀌지는 않는다 — 계산만 하고 엔티티 상태는 그대로다")
+        void doesNotMutateStoredState() {
+            User user = verifiedUser();
+            user.applyReport(NOW);
+            user.applyReport(NOW);
+            user.applyReport(NOW);
+
+            user.currentStatus(NOW.plusDays(30));
+
+            assertThat(user.getStatus()).isEqualTo(UserStatus.SUSPENDED);
+            assertThat(user.getSuspendedUntil()).isEqualTo(NOW.plusDays(7));
+        }
+    }
 }

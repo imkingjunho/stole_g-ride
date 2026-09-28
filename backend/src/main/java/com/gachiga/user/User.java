@@ -148,4 +148,23 @@ public class User {
             this.suspendedUntil = now.plusDays(SUSPEND_DAYS);
         }
     }
+
+    /**
+     * <b>지금 기준</b> 계정 상태다 (FR-04). 저장값이 {@code SUSPENDED} 여도 {@code suspendedUntil} 이
+     * 지났으면 {@code ACTIVE} 다 — 정지를 스케줄러로 풀어 주지 않으므로 읽는 시점에 계산한다.
+     *
+     * <p>{@code contract.user.UserPort.findById}·{@code UserAccountPort} 가 모두 이 메서드로 계산해야
+     * 같은 답을 낸다. 갈리면 "로그인은 되는데 매칭 요청은 영원히 403" 같은 상태가 생긴다.
+     */
+    public UserStatus currentStatus(LocalDateTime now) {
+        if (status == UserStatus.SUSPENDED && !suspendedUntil.isAfter(now)) {
+            return UserStatus.ACTIVE;
+        }
+        return status;
+    }
+
+    /** {@link #currentStatus} 가 {@code SUSPENDED} 일 때만 값이 있다. 풀렸으면 {@code null} */
+    public LocalDateTime currentSuspendedUntil(LocalDateTime now) {
+        return currentStatus(now) == UserStatus.SUSPENDED ? suspendedUntil : null;
+    }
 }
