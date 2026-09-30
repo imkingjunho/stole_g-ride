@@ -1,0 +1,14 @@
+# 테스트 전용 프로파일.
+# MySQL/Redis 없이도 스프링 컨텍스트가 조립되는지만 검증한다.
+# 실제 DB 를 쓰는 통합 테스트는 T1-4(Docker Compose) 이후 별도 프로파일로 추가한다.
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration
+
+logging:
+  level:
+    root: WARN
+    com.gachiga: INFO
