@@ -12,6 +12,7 @@ export interface KakaoMap {
   setCenter(position: KakaoLatLng): void;
   setBounds(bounds: KakaoBounds): void;
   setLevel(level: number): void;
+  setZoomable(zoomable: boolean): void;
 }
 
 export interface KakaoOverlay {

@@ -31,6 +31,7 @@ export function useKakaoMap(center: LatLng = DEFAULT_CENTER) {
       center: new sdk.LatLng(initialCenter.current.lat, initialCenter.current.lng),
       level: 5,
     });
+    instance.setZoomable(true);
     setMap(instance);
     return () => setMap(null);
   }, [sdk]);

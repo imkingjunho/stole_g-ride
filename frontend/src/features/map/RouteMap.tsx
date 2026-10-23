@@ -51,10 +51,20 @@ export function RouteMap({ sections, stops, className = '' }: RouteMapProps) {
       bounds.extend(position);
       pointCount += 1;
       const badge = document.createElement('div');
-      badge.textContent = String(stop.order);
-      badge.setAttribute('aria-label', `${stop.order}번 ${stop.label}`);
+      const sequence = document.createElement('span');
+      sequence.textContent = `${stop.order} ${stop.kind === 'PICKUP' ? '탑승' : '하차'}`;
+      sequence.className = 'font-bold';
+      const label = document.createElement('span');
+      label.textContent = stop.label;
+      label.className = 'max-w-32 truncate';
+      badge.append(sequence, label);
+      badge.setAttribute(
+        'aria-label',
+        `${stop.order}번 ${stop.kind === 'PICKUP' ? '탑승' : '하차'}: ${stop.label}`,
+      );
+      badge.setAttribute('role', 'img');
       badge.className =
-        'flex h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-brand font-bold text-white shadow';
+        'flex max-w-48 items-center gap-1 rounded-full border-2 border-white bg-brand px-3 py-1.5 text-xs text-white shadow';
       overlays.current.push(new sdk.CustomOverlay({ map, position, content: badge, yAnchor: 1 }));
     });
 
