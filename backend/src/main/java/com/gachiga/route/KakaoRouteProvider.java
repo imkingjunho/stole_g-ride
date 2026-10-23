@@ -7,6 +7,9 @@ import com.gachiga.contract.route.Coordinate;
 import com.gachiga.contract.route.RouteProvider;
 import com.gachiga.contract.route.RouteResult;
 import java.time.Duration;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -21,6 +24,8 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.data.redis.RedisConnectionFailureException;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 /**
  * 카카오모빌리티 다중 경유지 길찾기 구현체.
@@ -41,14 +46,21 @@ public class KakaoRouteProvider implements RouteProvider {
     private final ObjectMapper objectMapper;
     private final EstimatedRouteProvider fallback;
     private final String restApiKey;
+    private final StringRedisTemplate redisTemplate;
+    private final Duration cacheTtl;
+    private long cacheHits;
+    private long cacheMisses;
 
     @Autowired
     public KakaoRouteProvider(
             RestClient.Builder restClientBuilder,
             ObjectMapper objectMapper,
             EstimatedRouteProvider fallback,
-            @Value("${KAKAO_REST_API_KEY:}") String restApiKey) {
-        this(buildRestClient(restClientBuilder), objectMapper, fallback, restApiKey);
+            @Value("${KAKAO_REST_API_KEY:}") String restApiKey,
+            StringRedisTemplate redisTemplate,
+            @Value("${ROUTE_CACHE_TTL_SECONDS:600}") long cacheTtlSeconds) {
+        this(buildRestClient(restClientBuilder), objectMapper, fallback, restApiKey,
+                redisTemplate, Duration.ofSeconds(cacheTtlSeconds));
     }
 
     KakaoRouteProvider(
@@ -56,16 +68,36 @@ public class KakaoRouteProvider implements RouteProvider {
             ObjectMapper objectMapper,
             EstimatedRouteProvider fallback,
             String restApiKey) {
+        this(restClient, objectMapper, fallback, restApiKey, null, Duration.ofMinutes(10));
+    }
+
+    KakaoRouteProvider(
+            RestClient restClient,
+            ObjectMapper objectMapper,
+            EstimatedRouteProvider fallback,
+            String restApiKey,
+            StringRedisTemplate redisTemplate,
+            Duration cacheTtl) {
         this.restClient = restClient;
         this.objectMapper = objectMapper;
         this.fallback = fallback;
         this.restApiKey = restApiKey;
+        this.redisTemplate = redisTemplate;
+        this.cacheTtl = cacheTtl;
     }
 
     @Override
     public RouteResult findRoute(
             Coordinate origin, List<Coordinate> waypoints, Coordinate destination) {
         List<Coordinate> normalizedWaypoints = waypoints == null ? List.of() : waypoints;
+        String cacheKey = cacheKey(origin, normalizedWaypoints, destination);
+        RouteResult cached = readCache(cacheKey);
+        if (cached != null) {
+            cacheHits++;
+            log.debug("경로 캐시 적중: key={}, hits={}, misses={}", cacheKey, cacheHits, cacheMisses);
+            return cached;
+        }
+        cacheMisses++;
         if (restApiKey == null || restApiKey.isBlank()) {
             log.warn("카카오 REST API 키가 없어 추정 경로를 사용합니다.");
             return fallback.findRoute(origin, normalizedWaypoints, destination);
@@ -82,7 +114,9 @@ public class KakaoRouteProvider implements RouteProvider {
                         .body(request)
                         .retrieve()
                         .body(String.class);
-                return mapResponse(response, normalizedWaypoints.size());
+                RouteResult result = mapResponse(response, normalizedWaypoints.size());
+                writeCache(cacheKey, result);
+                return result;
             } catch (RestClientException | JsonProcessingException | IllegalStateException exception) {
                 if (attempt == 0) {
                     log.warn("카카오 길찾기 호출 실패, 1회 재시도합니다.", exception);
@@ -92,6 +126,58 @@ public class KakaoRouteProvider implements RouteProvider {
             }
         }
         return fallback.findRoute(origin, normalizedWaypoints, destination);
+    }
+
+    private RouteResult readCache(String cacheKey) {
+        if (redisTemplate == null) {
+            return null;
+        }
+        try {
+            String cached = redisTemplate.opsForValue().get(cacheKey);
+            return cached == null ? null : objectMapper.readValue(cached, RouteResult.class);
+        } catch (JsonProcessingException exception) {
+            log.warn("경로 캐시 역직렬화 실패: key={}", cacheKey, exception);
+            return null;
+        } catch (RedisConnectionFailureException exception) {
+            log.warn("Redis 연결 실패로 경로 API를 사용합니다.", exception);
+            return null;
+        }
+    }
+
+    private void writeCache(String cacheKey, RouteResult result) {
+        if (redisTemplate == null) {
+            return;
+        }
+        try {
+            redisTemplate.opsForValue().set(cacheKey, objectMapper.writeValueAsString(result), cacheTtl);
+        } catch (JsonProcessingException exception) {
+            log.warn("경로 캐시 직렬화 실패: key={}", cacheKey, exception);
+        } catch (RedisConnectionFailureException exception) {
+            log.warn("Redis 연결 실패로 경로 결과를 캐시하지 못했습니다.", exception);
+        }
+    }
+
+    private String cacheKey(Coordinate origin, List<Coordinate> waypoints, Coordinate destination) {
+        StringBuilder normalized = new StringBuilder(formatCoordinate(origin));
+        for (Coordinate waypoint : waypoints) {
+            normalized.append('|').append(formatCoordinate(waypoint));
+        }
+        normalized.append('|').append(formatCoordinate(destination));
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(normalized.toString().getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder("route:");
+            for (byte value : digest) {
+                hex.append(String.format("%02x", value));
+            }
+            return hex.toString();
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256을 지원하지 않는 환경입니다.", exception);
+        }
+    }
+
+    private String formatCoordinate(Coordinate coordinate) {
+        return "%.4f,%.4f".formatted(coordinate.lat(), coordinate.lng());
     }
 
     private RouteResult mapResponse(String response, int waypointCount) throws JsonProcessingException {

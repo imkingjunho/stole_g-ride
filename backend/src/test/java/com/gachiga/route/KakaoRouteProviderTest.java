@@ -85,4 +85,25 @@ class KakaoRouteProviderTest {
         assertThat(result.estimated()).isTrue();
         assertThat(result.sections()).hasSize(1);
     }
+
+    @Test
+    void usesEstimatedRouteAfterApiFailureRetry() {
+        RestClient.Builder builder = RestClient.builder()
+                .baseUrl("https://apis-navi.kakaomobility.com");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        KakaoRouteProvider provider = new KakaoRouteProvider(
+                builder.build(), new ObjectMapper(), new EstimatedRouteProvider(), "test-key");
+        server.expect(requestTo("https://apis-navi.kakaomobility.com/v1/waypoints/directions"))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators
+                        .withServerError());
+        server.expect(requestTo("https://apis-navi.kakaomobility.com/v1/waypoints/directions"))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators
+                        .withServerError());
+
+        RouteResult result = provider.findRoute(
+                new Coordinate(35.17, 126.9), List.of(), new Coordinate(35.14, 126.8));
+
+        assertThat(result.estimated()).isTrue();
+        server.verify();
+    }
 }
