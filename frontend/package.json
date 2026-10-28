@@ -12,7 +12,8 @@
     "preview": "vite preview",
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
-    "gen:api": "openapi-typescript ../docs/api-spec.yaml -o src/generated/api.d.ts"
+    "gen:api": "openapi-typescript ../docs/api-spec.yaml -o src/generated/api.d.ts",
+    "verify:deployment": "node scripts/verify-deployment.mjs"
   },
   "dependencies": {
     "@stomp/stompjs": "^7.1.1",

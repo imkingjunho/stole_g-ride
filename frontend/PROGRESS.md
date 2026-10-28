@@ -1,6 +1,26 @@
 # 프론트엔드 진행 기록 — 2026-10-28
 
-기준 main: `245ddec`. 작업자: 오승원.
+기준 main: `bbbc1d4` (SPA 후속 수정). 작업자: 오승원.
+
+## 운영 경로 404 수정 — 다음 단계
+
+- `frontend/vercel.json`에 Vite SPA용 catch-all rewrite (`/(.*)` → `/index.html`)를 추가했다. 프로젝트 Root Directory가 `frontend`이므로 이 위치에서 읽는다. Framework/빌드 명령/운영 환경변수는 기존 Vercel 설정을 사용한다.
+- `/request`, `/waiting` 직접 접속·새로고침 때 React Router가 먼저 앱을 받게 한다. 비로그인 방문자가 `/login`으로 이동하는 것은 정상 인증 가드 동작이다. rewrite는 로그인이나 서버 API 인가를 대신하지 않는다.
+- 공식 근거: https://vercel.com/docs/frameworks/frontend/vite#using-vite-to-make-spas
+- `npm run lint`, `npm run build` 통과. Vite 로컬 프리뷰에서 `/login`, `/request`, `/waiting`의 HTTP 200·앱 HTML·JS 자산, 비로그인 `/request`·`/waiting`의 로그인 렌더·새로고침을 확인했다. 로컬 프리뷰는 Vercel 플랫폼의 rewrite 적용 증거가 아니다.
+- 실제 운영 재배포/운영 URL 검증은 미완료다. 연결된 Vercel 계정과 확정된 운영 도메인이 없어 이번 환경에서 진행하지 못했다. GitHub 상태에는 Vercel 프로젝트 두 개(stole-g-ride, stole-g-ride-bpwm)가 보이므로 실제 운영 프로젝트와 새 배포 커밋을 확인한다.
+
+### 배포 후 확인 절차
+
+1. 이번 변경만 main에 push하고, 운영 Vercel 프로젝트에서 이 커밋의 배포가 Ready인지 확인한다. 자동 배포가 되지 않으면 Vercel에서 해당 커밋으로 Redeploy한다.
+2. `cd frontend` 후 `npm run verify:deployment -- https://실제운영도메인` 실행. `/login`, `/request`, `/waiting`의 HTTP 200·앱 HTML 및 JS 자산 응답이 모두 PASS여야 한다. 404/배포 보호용 로그인/HTML 대신 오류 문서/JS 자산에 fallback HTML이 반환되면 실패한다.
+3. 브라우저 시크릿 창으로 운영 `/request`, `/waiting`을 각각 직접 열고 새로고침한다. 비로그인은 로그인 화면이 정상이다. 실제 로그인 후에는 각 화면이 정상 렌더링되는지 확인한다.
+4. Playwright가 설치된 검사 환경에서는 위 명령 뒤에 `--browser`를 붙이면 비로그인 렌더·새로고침도 자동 확인한다.
+5. 운영 URL에서 검사가 끝난 뒤 배포 완료로 기록한다. 이번 코드 수정만으로 Phase 1·2 실서버 통합 완료를 체크하지 않는다.
+
+### 백엔드 차단 사항 갱신
+
+임승현의 `bbbc1d4`에서 RefreshServiceTest의 고정 만료 날짜를 현재 시각 기준으로 바꾼 변경이 main에 반영됐다. GitHub CI run 40656222804는 success다: https://github.com/imkingjunho/stole_g-ride/actions/runs/40656222804 . 기존 “백엔드 CI 실패”는 이 커밋 기준으로 해소됐다. 실제 DB/메일/JWT/STOMP/그룹 통합 완료 여부는 별도다.
 
 ## 후속 요청 반영 (v2)
 
@@ -12,7 +32,7 @@
 
 1. **지도 계약**: `[계약 변경 요청] 오승원 / features/map/RouteMap.tsx 및 docs/PRD.md §14.6 / estimated?: boolean (기본 false) 추가, estimated=true일 때 strokeStyle='dash' / 추정 경로의 시각 구분(T2-4)`. 현재 계약은 sections/stops/className뿐이다. 네 담당 파일에서 임의 props나 우회 스타일을 추가하지 않았다. 승인·구현 뒤 GroupRouteMap에서 group.estimated를 전달하고 실선/점선 회귀 검사를 추가한다.
 2. **호출량 제어**: 메모의 `KakaoRouteProvider.java` 미커밋 변경은 작업자의 로컬에만 있다. 이번 패치에는 그 변경이 포함되지 않는다. 송준호가 자기 작업 트리에서 보존·검사·커밋해야 한다.
-3. **RefreshServiceTest**: 현재 main은 고정 `NOW=2026-09-28T21:00`에 10일을 더한 토큰을 유효 토큰으로 사용한다. 서비스는 `LocalDateTime.now()`로 검사하므로 10/8 이후 유효 토큰 테스트가 만료될 수 있다. 임승현은 테스트 시각을 서비스와 일치시키거나 제어 가능한 Clock을 도입해 상대적인 만료·미만료를 검증해야 한다. 이번 환경은 Gradle 8.5 다운로드가 네트워크 제한으로 막혀 Java 테스트 자체를 실행하지 못했다. 재현 성공 또는 전체 빌드 통과로 기록하지 않는다.
+3. **RefreshServiceTest**: v2 작성 당시 고정 토큰 만료 시각 문제를 전달했다. 이후 main `bbbc1d4`에서 담당자가 현재 시각 기준으로 수정했고 GitHub CI도 통과했다. 위 백엔드 차단 사항 갱신 참조. 이 작업 환경의 직접 Java 테스트 실행은 Gradle 다운로드 제한으로 진행하지 못했다.
 4. **캐시 절감률**: 실제 기간·호출 수·캐시 적중 수 로그가 있어야 측정한다. 없는 수치를 만들거나 완료 체크하지 않는다.
 5. **대기 WS**: main에 대기 상태 push 구현은 있지만 JWT STOMP 인증은 여전히 Dev 구현이다. 송준호·임승현이 실제 사용자 인증·구독·재연결을 확인한 뒤 폴링 대체를 검증해야 한다.
 
