@@ -29,7 +29,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class RefreshServiceTest {
 
-    private static final LocalDateTime NOW = LocalDateTime.of(2026, 9, 28, 21, 0);
+    private static final LocalDateTime NOW = LocalDateTime.now();
 
     @Mock private RefreshTokenRepository refreshTokenRepository;
     @Mock private UserAccountPort userAccountPort;
