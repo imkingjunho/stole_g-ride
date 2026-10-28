@@ -78,7 +78,14 @@ async function authorizedFetch(input: Request) {
   if (initial.accessToken) request.headers.set('Authorization', `Bearer ${initial.accessToken}`);
   let response = await fetch(request);
   const path = new URL(request.url).pathname;
-  if (response.status !== 401 || path.startsWith('/api/auth/')) return response;
+  const publicAuth = [
+    '/api/auth/signup',
+    '/api/auth/verify',
+    '/api/auth/login',
+    '/api/auth/refresh',
+  ];
+  // logout은 인증이 필요하다. 만료된 Access로도 갱신 후 서버 Refresh 폐기까지 수행한다.
+  if (response.status !== 401 || publicAuth.includes(path)) return response;
   try {
     const current = useAuthStore.getState();
     if (

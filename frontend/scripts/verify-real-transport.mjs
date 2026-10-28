@@ -17,6 +17,7 @@ const user = {
   status: 'ACTIVE',
 };
 let refreshes = 0;
+let logoutAttempts = 0;
 const backend = createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', 'http://127.0.0.1:5187');
   res.setHeader('Access-Control-Allow-Headers', 'content-type,authorization');
@@ -44,6 +45,10 @@ const backend = createServer(async (req, res) => {
       accessTokenExpiresIn: 1800,
       user,
     });
+  }
+  if (req.url === '/api/auth/logout') {
+    logoutAttempts++;
+    if (req.headers.authorization === 'Bearer renewed') return success(null);
   }
   if (req.headers.authorization !== 'Bearer renewed') {
     res.writeHead(401);
@@ -109,6 +114,16 @@ try {
     await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length),
     0,
   );
+  await page.evaluate(async () => {
+    const { useAuthStore } = await import('/src/shared/stores/authStore.ts');
+    useAuthStore.setState({ accessToken: 'expired-again' });
+    const { api, unwrap } = await import('/src/shared/api/client.ts');
+    const r = await api.POST('/api/auth/logout');
+    unwrap(r.data, r.error);
+  });
+  assert.equal(refreshes, 2);
+  assert.equal(logoutAttempts, 2);
+  console.log('PASS 만료된 Access로 로그아웃: 갱신 후 서버 폐기 요청 재시도');
   console.log(
     'PASS real 설정에서 MSW 없이 로컬 HTTP 테스트 서버 요청·401 동시 갱신·새 Bearer 재시도',
   );

@@ -9,6 +9,7 @@ import { useCountdown } from '@/shared/ui/useCountdown';
 import { isMatchNotification, stompClient } from '@/shared/ws/stompClient';
 import { useGroup } from './useGroup';
 import { ReportButton } from './ReportButton';
+import { GroupRouteMap } from './GroupRouteMap';
 export function GroupPage() {
   const query = useGroup();
   const group = query.data;
@@ -155,12 +156,7 @@ export function GroupPage() {
       )}
       <Card>
         <h2 className="font-bold">함께 가는 경로</h2>
-        <div
-          className="my-4 flex h-48 items-center justify-center rounded-control bg-canvas text-sm text-slate-600"
-          aria-label="지도 준비 영역"
-        >
-          경로 지도 준비 중
-        </div>
+        <GroupRouteMap group={group} />
         <p className="text-sm text-slate-600">
           약 {Math.ceil(group.totalDuration / 60)}분 · {(group.totalDistance / 1000).toFixed(1)}km
         </p>

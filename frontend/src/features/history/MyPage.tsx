@@ -33,7 +33,11 @@ export function MyPage() {
       const r = await api.PATCH('/api/users/me', { body });
       return unwrap(r.data, r.error);
     },
-    onSuccess: () => {
+    onSuccess: (user) => {
+      if (user) {
+        qc.setQueryData(['profile'], user);
+        if (useAuthStore.getState().user?.id === user.id) useAuthStore.setState({ user });
+      }
       void qc.invalidateQueries({ queryKey: ['profile'] });
       setEdit(false);
     },

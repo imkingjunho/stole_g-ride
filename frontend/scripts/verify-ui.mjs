@@ -15,7 +15,7 @@ await mkdir(output, { recursive: true });
 const server = spawn(
   process.execPath,
   ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', '5186', '--strictPort'],
-  { cwd: root, env: { ...process.env, VITE_API_MODE: 'mock' } },
+  { cwd: root, env: { ...process.env, VITE_API_MODE: 'mock', VITE_KAKAO_JS_KEY: 'qa-sdk-stub' } },
 );
 await new Promise((resolve, reject) => {
   server.stdout.on('data', (b) => {
@@ -43,7 +43,23 @@ const context = await browser.newContext({
   locale: 'ko-KR',
   reducedMotion: 'reduce',
 });
+// 실제 카카오 서버를 호출하지 않고 SDK 계약(Polyline·정차 마커·bounds)을 검사한다.
+await context.route('https://dapi.kakao.com/**', (route) =>
+  route.fulfill({
+    contentType: 'application/javascript',
+    body: `
+    (() => { window.__mapOverlays = [];
+    class LatLng { constructor(lat,lng){this.lat=lat;this.lng=lng} getLat(){return this.lat} getLng(){return this.lng} }
+    class Map { setCenter(){} setBounds(b){this.bounds=b;window.__lastBounds=b.points.map(p=>({lat:p.getLat(),lng:p.getLng()}))} setZoomable(){} }
+    class Bounds { constructor(){this.points=[]} extend(p){this.points.push(p)} }
+    class Overlay { constructor(options){Object.assign(this,options);window.__mapOverlays.push(this)} setMap(map){this.map=map} }
+    window.kakao={maps:{LatLng,Map,LatLngBounds:Bounds,Polyline:Overlay,CustomOverlay:Overlay,Marker:Overlay,event:{addListener(){},removeListener(){}},load(cb){cb()}}}; })();
+  `,
+  }),
+);
 const page = await context.newPage();
+page.setDefaultTimeout(15000);
+page.setDefaultNavigationTimeout(15000);
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 const checks = [];
@@ -94,7 +110,7 @@ try {
   });
   await check('로그인·성사·정산 합계·모바일', async () => {
     await page.getByRole('button', { name: '목 데이터로 둘러보기' }).click();
-    await page.waitForURL('**/request');
+    await page.waitForURL(/\/(request|waiting)$/);
     await demo();
     await page.getByText('함께 9,700원', { exact: true }).waitFor();
     await page.getByRole('link', { name: '내 요금은 어떻게 계산됐나요? →' }).click();
@@ -125,6 +141,59 @@ try {
       }
     }
     await page.setViewportSize({ width: 360, height: 800 });
+  });
+  await check('성사 지도: 서버 경로·마커 순서·좌표 누락·추정치', async () => {
+    await demo();
+    await page.getByRole('application', { name: '합승 경로 지도' }).waitFor();
+    await page.waitForFunction(() => window.__mapOverlays.some((o) => o.map && o.content));
+    const overlays = await page.evaluate(() =>
+      window.__mapOverlays
+        .filter((o) => o.map)
+        .map((o) => ({
+          marker: o.content?.textContent,
+          lat: o.position?.getLat(),
+          lng: o.position?.getLng(),
+          points: o.path?.length,
+        })),
+    );
+    const markers = overlays.filter((o) => o.marker);
+    assert.equal(markers.length, 4);
+    assert.match(markers[0].marker, /탑승.*전남대 후문/);
+    assert.match(markers[3].marker, /하차.*광주송정역/);
+    assert.equal(markers[3].lat, 35.1378);
+    assert.equal(overlays.filter((o) => o.points > 1).length, 3);
+    await page.evaluate(async () => {
+      const { mockState } = await import('/src/shared/mocks/state.ts');
+      delete mockState.group.members[0].destLat;
+      mockState.group.estimated = true;
+    });
+    await navigate('/me');
+    await navigate('/groups/17');
+    await page
+      .getByText(
+        '일부 하차 위치가 아직 없어 지도에 표시되지 않아요. 아래 하차 순서를 확인해 주세요.',
+      )
+      .waitFor();
+    await page.getByText('추정 경로예요. 실제 도로와 이동 시간은 다를 수 있어요.').waitFor();
+    await page.screenshot({ path: `${output}/group-map.png`, fullPage: true });
+    await demo();
+  });
+  await check('DemoPage 샘플 JSON 지도: 경로선·마커·전체 bounds', async () => {
+    await navigate('/dev/demo');
+    await page.getByRole('heading', { name: '샘플 경로 지도 확인' }).waitFor();
+    await page.getByRole('application', { name: '합승 경로 지도' }).waitFor();
+    await page.waitForFunction(() => window.__lastBounds?.length === 10);
+    const bounds = await page.evaluate(() => window.__lastBounds);
+    assert.ok(bounds.some((point) => point.lat === 35.1763 && point.lng === 126.9123));
+    assert.ok(bounds.some((point) => point.lat === 35.1378 && point.lng === 126.7902));
+    await page.getByLabel('추정 경로 안내 확인').check();
+    await page.getByText('추정 경로예요. 실제 도로와 이동 시간은 다를 수 있어요.').waitFor();
+    await page.getByText('샘플 경로 JSON 보기', { exact: true }).click();
+    const sample = JSON.parse(await page.locator('details pre').textContent());
+    assert.equal(sample.route.sections.length, 3);
+    assert.equal(sample.members.length, 3);
+    assert.equal(sample.estimated, true);
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   });
   await check('모달 포커스 제한·Escape·포커스 복귀', async () => {
     await navigate('/dev/ui');
@@ -269,7 +338,7 @@ try {
   });
   await check('갱신 실패 시 로그아웃·로그인 이동', async () => {
     await page.getByRole('button', { name: '목 데이터로 둘러보기' }).click();
-    await page.waitForURL('**/request');
+    await page.waitForURL(/\/(request|waiting)$/);
     await page.evaluate(async () => {
       const { api } = await import('/src/shared/api/client.ts');
       const { useAuthStore } = await import('/src/shared/stores/authStore.ts');
@@ -280,7 +349,7 @@ try {
   });
   assert.deepEqual(errors, []);
   await page.getByRole('button', { name: '목 데이터로 둘러보기' }).click();
-  await page.waitForURL('**/request');
+  await page.waitForURL(/\/(request|waiting)$/);
   await demo();
   await page.screenshot({ path: `${output}/group-360.png`, fullPage: true });
   await writeFile(
