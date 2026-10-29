@@ -48,8 +48,11 @@ frontend/src/generated/                 자동 생성 — 손으로 수정 금�
 
 루트: build.gradle, docker-compose.yml, .env.example, .gitignore, .github/, .claude/   이승민
 docs/PRD.md, docs/api-spec.yaml, README.md, CLAUDE.md                          이승민
+docs/traffic-analysis.md                                                       이승민 (공용 문서)
 docs/roles/{이름}.md                                                            본인
 ```
+
+`docs/traffic-analysis.md`는 송준호 T3-1의 데이터 수집·분석 근거를 이승민이 공용 문서에 반영하고 서준이 튜닝에 사용한다. 문서 정리를 실제 분석 완료로 표시하지 않는다.
 
 **소유 폴더 밖 파일을 고쳐야 한다고 판단되면 고치지 않는다.** 대신 아래 형식의 요청 문구를 출력하고, 자기 폴더 안에서 가능한 부분까지만 진행한다.
 

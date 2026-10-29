@@ -1,20 +1,12 @@
 -- 가치가(WE-Meet) 스키마 — docs/schema.sql (T3-2)
---
--- 어떻게 만들었나: local 프로파일(ddl-auto: update)로 기동한 로컬 MySQL 8.0 에서 DDL 만 뽑았다. 정확히 이 파이프라인이다:
---   docker compose exec -T mysql sh -c 'mysqldump -ugachiga -pgachiga --no-data --skip-add-drop-table --skip-comments --compact gachiga 2>/dev/null' \
---     | sed -E '/^\/\*!(4010[1-3]|50503)/d; /^$/d; s/ AUTO_INCREMENT=[0-9]+//' > /tmp/schema-body.sql
---   그리고 이 머리말을 앞에 붙인다. 지운 것은 클라이언트 문자셋 지시문(/*!40101, /*!50503)과 AUTO_INCREMENT 현재값이다. 데이터는 없다.
---
--- 어디에 쓰나: 베타/운영 DB 에 이 파일을 먼저 적용한 뒤 prod 프로파일(ddl-auto: validate)로 기동한다 (PRD §7.3).
---   validate 는 컬럼·타입만 대조하고 UNIQUE·인덱스는 검사하지 않으므로, 제약은 이 파일이 유일한 근거다.
---   docker-compose.prod.yml 이 첫 기동 때 이 파일을 initdb 로 실행한다. 그 뒤의 변경은 docs/deploy.md §2 로.
---
--- 언제 다시 뽑나: 누가 엔티티(@Entity)를 바꾸면 그 사람이 local 에서 기동해 update 로 반영한 뒤,
---   이승민이 위 파이프라인으로 다시 뽑아 이 파일을 갱신한다. 컬럼 삭제·이름 변경·타입 변경은 update 가
---   반영하지 못하므로 그때는 docker compose down -v 로 초기화하고 다시 뽑는다 (CLAUDE.md §1).
---
--- 추출 시점의 엔티티: ride_requests(ride, group_id 포함) · users·reports(user) · chat_messages(realtime).
---   refresh_tokens(auth T1-4)·매칭 테이블(matching)·hubs(route)는 아직 엔티티가 없어 여기에도 없다.
+-- 추출일: 2026-10-28, MySQL 8.0.46
+-- 출처: 지정한 MySQL DB의 실제 mysqldump --no-data 결과.
+-- 재추출 전 최신 앱을 별도 빈 검증 DB에 local(ddl-auto: update)로 기동한다.
+-- 재현: bash deploy/scripts/export-schema.sh <MySQL 컨테이너> docs/schema.sql
+-- 클라이언트 문자셋 지시문과 AUTO_INCREMENT 현재값만 제거했다. 행 데이터는 포함하지 않는다.
+-- 새 빈 DB에 적용한 후 prod(ddl-auto: validate)로 기동하고 check-schema-indexes.sh로 인덱스를 확인한다.
+-- 기존 DB에는 이 전체 파일을 재실행하지 않는다. 변경분 적용은 docs/deploy.md §2를 따른다.
+-- 재추출에 기존 DB의 볼륨 삭제는 필요하지 않다. 별도 빈 DB를 만들고 local로 생성한다.
 
 SET NAMES utf8mb4;
 SET time_zone = '+09:00';
@@ -28,6 +20,25 @@ CREATE TABLE `chat_messages` (
   `type` enum('TEXT','QUICK','SYSTEM') COLLATE utf8mb4_unicode_ci NOT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_chat_messages_group_created` (`group_id`,`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE `hubs` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `lat` double NOT NULL,
+  `lng` double NOT NULL,
+  `name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `type` enum('CAMPUS','STATION','TERMINAL','SCHOOL') COLLATE utf8mb4_unicode_ci NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE `refresh_tokens` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `created_at` datetime(6) NOT NULL,
+  `expires_at` datetime(6) NOT NULL,
+  `revoked` bit(1) NOT NULL,
+  `token_hash` varchar(64) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `user_id` bigint NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `UK_o2mlirhldriil2y7krapq4frt` (`token_hash`),
+  KEY `idx_refresh_tokens_user_id` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE `reports` (
   `id` bigint NOT NULL AUTO_INCREMENT,
@@ -49,6 +60,7 @@ CREATE TABLE `ride_requests` (
   `dest_name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
   `estimated` bit(1) NOT NULL,
   `expires_at` datetime(6) NOT NULL,
+  `group_id` bigint DEFAULT NULL,
   `hub_id` bigint NOT NULL,
   `max_detour_ratio` decimal(3,2) NOT NULL,
   `max_wait_min` int NOT NULL,
@@ -58,7 +70,6 @@ CREATE TABLE `ride_requests` (
   `status` enum('WAITING','MATCHED','CONFIRMED','CANCELLED','EXPIRED','COMPLETED') COLLATE utf8mb4_unicode_ci NOT NULL,
   `user_id` bigint NOT NULL,
   `version` int NOT NULL,
-  `group_id` bigint DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_ride_requests_active_user` (`active_user_id`),
   KEY `idx_ride_requests_status_hub_depart` (`status`,`hub_id`,`depart_at`),

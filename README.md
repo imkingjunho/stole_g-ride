@@ -90,7 +90,13 @@ docker compose up -d --wait   # MySQL + Redis. Docker Desktop이 켜져 있어�
 ```
 
 **백엔드**
+
+루트 `.env`는 Docker Compose가 읽으며 `bootRun`은 자동으로 읽지 않습니다. 로그인까지 확인하려면 실행 셸이나
+IDE 환경변수에 `JWT_SECRET`(32바이트 이상)을 설정하세요. 아래는 로컬 테스트용 생성 예시입니다.
+같은 키를 유지해야 기존 Access 토큰이 계속 유효하며 운영 키는 별도로 관리합니다.
+
 ```bash
+export JWT_SECRET="$(openssl rand -hex 32)"   # macOS/Linux 로컬 예시
 cd backend
 ./gradlew bootRun             # Windows: gradlew.bat bootRun
 ```
@@ -236,7 +242,7 @@ docker compose down -v && docker compose up -d --wait     # DB 초기화
 
 | 이름 | 파트 | 내 폴더 (여기만 수정) |
 |---|---|---|
-| **이승민** | ① 플랫폼·요청 | `backend/…/common/ config/ contract/ ride/`, `application*.yml`, `domain/ride.yml`, 루트 파일(`build.gradle` `docker-compose.yml` `.env.example` `.github/` `.claude/`), `docs/PRD.md` `docs/api-spec.yaml` `README.md` `CLAUDE.md` |
+| **이승민** | ① 플랫폼·요청 | `backend/…/common/ config/ contract/ ride/`, `application*.yml`, `domain/ride.yml`, 루트 파일(`build.gradle` `docker-compose.yml` `.env.example` `.github/` `.claude/`), `docs/PRD.md` `docs/api-spec.yaml` `docs/traffic-analysis.md` `README.md` `CLAUDE.md` |
 | **서준** | ② 매칭·정산·통계 | `backend/…/matching/ fare/ stats/`, `domain/matching.yml` |
 | **임승현** | ③ 계정·실시간 | `backend/…/auth/ user/ realtime/`, `domain/auth.yml` |
 | **송준호** | ④ 경로·지도·요청 화면 | `backend/…/route/`, `domain/route.yml`, `frontend/src/features/request/`, `frontend/src/features/map/` |
@@ -281,7 +287,9 @@ docker compose down -v && docker compose up -d --wait     # DB 초기화
 | `CLAUDE.md` | AI 규칙 | 볼 일 없음 (AI가 알아서 읽음) |
 | `docs/schema.sql` | 실제 DB 스키마(DDL). 베타 서버는 이걸로 테이블을 만들고 `validate` 로 뜬다 | 엔티티를 바꿨을 때 (이승민이 다시 뽑는다) |
 | `docs/deploy.md` | 베타 배포 절차 — 서버 준비, `.env`, 프론트 빌드, `docker compose -f docker-compose.prod.yml` | 배포·업데이트·되돌리기 할 때 |
+| [docs/integration-check.md](docs/integration-check.md) | 최신 main 통합 점검 결과·검증 범위·담당자 후속 요청 | 배포 전, 팀원 작업을 연결할 때 |
 | `docs/performance.md` | 부하 테스트 결과와 개선 전후 수치 | 발표 자료 만들 때, 느려졌다 싶을 때 |
+| [docs/traffic-analysis.md](docs/traffic-analysis.md) | 광주 6개 거점의 교통·승하차 분석 기준, 공식 데이터 출처, 성사율·대기시간 정의. 원문 수집·실측 분석 전 | 송준호가 데이터를 수집·분석하고 서준이 매칭을 튜닝할 때. 공용 문서 반영은 이승민 |
 | `load/` | k6 부하 테스트 스크립트와 실행 방법 | 성능을 다시 잴 때 |
 
 ---

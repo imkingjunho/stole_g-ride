@@ -639,7 +639,7 @@ frontend/src/
 
 | 파트 | 담당 | 한 줄 정의 | 소유 폴더 | 담당 FR | 비중 |
 |---|---|---|---|---|---|
-| ① 플랫폼·요청 | **이승민** | 뼈대·계약·공통·매칭 요청/대기열·통합 | `backend/…/common/ config/ contract/ ride/`, `resources/application*.yml`, `resources/domain/ride.yml`, 저장소 루트 파일(`build.gradle`, `docker-compose.yml`, `.env.example`, `.gitignore`, `.github/`), `docs/PRD.md`, `docs/api-spec.yaml`, `README.md`, `CLAUDE.md` | FR-07(API), 08, 09(데이터), 10 + Phase 0 + 통합·성능 | ~20% |
+| ① 플랫폼·요청 | **이승민** | 뼈대·계약·공통·매칭 요청/대기열·통합 | `backend/…/common/ config/ contract/ ride/`, `resources/application*.yml`, `resources/domain/ride.yml`, 저장소 루트 파일(`build.gradle`, `docker-compose.yml`, `.env.example`, `.gitignore`, `.github/`), `docs/PRD.md`, `docs/api-spec.yaml`, `docs/traffic-analysis.md`, `README.md`, `CLAUDE.md` | FR-07(API), 08, 09(데이터), 10 + Phase 0 + 통합·성능 | ~20% |
 | ② 매칭·정산·통계 | **서준** | 매칭 엔진, 구간 정산, 그룹 API, 이력·통계, PM | `backend/…/matching/ fare/ stats/`, `resources/domain/matching.yml` | FR-11, 12, 13, 14, 16, 17, 18, 24, 25, 26 | ~20% |
 | ③ 계정·실시간 | **임승현** | 웹메일 인증·JWT·프로필·신고, WebSocket 전부(대기 push·매칭 알림·채팅) | `backend/…/auth/ user/ realtime/`, `resources/domain/auth.yml` | FR-01, 02, 03, 04, 09(push), 12(push), 20, 21, 22, 23 | ~20% |
 | ④ 경로·지도·요청 화면 | **송준호** | 카카오 연동·거점·장소 검색, 지도 컴포넌트, 요청·대기 화면 | `backend/…/route/`, `resources/domain/route.yml`, `frontend/src/features/request/`, `frontend/src/features/map/` | FR-05, 06, 07(UI), 15, 19 + FR-08·09·10 화면 | ~20% |
@@ -784,6 +784,7 @@ chore(contract): RouteResult에 estimated 필드 추가   ← 이승민만
 | `backend/build.gradle`, `backend/src/main/resources/application*.yml` | 의존성·공통 설정 |
 | `docker-compose.yml`, `.env.example`, `.gitignore`, `.github/**` | 인프라·CI |
 | `docs/PRD.md`, `README.md`, `CLAUDE.md` | 팀 문서 |
+| `docs/traffic-analysis.md` | 6개 거점의 교통 분석 기준·근거. 송준호가 데이터 수집·분석, 이승민이 문서 반영, 서준이 매칭·통계 구현 및 튜닝 |
 
 **변경 요청 방법** — 단톡방에 한 줄:
 
@@ -952,6 +953,13 @@ public interface MatchHistoryPort {
 }
 
 // ── contract/auth ──────────────────────────────────────────────
+public interface AccessTokenVerifier {
+    /** Bearer 접두사를 뺀 Access JWT 원문. 서명·필수 만료 시각·형식·양수 Long subject 검증.
+     *  null/공백·유효성 오류는 예외 대신 empty, 성공하면 userId. null 반환 금지.
+     *  토큰 원문·서명 키를 로그/응답에 남기지 않는다. 계정 상태·그룹 인가는 별도 계약으로 확인. */
+    Optional<Long> verify(String accessToken);
+}
+
 /** 컨트롤러 파라미터에 붙이면 현재 사용자 id(Long)가 주입된다. 리졸버 구현은 auth/ 소유 */
 @Target(ElementType.PARAMETER) @Retention(RetentionPolicy.RUNTIME)
 public @interface CurrentUser {}
@@ -968,7 +976,10 @@ public @interface CurrentUser {}
 | `RideRequestPort` | 이승민 `ride/` | 서준(대기열 읽기·상태 변경) |
 | `QueueStatusPort` | 이승민 `ride/` | 임승현 `realtime/`(대기 상태 push) |
 | `MatchHistoryPort` | 서준 `matching/` | 임승현 `realtime/`(채팅 인가), `user/`(신고 검증) |
+| `AccessTokenVerifier` | 임승현 `auth/` (구현 대기) | 임승현 `realtime/` (STOMP CONNECT 인증) |
 | `@CurrentUser` 리졸버 | 임승현 `auth/` | 컨트롤러 전부 |
+
+**Access 토큰 검증 계약 반영(2026-10-28):** 이승민이 임승현 T1-8의 요청에 따라 `AccessTokenVerifier` 인터페이스를 추가했다. `auth`의 검증 구현과 `realtime`의 STOMP 연결은 임승현의 후속 작업이다. 계약 추가만으로 STOMP 인증이 완료된 것은 아니다. 구현체는 필수 만료 시각·서명·subject 검증을 모두 적용하고, 토큰 유효성 오류는 `Optional.empty()`로 반환한다. 검증 설정·내부 처리의 장애가 발생해도 연결을 허용하지 않는다. Refresh 토큰 발급/회전과 계정 상태·그룹 멤버십 판정은 이 계약의 범위가 아니다.
 
 ### 14.2 이벤트 (`contract/event/`)
 
@@ -1020,12 +1031,16 @@ public record GroupCompleted(Long groupId, List<Long> userIds) {}
 | 항목 | 값 |
 |---|---|
 | 엔드포인트 | `ws://host/ws` (SockJS 미사용) |
-| 인증 | STOMP `CONNECT` 프레임 헤더 `Authorization: Bearer {accessToken}`. 실패 시 연결 거부 |
+| 인증 | STOMP `CONNECT` 프레임 헤더 `Authorization: Bearer {accessToken}`. `realtime`이 접두사를 제거하고 `AccessTokenVerifier.verify`로 검증. 실패 시 연결 거부 |
 | 구독 `/user/queue/status` | 내 대기 상태. 5초마다 + 변경 즉시. 본문 = `QueueStatus` JSON |
 | 구독 `/user/queue/match` | 매칭 알림. `{ "type": "PROPOSED" \| "CONFIRMED" \| "RECALCULATED" \| "DISSOLVED" \| "COMPLETED", "groupId": 17, "message": "…" }` |
 | 구독 `/topic/chat/{groupId}` | 채팅 수신. 그룹 멤버만 구독 가능(서버가 거부). 본문 = `ChatMessage` |
 | 발신 `/app/chat/{groupId}` | `{ "type": "TEXT" \| "QUICK", "content": "…" }` |
 | `ChatMessage` | `{ "id", "groupId", "senderId", "senderNickname", "type": "TEXT"\|"QUICK"\|"SYSTEM", "content", "createdAt" }` |
+
+CONNECT 헤더 누락·형식 오류, 검증 결과 empty 또는 검증 장애 시 연결을 거부한다. 성공한 사용자 ID만 Principal로 설정하며 기본 사용자로 대체하지 않는다. 토큰 원문·서명 키는 로그나 STOMP 오류 응답에 포함하지 않는다. 이후 채팅 구독·송신의 그룹 멤버십은 `MatchHistoryPort`로 별도 확인한다.
+
+**현재 상태(2026-10-28):** 검증 계약은 제공했지만 실제 `auth` 구현·`realtime` 연동은 아직 반영 전이다. `DevStompUserInterceptor`는 local/test 전용이므로 운영 STOMP 인증 완료로 표시하지 않는다. 임승현이 실제 구현으로 교체한 뒤 유효·누락·만료·위조 토큰 연결 결과를 확인한다.
 
 프론트 개발 모드(`VITE_API_MODE=mock`)에서는 `shared/ws`의 가짜 클라이언트가 위 메시지를 타이머로 흘려 준다(오승원).
 
@@ -1068,6 +1083,7 @@ export interface Stop { order: number; kind: 'PICKUP' | 'DROPOFF'; position: Lat
 export interface RouteMapProps {
   sections: { path: LatLng[] }[];   // 그룹 상세 응답의 route.sections 그대로
   stops: Stop[];                    // 탑승 1개 + 하차 N개
+  estimated?: boolean;              // 기본 false. true면 추정 경로를 점선(dash)으로 표시
   className?: string;
 }
 export function RouteMap(props: RouteMapProps): JSX.Element;
@@ -1078,6 +1094,12 @@ export interface DestinationPickerProps {
 }
 export function DestinationPicker(props: DestinationPickerProps): JSX.Element;
 ```
+
+**추정 경로 지도 계약 반영(2026-10-29):** 오승원이 `frontend/PROGRESS.md`에서 요청한 `estimated?: boolean`을 추가한다. 선택 속성이므로 생략하거나 `false`면 기존과 같은 실선(`strokeStyle='solid'`), `true`면 모든 경로 구간을 점선(`strokeStyle='dash'`)으로 표시한다. 기존 호출부는 변경 없이 사용할 수 있다.
+
+- **제공 — 송준호:** `features/map/RouteMap.tsx`에서 기본값 `false`와 실선/점선 전환을 구현한다. 같은 지도에서 값이 바뀌어도 경로선이 갱신되어야 한다.
+- **사용 — 오승원:** `GroupRouteMap`이 서버 응답의 `group.estimated`를 전달한다. `DemoPage`의 샘플 경로도 같은 컴포넌트를 통해 샘플의 `estimated` 값을 전달한다. 기존 추정 경로 안내 문구는 계속 표시한다.
+- **현재 상태:** 이승민의 문서 계약 반영은 완료했으며, 송준호의 지도 구현과 오승원의 값 전달·실선/점선 회귀 검사는 아직 후속 작업이다. 이번 계약 추가를 프론트 구현 완료로 기록하지 않는다.
 
 ### 14.7 Phase 0 스텁 목록 — 누가 무엇으로 바꾸나
 
@@ -1168,14 +1190,26 @@ export function DestinationPicker(props: DestinationPickerProps): JSX.Element;
 
 | 지표 | 목표 | 측정 방법 | 담당 |
 |---|---|---|---|
-| 매칭 성사율 | ≥ 60% | 성사 그룹 수 / 전체 요청 수 (베타 실측) | 송준호 |
+| 매칭 성사율 | ≥ 60% | 같은 요청 생성 코호트의 고유 성사 요청 수 / 전체 요청 수 (베타 실측, 아래 기준) | 송준호 |
 | 평균 요금 절감률 | ≥ 40% | (단독 요금 − 분담액) / 단독 요금 | 송준호 |
-| 평균 매칭 대기시간 | ≤ 5분 | 요청 생성 ~ 그룹 확정 | 서준 |
+| 평균 매칭 대기시간 | ≤ 5분 | 성사 요청별 생성 ~ 최초 그룹 확정 시간의 산술평균 | 서준 |
 | 정산 정확도 | 오차 0원 | 자동화 테스트 | 서준 |
 | API 응답 P95 | < 500ms | k6 부하 테스트 | 이승민 |
 | 베타 만족도 | ≥ 4.0 / 5.0 | 설문 (30명) | 서준·오승원 |
 | 테스트 커버리지 | `matching`·`fare` 80% | JaCoCo | 서준 |
 | **main 건강도** | CI 빨간 상태 24시간 이상 방치 0회 | GitHub Actions 이력 | 전원 |
+
+**성사율 집계 기준:** 거점·요청 생성 시간대로 묶은 실제 운영 요청의 고유 `requestId`를 분모로, 그중 최초 그룹 확정에 도달한 고유 요청 수를 분자로 센다. 취소·만료 요청은 분모에 포함하고, 검증 실패·데모·부하 테스트 요청은 제외한다. 재매칭·재확정은 같은 요청을 중복 계산하지 않는다. 요청 4건이 2인 그룹 2개로 모두 확정되면 성사율은 100%다. 분모 0은 미산출, 미결 요청이 남은 집계는 기준 시각·미결 건수와 함께 잠정치로 표시한다. 성사 후 해체·취소·완료는 별도 결과 지표로 다룬다.
+
+**대기시간 집계 기준:** 성사 요청의 평균을 목표와 비교하고 중앙값은 보조 지표로 보고한다. 미성사 요청의 대기는 이 평균에 포함되지 않으므로 성사율·표본 수도 함께 제시한다.
+
+### 16.1 교통 분석과 튜닝 근거
+
+- 세부 수집·전처리·지표·실험 기준은 [광주 시간대별 교통 분석 기준](traffic-analysis.md)을 따른다. 2026-10-28 현재 공식 데이터 목록과 분석 기준을 정리한 상태이며 원문 수집·실측 피크 분석은 미완료다.
+- 송준호 T3-1이 외부 데이터 수집·분석, T3-2가 베타 지표 산출, 서준이 `matching`·`stats` 구현 및 튜닝을 맡고, 이승민 T2-4가 공용 문서·계약 반영을 담당한다.
+- 외부 차량 교통량·승하차량은 수요의 보조 지표다. 내부 매칭 성사율을 대신할 수 없으며, PRD §10의 8~9시 동시 200명은 부하 테스트 가정이지 교통 실측 결론이 아니다.
+- 현재 최초 확정 시각·요청↔그룹 이력 계측은 준비 전이다. 통계 구현 전에 요청 코호트·중복 처리·테스트 데이터 제외 및 API의 `matchedCount`·0건·잠정치 표현을 합의한다. 문서 반영만으로 API·이벤트·DB 계약을 변경하지 않는다.
+- 분석 근거로 튜닝하더라도 사용자가 선택한 대기·우회 상한과 §5의 전원 절감 조건은 유지한다. 원문이 없는 상태에서 설정을 변경하거나 분석 작업을 완료 처리하지 않는다.
 
 ---
 
@@ -1206,8 +1240,10 @@ export function DestinationPicker(props: DestinationPickerProps): JSX.Element;
 
 ## 부록 B. 데이터 소스
 
-- 국토교통부 TIMS(택시운행정보관리시스템) — 격자별 영업통계, 노드링크 통행량
-- 광주광역시 빅데이터 통합플랫폼 — 교통·유동인구·대중교통 승하차 데이터
+- [교통 분석 문서](traffic-analysis.md) §3 — 공식 출처·관측 기간·공간/시간 단위·수집 상태를 관리하는 기준 목록. 현재 원문 수집 전.
+- [시내버스 노선별 승하차 인원](https://www.data.go.kr/data/15088456/fileData.do), [광주교통공사 역일시간대별 승하차량](https://www.data.go.kr/data/15060048/fileData.do) — 정류장·역 주변 이동량의 보조 지표. 도시철도 자료는 KTX 이용량이 아님.
+- [시간대별 교통량](https://www.data.go.kr/data/15158378/fileData.do) — 2024년 4개 교차로 조사, 일부 공개. 6개 거점 전체·최신 연속 관측을 대표하지 않음.
+- [TIMS 공식 안내](https://main.kotsa.or.kr/portal/contents.do?menuCode=01080600) — 공무원·운수사 대상, 대국민 서비스 없음. 일반 공개 수집원으로 전제하지 않음.
 
 ## 부록 C. v1.0 → v2.0 변경 사항
 

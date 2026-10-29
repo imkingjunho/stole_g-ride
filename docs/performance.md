@@ -39,14 +39,11 @@
 
 **실행 간 편차**: 같은 설정(로그 끔)을 두 번 재서 생성 P95 45.2ms 와 29.5ms 가 나왔다. 이 문서의 한 자리 ms 차이는 의미가 없고, 2배 이상 차이만 변화로 본다.
 
-**재현**
-```bash
-docker compose up -d --wait
-docker compose exec -T mysql sh -c 'mysql -ugachiga -pgachiga gachiga' < load/seed-users.sql
-cd backend && SERVER_PORT=8081 ./gradlew bootRun --args='--spring.jpa.show-sql=false --logging.level.com.gachiga=INFO --logging.level.org.hibernate.orm.jdbc.bind=WARN'
-k6 run load/k6/ride-requests.js        # 다른 터미널
-```
-자세한 것은 `load/README.md`.
+**당시 스크립트와 현재 재현 방법**
+
+위 수치는 2026-09-23의 개발용 헤더 인증 스크립트로 측정했다. 현재 main은 JWT 인증이므로 당시
+`seed-users.sql`·`X-Dev-User` 명령으로 재현할 수 없다. 현재 시드 생성·로그인·실행 절차는
+[load/README.md](../load/README.md), JWT를 포함한 최신 실측은 아래 §5를 따른다.
 
 ## 2. 개선 전후 — 쿼리 수 (T2-3, 2026-09-23)
 
@@ -79,6 +76,45 @@ k6 run load/k6/ride-requests.js        # 다른 터미널
 ## 4. 다음에 잴 것
 
 - 카카오 길찾기 연동(송준호) 뒤 생성 P95 — 외부 호출이 병목이 될 가능성이 크다. 그때 경로 캐시(`route:{좌표해시}`, PRD §7.1) 적중률과 함께.
-- JWT 인증(임승현 T1-5, 2026-09-28 `d5b2712` 로 적용됨) 뒤 같은 시나리오 — 토큰 검증 비용. `load/README.md` 의 주의대로 스크립트에 로그인을 넣어야 잴 수 있다.
+- JWT 인증을 포함한 요청 API 측정은 §5에 기록했다. 인증 유무의 순수 비용 비교는 동일 DB·풀 크기·프로파일로 조건을 맞춘 별도 실험이 필요하다.
 - WebSocket 200 연결 유지 + 5초 push — 위 2절의 SQL 2개가 실제 운영 경로에서도 나오는지.
 - 실제 베타 서버(`docs/deploy.md`)에서 한 번 — 네트워크 왕복 포함.
+
+## 5. JWT 포함 REST 부하 — 동시 200명 (2026-10-29)
+
+**결과: 모든 threshold 통과.** 생성·조회·취소 P95가 각각 21.8ms·7.6ms·6.6ms이며 목표 500ms 미만이다.
+실제 JWT·MySQL·Redis를 사용했다. 카카오 길찾기는 추정 fallback이고 매칭 tick·WebSocket 200연결은 포함하지 않는다.
+
+| 엔드포인트 | 평균 | 중앙값 | P90 | P95 | P99 | 최대 |
+|---|---:|---:|---:|---:|---:|---:|
+| 생성 `POST /api/requests` | 13.4ms | 12.5ms | 19.2ms | 21.8ms | 29.8ms | 115.8ms |
+| 조회 `GET /api/requests/me` | 4.3ms | 3.9ms | 6.4ms | 7.6ms | 11.3ms | 22.5ms |
+| 취소 `DELETE /api/requests/{id}` | 3.7ms | 3.4ms | 5.4ms | 6.6ms | 10.0ms | 26.6ms |
+
+- 생성 **11,271건**, 취소 **11,271건**, 409 **0건**, 부하 구간 HTTP 오류 **0%**, 응답 검사 성공률 **100%**.
+- HTTP 총 56,756건. 로그인·사전 확인 401건과 부하 요청 56,355건을 포함한다. k6 보고 전체 시간 116.38초,
+  전체 HTTP 처리량 487.7 req/s이며 이 처리량에는 setup이 포함된다. API별 지연은 성공 응답만 집계했고,
+  threshold는 실패 응답을 포함한 endpoint 지연·오류율도 확인한다.
+- 종료 직후 DB의 WAITING/MATCHED/CONFIRMED 요청 **0건**, Redis `queue:*` **0개**. 생성/취소 건수 일치와 함께 확인했다.
+- 기준 코드: main `7f70f86` + 이번 로컬 변경. Apple Silicon MacBook Air에서 k6와 Java 17,
+  Docker MySQL 8.0.46·Redis 7을 함께 실행했다. prod 프로파일(`ddl-auto: validate`, Hikari 최대 20),
+  JDBC `sslMode=REQUIRED`, Java 최대 heap 768MB, KST, SQL 상세 로그 꺼짐, route fallback 경고 로그만 억제.
+- 200개 계정을 setup에서 실제 로그인한다. 각 VU는 고유 계정으로 생성 → 조회 3회(0.3초 간격) → 취소 → 0.5초 대기를 반복한다.
+  30초 증가·60초 유지·10초 감소, 유예 15초. 동적 거점 6개·진행 요청 없는 계정 200개를 사전 확인했다.
+- 재현: [load/README.md](../load/README.md)의 격리 환경·BCrypt 시드·JWT 실행 절차. macOS는 측정 중 덮개를 열어 두고
+  자동 유휴 수면을 피한다(`caffeinate -i k6 run load/k6/ride-requests.js`). 외부 API 키를 비운 서버에서만 이 fallback 조건이 재현된다.
+- [원본 집계 JSON](performance/2026-10-29-jwt-fallback.json). 비밀번호·JWT·사용자 이메일은 포함하지 않는다.
+
+§1보다 수치가 낮아도 JWT 도입으로 빨라졌다고 해석하지 않는다. 이전 측정과 프로파일·DB 풀·TLS·데이터·실행 시점이 달라
+일대일 개선 비교가 아니다. 실제 베타 서버·외부 경로·매칭·WS를 포함한 목표 달성은 별도 검증해야 한다.
+
+### 이전 실행 실패와 재측정 근거
+
+2026-10-28 첫 JWT 200 VU 실행은 실패했다([실패 집계](performance/2026-10-28-interrupted.json)).
+생성 1,293건·취소 1,270건·409 1,428건, 부하 오류율 21.83%였다. OS 기록상 15:35:24 덮개 닫힘 수면이
+1,010초 지속됐고 백엔드 로그에도 약 1,008초 공백이 있어 최대 약 1,010,000ms 지연과 일치했다.
+수면 전에도 10초 요청 timeout과 409가 발생했으므로 모든 실패를 수면 하나로 설명할 수는 없다.
+
+생성 응답이 timeout되어도 서버가 뒤늦게 저장하면 하네스는 그 ID를 알 수 없다. 임의로 기존 요청을 지우지 않기 때문에
+후속 생성이 409로 실패할 수 있다. 실패 뒤 활성 요청이 모두 만료되고 큐가 비었음을 확인한 후 앱을 다시 기동하여
+위 측정을 수행했다. 이번 재측정에서는 같은 오류가 재현되지 않았으며, 원인이 특정되지 않은 성능 개선을 코드 수정 성과로 주장하지 않는다.

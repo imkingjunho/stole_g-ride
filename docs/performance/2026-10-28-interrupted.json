@@ -1,0 +1,85 @@
+{
+  "ranAt": "2026-10-28T06:53:24.186Z",
+  "baseUrl": "http://127.0.0.1:18081",
+  "routeMode": "fallback",
+  "vus": 200,
+  "firstUserNumber": 11,
+  "rampUp": "30s",
+  "hold": "60s",
+  "rampDown": "10s",
+  "testRunDurationMs": 1174579.676,
+  "iterations": 2992,
+  "http_reqs": 8565,
+  "http_reqs_per_s": 7.291970204326947,
+  "create_ok": 1293,
+  "cancel_ok": 1270,
+  "create_409": 1428,
+  "failed_rate": 0.21827535521803038,
+  "checks_rate": 0.7817246447819696,
+  "create_ms": {
+    "p(95)": 8979.660399999999,
+    "p(99)": 1010671.1519200001,
+    "max": 1013678.844,
+    "avg": 16661.642480278442,
+    "med": 1559.777,
+    "p(90)": 6769.1334
+  },
+  "me_ms": {
+    "avg": 5470.301765645438,
+    "med": 432.097,
+    "p(90)": 2445.3606000000004,
+    "p(95)": 3872.8735999999967,
+    "p(99)": 7698.188919999998,
+    "max": 1010766.451
+  },
+  "cancel_ms": {
+    "med": 423.254,
+    "p(90)": 2727.7658000000006,
+    "p(95)": 4764.369099999999,
+    "p(99)": 9477.285489999998,
+    "max": 1010800.325,
+    "avg": 6570.442911811028
+  },
+  "thresholds": {
+    "http_req_duration{endpoint:me}": {
+      "p(95)<500": {
+        "ok": false
+      }
+    },
+    "checks": {
+      "rate==1": {
+        "ok": false
+      }
+    },
+    "http_req_duration{endpoint:cancel}": {
+      "p(95)<500": {
+        "ok": false
+      }
+    },
+    "http_req_failed{phase:load}": {
+      "rate<0.01": {
+        "ok": false
+      }
+    },
+    "gachiga_cancel_ok": {
+      "count>0": {
+        "ok": true
+      }
+    },
+    "gachiga_create_ok": {
+      "count>0": {
+        "ok": true
+      }
+    },
+    "http_req_duration{endpoint:create}": {
+      "p(95)<500": {
+        "ok": false
+      }
+    },
+    "gachiga_create_409": {
+      "count==0": {
+        "ok": false
+      }
+    }
+  }
+}

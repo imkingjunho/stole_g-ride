@@ -1225,15 +1225,21 @@ components:
           example: 2
         destName:
           type: string
+          minLength: 1
           maxLength: 100
+          description: 목적지명. 공백만으로 이루어진 문자열은 허용하지 않는다.
           example: 광주송정역
         destLat:
           type: number
           format: double
+          minimum: -90
+          maximum: 90
           example: 35.1378
         destLng:
           type: number
           format: double
+          minimum: -180
+          maximum: 180
           example: 126.7902
         departAt:
           type: string
