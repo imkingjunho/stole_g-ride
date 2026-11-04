@@ -52,7 +52,7 @@ public class Clustering {
                 }
 
                 for (int j = 0; j < requests.size(); j++) {
-                    if (!visited.get(j)) {
+                                        if (!visited.get(j) && cluster.size() + queue.size() < MAX_BUCKET_SIZE) {
                         double dist = haversineDistance(
                             requests.get(curr).destination().lat(),
                             requests.get(curr).destination().lng(),
