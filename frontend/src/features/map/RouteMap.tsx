@@ -12,12 +12,13 @@ export interface Stop {
 export interface RouteMapProps {
   sections: { path: LatLng[] }[];
   stops: Stop[];
+  estimated?: boolean;
   className?: string;
 }
 
 const DEFAULT_CENTER: LatLng = { lat: 35.17822, lng: 126.90793 };
 
-export function RouteMap({ sections, stops, className = '' }: RouteMapProps) {
+export function RouteMap({ sections, stops, estimated = false, className = '' }: RouteMapProps) {
   const { containerRef, error, isLoading, map, sdk } = useKakaoMap(DEFAULT_CENTER);
   const overlays = useRef<KakaoOverlay[]>([]);
 
@@ -41,7 +42,7 @@ export function RouteMap({ sections, stops, className = '' }: RouteMapProps) {
           strokeWeight: 5,
           strokeColor: '#1769d4',
           strokeOpacity: 0.85,
-          strokeStyle: 'solid',
+          strokeStyle: estimated ? 'dash' : 'solid',
         }));
       }
     });
@@ -73,7 +74,7 @@ export function RouteMap({ sections, stops, className = '' }: RouteMapProps) {
       overlays.current.forEach((overlay) => overlay.setMap(null));
       overlays.current = [];
     };
-  }, [map, sdk, sections, stops]);
+  }, [estimated, map, sdk, sections, stops]);
 
   if (error) {
     return (

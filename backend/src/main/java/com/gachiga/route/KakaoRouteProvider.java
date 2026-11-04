@@ -24,6 +24,7 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 
@@ -48,8 +49,7 @@ public class KakaoRouteProvider implements RouteProvider {
     private final String restApiKey;
     private final StringRedisTemplate redisTemplate;
     private final Duration cacheTtl;
-    private long cacheHits;
-    private long cacheMisses;
+    private final RouteCallQuota routeCallQuota;
 
     @Autowired
     public KakaoRouteProvider(
@@ -58,9 +58,10 @@ public class KakaoRouteProvider implements RouteProvider {
             EstimatedRouteProvider fallback,
             @Value("${KAKAO_REST_API_KEY:}") String restApiKey,
             StringRedisTemplate redisTemplate,
-            @Value("${ROUTE_CACHE_TTL_SECONDS:600}") long cacheTtlSeconds) {
+            @Value("${gachiga.route.cache-ttl-seconds:600}") long cacheTtlSeconds,
+            RouteCallQuota routeCallQuota) {
         this(buildRestClient(restClientBuilder), objectMapper, fallback, restApiKey,
-                redisTemplate, Duration.ofSeconds(cacheTtlSeconds));
+                redisTemplate, Duration.ofSeconds(cacheTtlSeconds), routeCallQuota);
     }
 
     KakaoRouteProvider(
@@ -68,7 +69,7 @@ public class KakaoRouteProvider implements RouteProvider {
             ObjectMapper objectMapper,
             EstimatedRouteProvider fallback,
             String restApiKey) {
-        this(restClient, objectMapper, fallback, restApiKey, null, Duration.ofMinutes(10));
+        this(restClient, objectMapper, fallback, restApiKey, null, Duration.ofMinutes(10), null);
     }
 
     KakaoRouteProvider(
@@ -78,12 +79,24 @@ public class KakaoRouteProvider implements RouteProvider {
             String restApiKey,
             StringRedisTemplate redisTemplate,
             Duration cacheTtl) {
+        this(restClient, objectMapper, fallback, restApiKey, redisTemplate, cacheTtl, null);
+    }
+
+    KakaoRouteProvider(
+            RestClient restClient,
+            ObjectMapper objectMapper,
+            EstimatedRouteProvider fallback,
+            String restApiKey,
+            StringRedisTemplate redisTemplate,
+            Duration cacheTtl,
+            RouteCallQuota routeCallQuota) {
         this.restClient = restClient;
         this.objectMapper = objectMapper;
         this.fallback = fallback;
         this.restApiKey = restApiKey;
         this.redisTemplate = redisTemplate;
         this.cacheTtl = cacheTtl;
+        this.routeCallQuota = routeCallQuota;
     }
 
     @Override
@@ -91,13 +104,14 @@ public class KakaoRouteProvider implements RouteProvider {
             Coordinate origin, List<Coordinate> waypoints, Coordinate destination) {
         List<Coordinate> normalizedWaypoints = waypoints == null ? List.of() : waypoints;
         String cacheKey = cacheKey(origin, normalizedWaypoints, destination);
-        RouteResult cached = readCache(cacheKey);
-        if (cached != null) {
-            cacheHits++;
-            log.debug("경로 캐시 적중: key={}, hits={}, misses={}", cacheKey, cacheHits, cacheMisses);
-            return cached;
+        CacheLookup cacheLookup = readCache(cacheKey);
+        if (cacheLookup.status() == CacheStatus.HIT) {
+            log.info("route_cache event=hit");
+            return cacheLookup.result();
         }
-        cacheMisses++;
+        if (cacheLookup.status() == CacheStatus.MISS) {
+            log.info("route_cache event=miss");
+        }
         if (restApiKey == null || restApiKey.isBlank()) {
             log.warn("카카오 REST API 키가 없어 추정 경로를 사용합니다.");
             return fallback.findRoute(origin, normalizedWaypoints, destination);
@@ -105,6 +119,9 @@ public class KakaoRouteProvider implements RouteProvider {
 
         Map<String, Object> request = createRequest(origin, normalizedWaypoints, destination);
         for (int attempt = 0; attempt < 2; attempt++) {
+            if (!isKakaoCallAllowed()) {
+                return fallback.findRoute(origin, normalizedWaypoints, destination);
+            }
             try {
                 String response = restClient
                         .post()
@@ -128,21 +145,55 @@ public class KakaoRouteProvider implements RouteProvider {
         return fallback.findRoute(origin, normalizedWaypoints, destination);
     }
 
-    private RouteResult readCache(String cacheKey) {
+    private boolean isKakaoCallAllowed() {
+        if (routeCallQuota == null) {
+            return true;
+        }
+        try {
+            RouteCallQuota.Decision decision = routeCallQuota.acquire();
+            if (!decision.allowed()) {
+                log.warn(
+                        "카카오 경로 API 호출 한도 초과({}), 추정 경로로 대체합니다. tick={}, daily={}",
+                        decision.limit(),
+                        decision.tickCount(),
+                        decision.dailyCount());
+            }
+            return decision.allowed();
+        } catch (DataAccessException | IllegalStateException exception) {
+            log.warn("Redis 호출량 제한 확인 실패, 카카오 호출을 생략하고 추정 경로를 사용합니다.", exception);
+            return false;
+        }
+    }
+
+    private CacheLookup readCache(String cacheKey) {
         if (redisTemplate == null) {
-            return null;
+            return new CacheLookup(null, CacheStatus.UNAVAILABLE);
         }
         try {
             String cached = redisTemplate.opsForValue().get(cacheKey);
-            return cached == null ? null : objectMapper.readValue(cached, RouteResult.class);
+            if (cached == null) {
+                return new CacheLookup(null, CacheStatus.MISS);
+            }
+            RouteResult result = objectMapper.readValue(cached, RouteResult.class);
+            return result == null
+                    ? new CacheLookup(null, CacheStatus.MISS)
+                    : new CacheLookup(result, CacheStatus.HIT);
         } catch (JsonProcessingException exception) {
             log.warn("경로 캐시 역직렬화 실패: key={}", cacheKey, exception);
-            return null;
+            return new CacheLookup(null, CacheStatus.MISS);
         } catch (RedisConnectionFailureException exception) {
             log.warn("Redis 연결 실패로 경로 API를 사용합니다.", exception);
-            return null;
+            return new CacheLookup(null, CacheStatus.UNAVAILABLE);
         }
     }
+
+    private enum CacheStatus {
+        HIT,
+        MISS,
+        UNAVAILABLE
+    }
+
+    private record CacheLookup(RouteResult result, CacheStatus status) {}
 
     private void writeCache(String cacheKey, RouteResult result) {
         if (redisTemplate == null) {
