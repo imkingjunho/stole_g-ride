@@ -75,6 +75,12 @@ async function navigate(path) {
     await router.navigate(p);
   }, path);
 }
+async function waitMapStyle(style) {
+  await page.waitForFunction((expected) => {
+    const lines = window.__mapOverlays.filter((o) => o.map && o.path);
+    return lines.length === 3 && lines.every((o) => o.strokeStyle === expected);
+  }, style);
+}
 async function demo(pending = false) {
   while (await page.getByRole('button', { name: '알림 닫기', exact: true }).count())
     await page.getByRole('button', { name: '알림 닫기', exact: true }).first().click();
@@ -282,6 +288,7 @@ try {
     await demo();
     await page.getByRole('application', { name: '합승 경로 지도' }).waitFor();
     await page.waitForFunction(() => window.__mapOverlays.some((o) => o.map && o.content));
+    await waitMapStyle('solid');
     const overlays = await page.evaluate(() =>
       window.__mapOverlays
         .filter((o) => o.map)
@@ -311,10 +318,11 @@ try {
       )
       .waitFor();
     await page.getByText('추정 경로예요. 실제 도로와 이동 시간은 다를 수 있어요.').waitFor();
+    await waitMapStyle('dash');
     await page.screenshot({ path: `${output}/group-map.png`, fullPage: true });
     await demo();
   });
-  await check('DemoPage 샘플 JSON 지도: 경로선·마커·전체 bounds', async () => {
+  await check('DemoPage 샘플 JSON 지도: 실선·점선 전환·마커·전체 bounds', async () => {
     await navigate('/dev/demo');
     await page.getByRole('heading', { name: '샘플 경로 지도 확인' }).waitFor();
     await page.getByRole('application', { name: '합승 경로 지도' }).waitFor();
@@ -322,13 +330,20 @@ try {
     const bounds = await page.evaluate(() => window.__lastBounds);
     assert.ok(bounds.some((point) => point.lat === 35.1763 && point.lng === 126.9123));
     assert.ok(bounds.some((point) => point.lat === 35.1378 && point.lng === 126.7902));
-    await page.getByLabel('추정 경로 안내 확인').check();
+    await waitMapStyle('solid');
+    await page.getByLabel('추정 경로 점선 확인').check();
+    await waitMapStyle('dash');
     await page.getByText('추정 경로예요. 실제 도로와 이동 시간은 다를 수 있어요.').waitFor();
     await page.getByText('샘플 경로 JSON 보기', { exact: true }).click();
     const sample = JSON.parse(await page.locator('details pre').textContent());
     assert.equal(sample.route.sections.length, 3);
     assert.equal(sample.members.length, 3);
     assert.equal(sample.estimated, true);
+    await page.screenshot({ path: `${output}/demo-map-dashed.png`, fullPage: true });
+    await page.getByLabel('추정 경로 점선 확인').uncheck();
+    await waitMapStyle('solid');
+    assert.equal(await page.evaluate(() => window.__mapOverlays.filter((o) => o.map).length), 7);
+    assert.equal(await page.evaluate(() => window.__lastBounds.length), 10);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   });
   await check('모달 포커스 제한·Escape·포커스 복귀', async () => {

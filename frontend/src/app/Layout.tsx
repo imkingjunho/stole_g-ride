@@ -1,6 +1,7 @@
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { isMockMode } from '@/shared/api/config';
 import { SessionEffects } from './SessionEffects';
+import { useConnectionStore } from '@/shared/ws/connectionStore';
 import { Badge } from '@/shared/ui';
 import { LegalNotice } from '@/shared/ui/LegalNotice';
 const tabs = [
@@ -11,6 +12,7 @@ const tabs = [
 ];
 export function Layout() {
   const { pathname } = useLocation();
+  const connection = useConnectionStore((s) => s.status);
   return (
     <div className="mx-auto flex min-h-dvh max-w-app flex-col bg-canvas pb-[calc(72px+env(safe-area-inset-bottom))]">
       <SessionEffects />
@@ -27,6 +29,16 @@ export function Layout() {
         <Link className="link bg-brand-soft" to="/dev/demo">
           DEV · 기능 체험
         </Link>
+      )}
+      {pathname === '/waiting' && connection !== 'connected' && (
+        <p
+          role="status"
+          className="mx-page mt-3 rounded-control bg-amber-100 p-3 text-sm text-amber-900"
+        >
+          {connection === 'connecting'
+            ? '실시간 상태를 연결하고 있어요.'
+            : '실시간 연결이 끊겼어요. 다시 연결하는 동안 대기 상태를 주기적으로 확인해요.'}
+        </p>
       )}
       <main id="main-content" className="flex-1">
         <Outlet />

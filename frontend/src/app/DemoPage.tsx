@@ -79,7 +79,7 @@ export function DemoPage() {
             checked={estimated}
             onChange={(e) => setEstimated(e.target.checked)}
           />
-          추정 경로 안내 확인
+          추정 경로 점선 확인
         </label>
         <GroupRouteMap group={sample} />
         <details className="text-sm">

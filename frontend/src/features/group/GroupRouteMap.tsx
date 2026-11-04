@@ -36,7 +36,7 @@ export function GroupRouteMap({ group }: { group: Group }) {
   return (
     <div className="my-4 space-y-2">
       {sections.some((section) => section.path.length > 1) || stops.length ? (
-        <RouteMap sections={sections} stops={stops} />
+        <RouteMap sections={sections} stops={stops} estimated={group.estimated} />
       ) : (
         <p role="status" className="rounded-control bg-canvas p-4 text-sm">
           경로 좌표를 준비하고 있어요.
