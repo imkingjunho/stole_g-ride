@@ -1,5 +1,6 @@
 package com.gachiga.auth;
 
+import com.gachiga.contract.auth.AccessTokenVerifier;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
@@ -20,11 +21,14 @@ import org.springframework.stereotype.Component;
  * <p>Refresh 토큰은 JWT가 아니다 — {@link TokenService} 가 만드는 불투명(opaque) 값이다. Access
  * 토큰만 서명해서 서버 상태 없이(stateless) 검증할 수 있게 하고, Refresh는 DB에서 해시로 조회해야만
  * 유효성을 알 수 있게 해서 회전·폐기가 즉시 반영되게 한다.
+ *
+ * <p>{@link #verify(String)}은 {@code realtime}의 STOMP CONNECT 인증이 {@link AccessTokenVerifier}
+ * port로 간접 주입받아 쓴다 — ArchUnit이 도메인 간 직접 import를 막기 때문이다.
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class JwtTokenProvider {
+public class JwtTokenProvider implements AccessTokenVerifier {
 
     private final AuthProperties authProperties;
 
@@ -60,6 +64,7 @@ public class JwtTokenProvider {
      * @return 서명이 맞고 만료되지 않았으면 subject 의 userId. 위조·만료·형식 오류면 빈 값 — 원인은
      *     로그에만 남기고 호출자에게는 구분해 주지 않는다(전부 같은 {@code INVALID_TOKEN})
      */
+    @Override
     public Optional<Long> verify(String token) {
         try {
             Claims claims = Jwts.parser().verifyWith(signingKey()).build().parseSignedClaims(token).getPayload();

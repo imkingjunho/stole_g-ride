@@ -1,13 +1,13 @@
 package com.gachiga.realtime;
 
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.gachiga.contract.ride.QueueStatus;
 import com.gachiga.contract.ride.QueueStatusPort;
-import java.util.Optional;
+import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -35,7 +35,7 @@ class QueueStatusPushSchedulerTest {
     private QueueStatusPushScheduler scheduler;
 
     @Test
-    @DisplayName("연결된 사용자 중 진행 중인 요청이 있는 사람에게만 push 한다")
+    @DisplayName("연결된 사용자를 한 번에 조회해, 진행 중인 요청이 있는 사람에게만 push 한다")
     void pushesOnlyUsersWithActiveRequest() {
         scheduler = new QueueStatusPushScheduler(simpUserRegistry, queueStatusPort, pusher);
         given(userOne.getName()).willReturn("1");
@@ -43,17 +43,16 @@ class QueueStatusPushSchedulerTest {
         given(simpUserRegistry.getUsers()).willReturn(Set.of(userOne, userTwo));
 
         QueueStatus status = new QueueStatus(10L, "WAITING", 300, 1);
-        given(queueStatusPort.statusOf(1L)).willReturn(Optional.of(status));
-        given(queueStatusPort.statusOf(2L)).willReturn(Optional.empty());
+        given(queueStatusPort.statusOfAll(anyCollection())).willReturn(Map.of(1L, status));
 
         scheduler.pushToConnectedUsers();
 
         verify(pusher).push(1L, status);
-        verify(pusher, never()).push(eq(2L), org.mockito.ArgumentMatchers.any());
+        verify(pusher, never()).push(2L, status);
     }
 
     @Test
-    @DisplayName("사용자 id 형식이 아니면 건너뛴다")
+    @DisplayName("사용자 id 형식이 아니면 조회 대상에서 빠진다")
     void skipsNonNumericName() {
         scheduler = new QueueStatusPushScheduler(simpUserRegistry, queueStatusPort, pusher);
         given(userOne.getName()).willReturn("not-a-number");
@@ -61,23 +60,31 @@ class QueueStatusPushSchedulerTest {
 
         scheduler.pushToConnectedUsers();
 
+        verify(queueStatusPort, never()).statusOfAll(anyCollection());
         verify(pusher, never()).push(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 
     @Test
-    @DisplayName("한 명 조회가 실패해도 나머지는 처리한다")
-    void toleratesPerUserFailure() {
+    @DisplayName("연결된 사용자가 없으면 조회하지 않는다")
+    void skipsWhenNoOneConnected() {
         scheduler = new QueueStatusPushScheduler(simpUserRegistry, queueStatusPort, pusher);
-        given(userOne.getName()).willReturn("1");
-        given(userTwo.getName()).willReturn("2");
-        given(simpUserRegistry.getUsers()).willReturn(Set.of(userOne, userTwo));
-
-        given(queueStatusPort.statusOf(1L)).willThrow(new RuntimeException("DB 오류"));
-        QueueStatus status = new QueueStatus(20L, "WAITING", 100, 0);
-        given(queueStatusPort.statusOf(2L)).willReturn(Optional.of(status));
+        given(simpUserRegistry.getUsers()).willReturn(Set.of());
 
         scheduler.pushToConnectedUsers();
 
-        verify(pusher).push(2L, status);
+        verify(queueStatusPort, never()).statusOfAll(anyCollection());
+    }
+
+    @Test
+    @DisplayName("배치 조회가 실패해도 스케줄러가 죽지 않는다")
+    void toleratesBatchFailure() {
+        scheduler = new QueueStatusPushScheduler(simpUserRegistry, queueStatusPort, pusher);
+        given(userOne.getName()).willReturn("1");
+        given(simpUserRegistry.getUsers()).willReturn(Set.of(userOne));
+        given(queueStatusPort.statusOfAll(anyCollection())).willThrow(new RuntimeException("DB 오류"));
+
+        scheduler.pushToConnectedUsers();
+
+        verify(pusher, never()).push(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 }

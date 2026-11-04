@@ -148,6 +148,30 @@ class UserControllerTest {
     }
 
     @Test
+    @DisplayName("닉네임을 생략해도 학과·학년만 수정된다 (PATCH는 세 필드 모두 선택이다)")
+    void updateMeWithoutNicknameSucceeds() throws Exception {
+        given(userService.updateProfile(eq(1L), any(UpdateProfileRequest.class)))
+                .willReturn(
+                        new UserProfileResponse(
+                                1L,
+                                "gachiga@jnu.ac.kr",
+                                "후문호랑이",
+                                Gender.M,
+                                "전자공학과",
+                                4,
+                                UserStatus.ACTIVE,
+                                null));
+
+        mockMvc.perform(
+                        patch("/api/users/me")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"department\":\"전자공학과\",\"grade\":4}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.nickname").value("후문호랑이"))
+                .andExpect(jsonPath("$.data.department").value("전자공학과"));
+    }
+
+    @Test
     @DisplayName("닉네임이 2자 미만이면 400 INVALID_INPUT")
     void rejectsTooShortNickname() throws Exception {
         mockMvc.perform(

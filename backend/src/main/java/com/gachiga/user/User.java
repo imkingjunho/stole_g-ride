@@ -123,11 +123,14 @@ public class User {
     /**
      * 닉네임·학과·학년을 바꾼다 (T2-5, FR-03).
      *
-     * <p>성별은 여기 없다 — 가입 후 바꿀 수 없다. 학과·학년은 선택 입력이라 {@code null} 을 주면
+     * <p>성별은 여기 없다 — 가입 후 바꿀 수 없다. {@code nickname} 이 {@code null} 이면 기존 값을
+     * 유지한다 — 닉네임은 지울 수 없는 필드다. 학과·학년은 선택 입력이라 {@code null} 을 주면
      * 지워진다.
      */
     public void updateProfile(String nickname, String department, Integer grade) {
-        this.nickname = nickname;
+        if (nickname != null) {
+            this.nickname = nickname;
+        }
         this.department = department;
         this.grade = grade;
     }

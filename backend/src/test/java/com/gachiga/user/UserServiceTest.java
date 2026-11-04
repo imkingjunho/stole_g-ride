@@ -4,9 +4,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+
 import com.gachiga.common.exception.BusinessException;
 import com.gachiga.common.exception.ErrorCode;
 import com.gachiga.contract.user.Gender;
+import com.gachiga.contract.user.UserStatus;
 import com.gachiga.user.dto.UpdateProfileRequest;
 import com.gachiga.user.dto.UserProfileResponse;
 import java.time.LocalDateTime;
@@ -43,6 +49,25 @@ class UserServiceTest {
         assertThat(profile.nickname()).isEqualTo("후문호랑이");
         assertThat(profile.department()).isEqualTo("컴퓨터공학과");
         assertThat(profile.grade()).isEqualTo(3);
+        assertThat(profile.suspendedUntil()).isNull();
+    }
+
+    @Test
+    @DisplayName("정지 기간이 지났으면 저장값이 SUSPENDED여도 지금 기준 ACTIVE로 보인다 (리뷰 반영)")
+    void reflectsExpiredSuspensionAsActive() {
+        userService = new UserService(userRepository);
+        User user =
+                User.create("gachiga@jnu.ac.kr", "{bcrypt}hash", "후문호랑이", Gender.M, null, null, NOW);
+        user.applyReport(NOW);
+        user.applyReport(NOW);
+        user.applyReport(NOW); // SUSPENDED, suspendedUntil = NOW + 7일
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+
+        UserProfileResponse profile = userService.myProfile(1L);
+
+        // myProfile 은 실제 LocalDateTime.now() 를 기준으로 계산한다 — 테스트 실행 시각이
+        // 가입 정지 기준 시각(NOW, 2026-09-28)보다 7일 이상 지났으므로 ACTIVE 로 보여야 한다
+        assertThat(profile.status()).isEqualTo(UserStatus.ACTIVE);
         assertThat(profile.suspendedUntil()).isNull();
     }
 
@@ -86,6 +111,30 @@ class UserServiceTest {
             assertThat(profile.department()).isEqualTo("전자공학과");
             assertThat(profile.grade()).isEqualTo(4);
             assertThat(profile.gender()).isEqualTo(Gender.M);
+        }
+
+        @Test
+        @DisplayName("닉네임을 생략하면(=null) 중복 검사 없이 학과·학년만 바꾼다")
+        void updatesWithoutNickname() {
+            userService = new UserService(userRepository);
+            User user =
+                    User.create(
+                            "gachiga@jnu.ac.kr",
+                            "{bcrypt}hash",
+                            "후문호랑이",
+                            Gender.M,
+                            "컴퓨터공학과",
+                            3,
+                            NOW);
+            given(userRepository.findById(1L)).willReturn(Optional.of(user));
+
+            UserProfileResponse profile =
+                    userService.updateProfile(1L, new UpdateProfileRequest(null, "전자공학과", 4));
+
+            assertThat(profile.nickname()).isEqualTo("후문호랑이");
+            assertThat(profile.department()).isEqualTo("전자공학과");
+            assertThat(profile.grade()).isEqualTo(4);
+            verify(userRepository, never()).existsByNicknameAndIdNot(anyString(), anyLong());
         }
 
         @Test

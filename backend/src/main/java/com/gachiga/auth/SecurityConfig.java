@@ -25,10 +25,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
  * {@code security: []}). 그 밖의 모든 REST 는 {@code Authorization: Bearer} 를 요구한다.
  *
  * <p>{@code /ws} 는 HTTP 핸드셰이크 단계에서는 permitAll 이다 — STOMP 프로토콜 자체의 인증은
- * {@code realtime/DevStompUserInterceptor}(CONNECT 프레임)가 따로 맡는다. 진짜 JWT 검증으로
- * 바꾸려면 {@code realtime} 이 이 모듈의 {@link JwtTokenProvider} 를 검증할 방법이 필요한데,
- * ArchUnit 이 도메인 간 직접 import 를 막으므로 {@code contract.auth} 에 검증용 port 가 있어야
- * 한다 — 아직 없어서 Dev 스텁이 남아 있다({@code [계약 변경 요청]} 대기).
+ * {@code realtime/JwtStompUserInterceptor}(CONNECT 프레임)가 {@code contract.auth.AccessTokenVerifier}
+ * (이 모듈의 {@link JwtTokenProvider} 구현)로 따로 맡는다.
  *
  * <p>인증 실패는 {@code common} 의 {@link ErrorCode} 를 쓴 {@link ApiResponse} 형태로 나간다
  * (CLAUDE.md §5) — Spring Security 기본 401 은 빈 본문이라 프론트의 공통 에러 처리와 안 맞는다.

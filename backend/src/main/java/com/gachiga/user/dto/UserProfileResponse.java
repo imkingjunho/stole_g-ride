@@ -20,7 +20,12 @@ public record UserProfileResponse(
         UserStatus status,
         LocalDateTime suspendedUntil) {
 
-    public static UserProfileResponse of(User user) {
+    /**
+     * {@code now} 기준으로 계산한 상태를 담는다 ({@link User#currentStatus}) — 저장값을 그대로 쓰면
+     * 정지 기간이 지난 사용자의 프로필이 로그인 응답({@code UserAccountAdapter})·{@code UserPort}
+     * 와 다르게 보인다.
+     */
+    public static UserProfileResponse of(User user, LocalDateTime now) {
         return new UserProfileResponse(
                 user.getId(),
                 user.getEmail(),
@@ -28,7 +33,7 @@ public record UserProfileResponse(
                 user.getGender(),
                 user.getDepartment(),
                 user.getGrade(),
-                user.getStatus(),
-                user.getSuspendedUntil());
+                user.currentStatus(now),
+                user.currentSuspendedUntil(now));
     }
 }

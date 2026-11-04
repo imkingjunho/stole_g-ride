@@ -103,6 +103,18 @@ class UserTest {
             assertThat(user.getDepartment()).isNull();
             assertThat(user.getGrade()).isNull();
         }
+
+        @Test
+        @DisplayName("닉네임이 null이면 기존 닉네임을 유지한다 — 지울 수 없는 필드다")
+        void keepsNicknameWhenNull() {
+            User user = verifiedUser();
+
+            user.updateProfile(null, "전자공학과", 4);
+
+            assertThat(user.getNickname()).isEqualTo("후문호랑이");
+            assertThat(user.getDepartment()).isEqualTo("전자공학과");
+            assertThat(user.getGrade()).isEqualTo(4);
+        }
     }
 
     @Nested
