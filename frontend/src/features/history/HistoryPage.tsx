@@ -14,7 +14,9 @@ export function HistoryPage() {
       <h1 className="text-2xl font-bold">함께한 이동</h1>
       <Card>
         <p className="text-sm text-slate-600">지금까지 아낀 금액</p>
-        {stats.data ? (
+        {stats.error ? (
+          <QueryState error={stats.error} retry={() => void stats.refetch()} />
+        ) : stats.data ? (
           <>
             <p className="mt-2 text-3xl font-bold text-saving">{won(stats.data.totalSaving)}</p>
             <p className="mt-2 text-sm text-slate-600">총 {stats.data.totalRides}번의 동승</p>

@@ -2,8 +2,8 @@ import { useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNavigate, Link } from 'react-router-dom';
 import { Button, Card, Badge } from '@/shared/ui';
-import { mockState, resetGroup, notifyMatch } from '@/shared/mocks/state';
-import { mockGroup } from '@/shared/mocks/data';
+import { mockState, resetGroup, notifyMatch, createMockRequest } from '@/shared/mocks/state';
+import { mockGroup, mockRideRequest } from '@/shared/mocks/data';
 import { GroupRouteMap } from '@/features/group/GroupRouteMap';
 export function DemoPage() {
   const [estimated, setEstimated] = useState(false);
@@ -16,6 +16,22 @@ export function DemoPage() {
     qc.removeQueries({ queryKey: ['messages'] });
     navigate('/groups/17');
   }
+  function openExpiredRequest() {
+    const fixture = mockRideRequest;
+    createMockRequest({
+      hubId: fixture.hub.id,
+      destName: fixture.destName,
+      destLat: fixture.destLat,
+      destLng: fixture.destLng,
+      departAt: new Date().toISOString(),
+      maxWaitMin: 5,
+      sameGenderOnly: true,
+      maxDetourRatio: 0.2,
+    });
+    mockState.request!.expiresAt = new Date(Date.now() - 1000).toISOString();
+    qc.removeQueries({ queryKey: ['myRequest'] });
+    navigate('/waiting');
+  }
   return (
     <section className="page">
       <Badge variant="dev" />
@@ -23,6 +39,34 @@ export function DemoPage() {
       <p className="text-sm text-slate-600">
         아래 동작은 목 데이터에만 적용돼요. 성사·수락·정산·채팅 흐름을 확인할 수 있어요.
       </p>
+      <Card className="space-y-3">
+        <h2 className="font-bold">요청 · 예외 상태 확인</h2>
+        <Button
+          fullWidth
+          variant="secondary"
+          onClick={() => {
+            mockState.request = null;
+            qc.removeQueries({ queryKey: ['myRequest'] });
+            navigate('/request');
+          }}
+        >
+          새 요청 작성
+        </Button>
+        <Button fullWidth variant="secondary" onClick={openExpiredRequest}>
+          대기 만료 화면 보기
+        </Button>
+        <Button
+          fullWidth
+          variant="secondary"
+          onClick={() => {
+            mockState.failures.set('GET /api/stats/me', 1);
+            qc.removeQueries({ queryKey: ['stats'] });
+            navigate('/history');
+          }}
+        >
+          통계 오류와 재시도 보기
+        </Button>
+      </Card>
       <Card>
         <h2 className="font-bold">샘플 경로 지도 확인</h2>
         <p className="mt-2 text-sm text-slate-600">

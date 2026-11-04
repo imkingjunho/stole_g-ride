@@ -142,6 +142,142 @@ try {
     }
     await page.setViewportSize({ width: 360, height: 800 });
   });
+  await check('요청 생성·중복 방지·취소·빈 대기 화면', async () => {
+    await navigate('/dev/demo');
+    await page.getByRole('button', { name: '새 요청 작성', exact: true }).click();
+    await page.getByRole('heading', { name: '어디로 갈까요?' }).waitFor();
+    await page.getByRole('button', { name: '전남대 후문', exact: true }).click();
+    await page.getByRole('button', { name: '5분', exact: true }).click();
+    await page.getByLabel('목적지 검색').fill('송정');
+    await page.getByRole('list', { name: '장소 검색 결과' }).getByRole('button').first().click();
+    await page.getByRole('button', { name: '동승 매칭 시작', exact: true }).click();
+    await page.waitForURL('**/waiting');
+    await page.getByRole('heading', { name: '함께 갈 사람을 찾고 있어요' }).waitFor();
+    const request = await page.evaluate(
+      async () => (await import('/src/shared/mocks/state.ts')).mockState.request,
+    );
+    assert.equal(request.hub.id, 2);
+    assert.equal(request.maxWaitMin, 5);
+    assert.equal(request.destName, '광주송정역');
+    assert.ok(request.remainingSeconds > 290 && request.remainingSeconds <= 300);
+    const duplicate = await page.evaluate(async () => {
+      const { api } = await import('/src/shared/api/client.ts');
+      const { mockState } = await import('/src/shared/mocks/state.ts');
+      const r = mockState.request;
+      const result = await api.POST('/api/requests', { body: { ...r, hubId: r.hub.id } });
+      mockState.failures.set('DELETE /api/requests/' + r.requestId, 1);
+      return { status: result.response.status, code: result.error?.error.code };
+    });
+    assert.equal(duplicate.status, 409);
+    assert.equal(duplicate.code, 'ALREADY_IN_QUEUE');
+    await page.getByRole('button', { name: '요청 취소', exact: true }).click();
+    await page.getByText('일시적으로 정보를 불러오지 못했어요.', { exact: true }).waitFor();
+    assert.ok(
+      await page.evaluate(
+        async () => !!(await import('/src/shared/mocks/state.ts')).mockState.request,
+      ),
+    );
+    await page.getByRole('button', { name: '요청 취소', exact: true }).click();
+    await page.waitForURL('**/request');
+    await navigate('/waiting');
+    await page.getByRole('heading', { name: '진행 중인 요청이 없어요' }).waitFor();
+  });
+  await check('요청 만료·재시도·목적지 검색 빈 상태', async () => {
+    await navigate('/dev/demo');
+    await page.getByRole('button', { name: '대기 만료 화면 보기' }).click();
+    await page.getByRole('heading', { name: '대기 시간이 끝났어요' }).waitFor();
+    await page.getByRole('button', { name: '다시 매칭 요청하기' }).click();
+    await page.waitForURL('**/request');
+    await page.getByLabel('목적지 검색').fill('없는목적지');
+    await page.getByText('검색 결과가 없어요.', { exact: true }).waitFor();
+    await page.getByLabel('목적지 검색').fill('유스');
+    await page.getByRole('list', { name: '장소 검색 결과' }).getByRole('button').first().click();
+    await page.getByRole('button', { name: '동승 매칭 시작', exact: true }).click();
+    await page.waitForURL('**/waiting');
+    await page.getByRole('heading', { name: '함께 갈 사람을 찾고 있어요' }).waitFor();
+    await page.getByRole('button', { name: '요청 취소', exact: true }).click();
+    await page.waitForURL('**/request');
+  });
+  await check('API 오류: 그룹 재시도·이력과 내 정보의 통계 재시도', async () => {
+    await page.evaluate(async () => {
+      const { mockState } = await import('/src/shared/mocks/state.ts');
+      mockState.failures.set('GET /api/groups/17', 2);
+    });
+    await navigate('/dev/demo');
+    await page.getByRole('button', { name: '성사 화면 보기', exact: true }).click();
+    await page
+      .locator('main')
+      .getByRole('alert')
+      .filter({ hasText: '일시적으로 정보를 불러오지 못했어요.' })
+      .waitFor();
+    await page.getByRole('button', { name: '다시 시도', exact: true }).click();
+    await page.getByRole('heading', { name: '동승이 성사됐어요!' }).waitFor();
+    for (const path of ['/history', '/me']) {
+      await page.evaluate(async () =>
+        (await import('/src/shared/mocks/state.ts')).mockState.failures.set('GET /api/stats/me', 1),
+      );
+      await navigate(path);
+      await page
+        .locator('main')
+        .getByRole('alert')
+        .filter({ hasText: '일시적으로 정보를 불러오지 못했어요.' })
+        .waitFor();
+      await page.getByRole('button', { name: '다시 시도', exact: true }).click();
+      await page
+        .locator('main')
+        .getByRole('alert')
+        .filter({ hasText: '일시적으로 정보를 불러오지 못했어요.' })
+        .waitFor({ state: 'hidden' });
+    }
+  });
+  await check('네트워크 실패 안내·채팅 연결 끊김과 복구', async () => {
+    await demo();
+    await page.getByRole('link', { name: '동승자와 채팅하기' }).click();
+    await page.getByLabel('메시지', { exact: true }).fill('연결 확인');
+    await page.evaluate(async () =>
+      (await import('/src/shared/ws/connectionStore.ts')).useConnectionStore.setState({
+        status: 'disconnected',
+      }),
+    );
+    await page.getByText('연결이 끊겼어요. 다시 연결하고 있어요.', { exact: true }).waitFor();
+    assert.ok(await page.getByRole('button', { name: '보내기', exact: true }).isDisabled());
+    await page.evaluate(async () =>
+      (await import('/src/shared/ws/connectionStore.ts')).useConnectionStore.setState({
+        status: 'connected',
+      }),
+    );
+    await page.getByRole('button', { name: '보내기', exact: true }).waitFor({ state: 'visible' });
+    assert.equal(
+      await page.getByRole('button', { name: '보내기', exact: true }).isDisabled(),
+      false,
+    );
+    await page.evaluate(() => {
+      window.__savedFetch = window.fetch;
+      window.fetch = async (...args) => {
+        const input = args[0];
+        const url = typeof input === 'string' ? input : input.url;
+        if (url?.includes('/api/groups/17') && !url.includes('/messages'))
+          throw new TypeError('Failed to fetch');
+        return window.__savedFetch(...args);
+      };
+    });
+    try {
+      await navigate('/groups/17');
+      await page
+        .locator('main')
+        .getByRole('alert')
+        .filter({ hasText: '네트워크 상태를 확인하고 다시 시도해 주세요.' })
+        .waitFor();
+      assert.equal(await page.getByRole('button', { name: '수락', exact: true }).count(), 0);
+    } finally {
+      await page.evaluate(() => {
+        window.fetch = window.__savedFetch;
+        delete window.__savedFetch;
+      });
+    }
+    await page.getByRole('button', { name: '다시 시도', exact: true }).click();
+    await page.getByRole('heading', { name: '동승이 성사됐어요!' }).waitFor();
+  });
   await check('성사 지도: 서버 경로·마커 순서·좌표 누락·추정치', async () => {
     await demo();
     await page.getByRole('application', { name: '합승 경로 지도' }).waitFor();

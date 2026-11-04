@@ -55,7 +55,7 @@ export function MyPage() {
       navigate('/login', { replace: true });
     },
   });
-  if (!profile.data)
+  if (profile.error || !profile.data)
     return (
       <QueryState
         loading={profile.isLoading}
@@ -94,7 +94,13 @@ export function MyPage() {
       </Card>
       <Card>
         <h2 className="font-bold">나의 동승 기록</h2>
-        {stats.data ? (
+        {stats.isLoading || stats.error ? (
+          <QueryState
+            loading={stats.isLoading}
+            error={stats.error}
+            retry={() => void stats.refetch()}
+          />
+        ) : stats.data ? (
           <dl className="mt-4 grid grid-cols-2 gap-4">
             <div>
               <dt className="text-sm text-slate-600">누적 절감액</dt>

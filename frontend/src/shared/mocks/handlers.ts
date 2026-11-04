@@ -1,8 +1,8 @@
 import { HttpResponse, http, delay } from 'msw';
 import type { components } from '@/generated/api';
 import { apiBaseUrl as BASE } from '@/shared/api/config';
-import { mockGroup, mockHubs, mockPlaces, mockRideRequest } from './data';
-import { mockState, notifyMatch } from './state';
+import { mockGroup, mockHubs, mockPlaces } from './data';
+import { mockState, notifyMatch, readMockRequest, createMockRequest } from './state';
 type S = components['schemas'];
 const ok = <T>(data: T) => HttpResponse.json({ success: true, data, error: null });
 const fail = (code: string, message: string, status = 400) =>
@@ -79,6 +79,12 @@ export const handlers = [
   // 인증이 필요한 REST는 무효 토큰에 401을 반환하여 갱신 동작도 확인한다.
   http.all(`${BASE}/api/*`, ({ request }) => {
     if (!protectedRequest(request)) return fail('UNAUTHORIZED', '다시 로그인해 주세요.', 401);
+    const key = `${request.method} ${new URL(request.url).pathname}`;
+    const remaining = mockState.failures.get(key) ?? 0;
+    if (remaining > 0) {
+      mockState.failures.set(key, remaining - 1);
+      return fail('INTERNAL_ERROR', '일시적으로 정보를 불러오지 못했어요.', 500);
+    }
   }),
   http.get(`${BASE}/api/users/me`, () => ok(mockState.user)),
   http.patch(`${BASE}/api/users/me`, async ({ request }) => {
@@ -100,11 +106,36 @@ export const handlers = [
     const q = new URL(request.url).searchParams.get('q') ?? '';
     return ok(mockPlaces.filter((p) => p.name.includes(q)));
   }),
-  http.post(`${BASE}/api/requests`, () =>
-    HttpResponse.json({ success: true, data: mockRideRequest, error: null }, { status: 201 }),
-  ),
-  http.get(`${BASE}/api/requests/me`, () => ok(mockRideRequest)),
-  http.delete(`${BASE}/api/requests/:requestId`, () => ok(null)),
+  http.post(`${BASE}/api/requests`, async ({ request }) => {
+    const current = readMockRequest();
+    if (current && ['WAITING', 'MATCHED', 'CONFIRMED'].includes(current.status))
+      return fail('ALREADY_IN_QUEUE', '이미 진행 중인 요청이 있어요.', 409);
+    const body = (await request.json()) as S['CreateRideRequest'];
+    if (
+      !mockHubs.some((h) => h.id === body.hubId) ||
+      !body.destName?.trim() ||
+      !Number.isFinite(body.destLat) ||
+      Math.abs(body.destLat) > 90 ||
+      !Number.isFinite(body.destLng) ||
+      Math.abs(body.destLng) > 180 ||
+      ![5, 10, 15, 20].includes(body.maxWaitMin) ||
+      ![0.1, 0.2, 0.3].includes(body.maxDetourRatio)
+    )
+      return fail('INVALID_INPUT', '요청 조건을 확인해 주세요.');
+    return HttpResponse.json(
+      { success: true, data: createMockRequest(body), error: null },
+      { status: 201 },
+    );
+  }),
+  http.get(`${BASE}/api/requests/me`, () => ok(readMockRequest())),
+  http.delete(`${BASE}/api/requests/:requestId`, ({ params }) => {
+    const request = readMockRequest();
+    if (!request || request.requestId !== Number(params.requestId))
+      return fail('NOT_FOUND', '요청을 찾을 수 없어요.', 404);
+    if (request.status !== 'WAITING') return fail('INVALID_INPUT', '현재 요청은 취소할 수 없어요.');
+    mockState.request = null;
+    return ok(null);
+  }),
   http.get(`${BASE}/api/groups/:groupId/messages`, ({ params }) =>
     Number(params.groupId) === mockState.group.groupId
       ? ok(mockState.messages)

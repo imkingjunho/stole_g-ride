@@ -1,5 +1,5 @@
 import type { components } from '@/generated/api';
-import { mockGroup, mockHistory, mockMessages, mockUser } from './data';
+import { mockGroup, mockHistory, mockMessages, mockUser, mockRideRequest, mockHubs } from './data';
 type S = components['schemas'];
 export const mockState = {
   group: structuredClone(mockGroup),
@@ -11,7 +11,40 @@ export const mockState = {
   lockedUntil: 0,
   signupEmail: '',
   expiredOnce: false,
+  request: null as S['RideRequestDetail'] | null,
+  nextRequestId: 1,
+  failures: new Map<string, number>(),
 };
+
+/** 목 요청도 사용자가 선택한 값과 서버 만료 시각을 유지한다. 실제 매칭 알고리즘은 흉내 내지 않는다. */
+export function readMockRequest() {
+  const request = mockState.request;
+  if (!request) return null;
+  request.remainingSeconds = Math.max(
+    0,
+    Math.ceil((new Date(request.expiresAt).getTime() - Date.now()) / 1000),
+  );
+  if (request.status === 'WAITING' && request.remainingSeconds === 0) request.status = 'EXPIRED';
+  return request;
+}
+export function createMockRequest(body: S['CreateRideRequest']) {
+  const hub = mockHubs.find((h) => h.id === body.hubId);
+  if (!hub) throw new Error('출발 거점을 확인해 주세요.');
+  mockState.request = {
+    ...structuredClone(mockRideRequest),
+    ...body,
+    hub,
+    requestId: mockState.nextRequestId++,
+    userId: mockState.user.id,
+    status: 'WAITING',
+    groupId: null,
+    estimated: true,
+    remainingSeconds: body.maxWaitMin * 60,
+    expiresAt: new Date(Date.now() + body.maxWaitMin * 60000).toISOString(),
+    createdAt: new Date().toISOString(),
+  };
+  return mockState.request;
+}
 const listeners = new Map<string, Set<(value: unknown) => void>>();
 export function listenMock(destination: string, handler: (value: unknown) => void) {
   let set = listeners.get(destination);
@@ -29,6 +62,17 @@ export function emitMock(destination: string, value: unknown) {
   listeners.get(destination)?.forEach((handler) => handler(value));
 }
 export function notifyMatch(type: S['MatchNotification']['type'], message: string) {
+  const request = readMockRequest();
+  if (request) {
+    if (type === 'COMPLETED') mockState.request = null;
+    else if (type === 'DISSOLVED') {
+      request.status = request.remainingSeconds > 0 ? 'WAITING' : 'EXPIRED';
+      request.groupId = null;
+    } else {
+      request.status = type === 'CONFIRMED' ? 'CONFIRMED' : 'MATCHED';
+      request.groupId = mockState.group.groupId;
+    }
+  }
   emitMock('/user/queue/match', {
     groupId: mockState.group.groupId,
     type,

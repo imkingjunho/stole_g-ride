@@ -65,7 +65,7 @@ export function GroupPage() {
     },
     onError: showError,
   });
-  if (!group)
+  if (query.error || !group)
     return (
       <QueryState
         loading={query.isLoading}

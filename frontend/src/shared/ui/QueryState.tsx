@@ -20,7 +20,13 @@ export function QueryState({
   if (error)
     return (
       <div className="space-y-3 p-page">
-        <p role="alert">{error instanceof Error ? error.message : '연결을 확인해 주세요.'}</p>
+        <p role="alert">
+          {error instanceof TypeError
+            ? '서버에 연결하지 못했어요. 네트워크 상태를 확인하고 다시 시도해 주세요.'
+            : error instanceof Error
+              ? error.message
+              : '연결을 확인해 주세요.'}
+        </p>
         {retry && (
           <Button variant="secondary" onClick={retry}>
             다시 시도

@@ -37,7 +37,14 @@ export function unwrap<T>(
 export function showError(error: unknown) {
   useToastStore
     .getState()
-    .notify(error instanceof Error ? error.message : '요청을 처리하지 못했어요.', 'error');
+    .notify(
+      error instanceof TypeError
+        ? '서버에 연결하지 못했어요. 네트워크 상태를 확인하고 다시 시도해 주세요.'
+        : error instanceof Error
+          ? error.message
+          : '요청을 처리하지 못했어요.',
+      'error',
+    );
 }
 // 동시에 여러 요청이 만료되어도 refresh 회전은 한 번만 수행한다.
 let refreshing: { token: string; promise: Promise<void> } | null = null;

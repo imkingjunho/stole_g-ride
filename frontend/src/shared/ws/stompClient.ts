@@ -3,7 +3,7 @@ import type { components } from '@/generated/api';
 import { isMockMode, apiBaseUrl } from '@/shared/api/config';
 import { useAuthStore } from '@/shared/stores/authStore';
 import { useConnectionStore } from './connectionStore';
-import { addMockChat, listenMock } from '@/shared/mocks/state';
+import { addMockChat, listenMock, readMockRequest } from '@/shared/mocks/state';
 type MessageHandler = (body: unknown) => void;
 export type QueueStatusPayload = components['schemas']['QueueStatus'];
 export type MatchNotification = components['schemas']['MatchNotification'];
@@ -94,14 +94,14 @@ class MockStompClient implements StompClient {
     const removeListener = listenMock(destination, handler);
     let timer: ReturnType<typeof setInterval> | undefined;
     if (destination === '/user/queue/status') {
-      const deadline = Date.now() + 600000;
       timer = setInterval(() => {
-        const remainingSeconds = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+        const request = readMockRequest();
+        if (!request) return;
         handler({
-          requestId: 1,
-          status: remainingSeconds > 0 ? 'WAITING' : 'EXPIRED',
-          remainingSeconds,
-          candidateCount: 2,
+          requestId: request.requestId,
+          status: request.status,
+          remainingSeconds: request.remainingSeconds,
+          candidateCount: request.candidateCount,
         } satisfies QueueStatusPayload);
       }, 5000);
     }
