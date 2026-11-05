@@ -1,8 +1,8 @@
 package com.gachiga.matching.adapter;
 
 import com.gachiga.contract.matching.MatchHistoryPort;
-import com.gachiga.matching.domain.MatchGroup;
-import com.gachiga.matching.port.MatchGroupRepository;
+import com.gachiga.matching.domain.MatchMember;
+import com.gachiga.matching.port.MatchMemberRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import java.util.List;
@@ -11,22 +11,18 @@ import java.util.List;
 @RequiredArgsConstructor
 public class MatchHistoryAdapter implements MatchHistoryPort {
 
-    private final MatchGroupRepository groupRepository;
+    private final MatchMemberRepository memberRepository;
 
     @Override
     public boolean isMember(Long groupId, Long userId) {
-        return groupRepository.findById(groupId)
-            .map(group -> group.getMembers().stream()
-                .anyMatch(member -> member.getUserId().equals(userId)))
-            .orElse(false);
+        return memberRepository.findByGroupIdAndUserId(groupId, userId).isPresent();
     }
 
     @Override
     public List<Long> memberUserIds(Long groupId) {
-        return groupRepository.findById(groupId)
-            .map(group -> group.getMembers().stream()
-                .map(member -> member.getUserId())
-                .toList())
-            .orElse(List.of());
+        // 그룹이 없으면 빈 리스트 (MatchHistoryPort 계약)
+        return memberRepository.findByGroupId(groupId).stream()
+            .map(MatchMember::getUserId)
+            .toList();
     }
 }

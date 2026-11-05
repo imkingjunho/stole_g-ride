@@ -13,7 +13,7 @@ public interface MatchMemberRepository extends JpaRepository<MatchMember, Long> 
 
     Optional<MatchMember> findByGroupIdAndUserId(Long groupId, Long userId);
 
-    @Query("SELECT m FROM MatchMember m WHERE m.group.id = :groupId")
+    @Query("SELECT m FROM MatchMember m WHERE m.groupId = :groupId")
     List<MatchMember> findMembersByGroupId(@Param("groupId") Long groupId);
 
     List<MatchMember> findByUserId(Long userId);

@@ -18,9 +18,8 @@ public class MatchMember {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "group_id", nullable = false)
-    private MatchGroup group;
+    @Column(name = "group_id", nullable = false)
+    private Long groupId;
 
     @Column(nullable = false)
     private Long requestId;

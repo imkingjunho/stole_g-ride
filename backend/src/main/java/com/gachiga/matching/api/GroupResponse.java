@@ -1,6 +1,7 @@
 package com.gachiga.matching.api;
 
 import com.gachiga.matching.domain.MatchGroup;
+import com.gachiga.matching.domain.MatchMember;
 import com.gachiga.matching.domain.GroupStatus;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -34,7 +35,7 @@ public class GroupResponse {
         private Integer savingAmount;
     }
 
-    public static GroupResponse from(MatchGroup group) {
+    public static GroupResponse from(MatchGroup group, List<MatchMember> members) {
         return GroupResponse.builder()
             .id(group.getId())
             .hubId(group.getHubId())
@@ -45,7 +46,7 @@ public class GroupResponse {
             .createdAt(group.getCreatedAt())
             .confirmedAt(group.getConfirmedAt())
             .closedAt(group.getClosedAt())
-            .members(group.getMembers().stream()
+            .members(members.stream()
                 .map(m -> MemberInfo.builder()
                     .userId(m.getUserId())
                     .requestId(m.getRequestId())

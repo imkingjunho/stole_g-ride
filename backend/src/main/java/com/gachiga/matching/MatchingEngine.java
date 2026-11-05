@@ -119,7 +119,7 @@ public class MatchingEngine {
     for (int i = 0; i < combination.size(); i++) {
         WaitingRequest req = combination.get(i);
         MatchMember member = MatchMember.builder()
-            .group(saved)
+            .groupId(saved.getId())
             .requestId(req.requestId())
             .userId(req.userId())
             .boardingOrder(i)

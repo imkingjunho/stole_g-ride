@@ -30,22 +30,11 @@ public class MatchGroup {
     private LocalDateTime confirmedAt;
     private LocalDateTime closedAt;
     private boolean estimated;
-
-    @OneToMany(mappedBy = "group", cascade = CascadeType.ALL, fetch = FetchType.EAGER)
-    @Builder.Default
-    private List<MatchMember> members = new ArrayList<>();
-
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
         status = GroupStatus.PENDING;
     }
-
-    public void addMember(MatchMember member) {
-        members.add(member);
-        member.setGroup(this);
-    }
-
     public void confirm() {
         this.status = GroupStatus.CONFIRMED;
         this.confirmedAt = LocalDateTime.now();
