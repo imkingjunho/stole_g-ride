@@ -5,7 +5,6 @@ import com.gachiga.contract.route.RouteProvider;
 import com.gachiga.contract.route.RouteResult;
 import com.gachiga.contract.route.Coordinate;
 import com.gachiga.contract.user.UserPort;
-import com.gachiga.fare.FareCalculator;
 import com.gachiga.matching.domain.MatchCandidate;
 import java.util.*;
 import java.util.stream.Collectors;

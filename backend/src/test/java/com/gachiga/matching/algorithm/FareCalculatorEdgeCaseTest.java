@@ -1,4 +1,4 @@
-package com.gachiga.fare;
+package com.gachiga.matching.algorithm;
 
 import static org.junit.jupiter.api.Assertions.*;
 

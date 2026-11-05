@@ -1,4 +1,4 @@
-package com.gachiga.fare;
+package com.gachiga.matching.algorithm;
 
 import com.gachiga.contract.route.RouteResult;
 import java.util.*;
