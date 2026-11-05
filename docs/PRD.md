@@ -386,7 +386,9 @@ ride_requests                         -- 소유: ride (이승민)
   max_detour_ratio DECIMAL(3,2)       -- 0.10 / 0.20 / 0.30
   solo_distance INT                   -- 단독 직행 거리(m), 캐시
   solo_fare INT                       -- 단독 예상 요금(원), 캐시
+  estimated BOOLEAN                   -- solo_fare 가 카카오가 아닌 추정치인지 (E-03, UI 배지)
   status ENUM('WAITING','MATCHED','CONFIRMED','CANCELLED','EXPIRED','COMPLETED')
+  active_user_id BIGINT UNIQUE        -- 진행 중이면 user_id, 끝나면 NULL. 1인 1건(FR-08)을 DB 가 보장
   version INT                         -- 낙관적 락 (@Version)
   created_at, expires_at DATETIME
 
@@ -419,7 +421,7 @@ chat_messages                         -- 소유: realtime (임승현)
   -- 그룹 종료 또는 3시간 경과 시 스케줄러가 물리 삭제
 ```
 
-**인덱스:** `ride_requests(status, hub_id, depart_at)`, `match_members(user_id)`, `chat_messages(group_id, created_at)`, `refresh_tokens(user_id)`
+**인덱스:** `ride_requests(status, hub_id, depart_at)`, `ride_requests(user_id, status)`, `UNIQUE ride_requests(active_user_id)`, `match_members(user_id)`, `chat_messages(group_id, created_at)`, `refresh_tokens(user_id)`
 
 **Redis 키:** `queue:{hubId}` (Sorted Set, score=희망 출발 시각), `route:{좌표해시}` (경로 캐시, TTL 10분), `verify:{email}` (인증 코드, TTL 10분), `verify:fail:{email}` (실패 횟수, TTL 30분)
 
@@ -637,7 +639,7 @@ frontend/src/
 
 | 파트 | 담당 | 한 줄 정의 | 소유 폴더 | 담당 FR | 비중 |
 |---|---|---|---|---|---|
-| ① 플랫폼·요청 | **이승민** | 뼈대·계약·공통·매칭 요청/대기열·통합 | `backend/…/common/ config/ contract/ ride/`, `resources/application*.yml`, `resources/domain/ride.yml`, 저장소 루트 파일(`build.gradle`, `docker-compose.yml`, `.env.example`, `.gitignore`, `.github/`), `docs/PRD.md`, `docs/api-spec.yaml`, `README.md`, `CLAUDE.md` | FR-07(API), 08, 09(데이터), 10 + Phase 0 + 통합·성능 | ~20% |
+| ① 플랫폼·요청 | **이승민** | 뼈대·계약·공통·매칭 요청/대기열·통합 | `backend/…/common/ config/ contract/ ride/`, `resources/application*.yml`, `resources/domain/ride.yml`, 저장소 루트 파일(`build.gradle`, `docker-compose.yml`, `.env.example`, `.gitignore`, `.github/`), `docs/PRD.md`, `docs/api-spec.yaml`, `docs/traffic-analysis.md`, `README.md`, `CLAUDE.md` | FR-07(API), 08, 09(데이터), 10 + Phase 0 + 통합·성능 | ~20% |
 | ② 매칭·정산·통계 | **서준** | 매칭 엔진, 구간 정산, 그룹 API, 이력·통계, PM | `backend/…/matching/ fare/ stats/`, `resources/domain/matching.yml` | FR-11, 12, 13, 14, 16, 17, 18, 24, 25, 26 | ~20% |
 | ③ 계정·실시간 | **임승현** | 웹메일 인증·JWT·프로필·신고, WebSocket 전부(대기 push·매칭 알림·채팅) | `backend/…/auth/ user/ realtime/`, `resources/domain/auth.yml` | FR-01, 02, 03, 04, 09(push), 12(push), 20, 21, 22, 23 | ~20% |
 | ④ 경로·지도·요청 화면 | **송준호** | 카카오 연동·거점·장소 검색, 지도 컴포넌트, 요청·대기 화면 | `backend/…/route/`, `resources/domain/route.yml`, `frontend/src/features/request/`, `frontend/src/features/map/` | FR-05, 06, 07(UI), 15, 19 + FR-08·09·10 화면 | ~20% |
@@ -782,6 +784,7 @@ chore(contract): RouteResult에 estimated 필드 추가   ← 이승민만
 | `backend/build.gradle`, `backend/src/main/resources/application*.yml` | 의존성·공통 설정 |
 | `docker-compose.yml`, `.env.example`, `.gitignore`, `.github/**` | 인프라·CI |
 | `docs/PRD.md`, `README.md`, `CLAUDE.md` | 팀 문서 |
+| `docs/traffic-analysis.md` | 6개 거점의 교통 분석 기준·근거. 송준호가 데이터 수집·분석, 이승민이 문서 반영, 서준이 매칭·통계 구현 및 튜닝 |
 
 **변경 요청 방법** — 단톡방에 한 줄:
 
@@ -886,8 +889,32 @@ public enum Gender { M, F }
 public enum UserStatus { ACTIVE, SUSPENDED }
 public record UserSummary(Long id, String nickname, Gender gender, UserStatus status) {}
 
-public interface UserPort {
+// status 는 두 port 모두 "지금 기준" — 저장값이 SUSPENDED 여도 suspendedUntil 이 지났으면 ACTIVE (FR-04).
+// user 가 한 메서드로 계산해 UserSummary·AccountProfile·GET /api/users/me 가 같은 답을 낸다.
+public interface UserPort {          // 읽기 전용 — 모든 모듈이 주입받는다
     Optional<UserSummary> findById(Long userId);
+    /** 이미 가입한 주소인지 (FR-01). CanonicalEmail.of 로 비교·저장. 참고값 — 최종 판정은 UserAccountPort.register */
+    boolean existsByEmail(String email);
+}
+
+/** 이메일 정식 형태(trim + Locale.ROOT 소문자). existsByEmail·register·authenticate 와 auth 의 Redis 키
+ *  (verify:{email}·verify:fail:{email})는 모두 이 함수 결과를 쓴다 — 각자 구현하면 어긋난다 */
+public final class CanonicalEmail { public static String of(String raw) {...} }
+
+// 계정 수명주기 — auth 만 부르고 user 만 구현한다 (ArchitectureTest 가 강제). 비밀번호 해시는 user 안에서만
+public record NewAccount(String email, String rawPassword, String nickname, Gender gender,
+                         String department, Integer grade) {}          // 생성자가 email 정식화, toString 은 비밀번호 가림
+public record AccountProfile(Long id, String email, String nickname, Gender gender, String department,
+                             Integer grade, UserStatus status, LocalDateTime suspendedUntil) {}  // = api-spec UserProfile
+
+public interface UserAccountPort {
+    /** 가입 (T1-3). 인증 코드 검증은 auth 가 끝낸 뒤. 이메일·닉네임 중복(경합 포함)·72바이트 초과 비밀번호는 INVALID_INPUT */
+    AccountProfile register(NewAccount account);
+    /** 토큰 재발급(refresh) 응답의 user 를 채운다 (T1-4) */
+    Optional<AccountProfile> findAccountById(Long userId);
+    /** 로그인 검증 (T1-4). 없는 이메일·틀린 비밀번호 모두 empty(구분 안 함) — 없는 이메일도 더미 해시와 비교해
+     *  시간을 맞춘다. 정지 계정도 맞으면 값을 주고 403 판정은 auth 가 status 로 */
+    Optional<AccountProfile> authenticate(String email, String rawPassword);
 }
 
 // ── contract/ride ──────────────────────────────────────────────
@@ -912,8 +939,11 @@ public interface RideRequestPort {
 public record QueueStatus(Long requestId, String status, int remainingSeconds, int candidateCount) {}
 
 public interface QueueStatusPort {
-    /** 사용자의 진행 중 요청 상태. 없으면 empty. realtime 이 5초마다 호출 */
+    /** 사용자 한 명의 진행 중 요청 상태. 없으면 empty. 이벤트 즉시 push 에 쓴다 */
     Optional<QueueStatus> statusOf(Long userId);
+    /** 여러 사용자를 한 번에. 진행 중 요청이 있는 사용자만 키로 들어간다. realtime 5초 주기 push 용
+     *  (realtime 반영 대기 — 임승현). 500명까지 쿼리 2개 (T2-3) — 사람마다 statusOf 를 부르면 사람 수 × 2 */
+    Map<Long, QueueStatus> statusOfAll(Collection<Long> userIds);
 }
 
 // ── contract/matching ──────────────────────────────────────────
@@ -923,6 +953,13 @@ public interface MatchHistoryPort {
 }
 
 // ── contract/auth ──────────────────────────────────────────────
+public interface AccessTokenVerifier {
+    /** Bearer 접두사를 뺀 Access JWT 원문. 서명·필수 만료 시각·형식·양수 Long subject 검증.
+     *  null/공백·유효성 오류는 예외 대신 empty, 성공하면 userId. null 반환 금지.
+     *  토큰 원문·서명 키를 로그/응답에 남기지 않는다. 계정 상태·그룹 인가는 별도 계약으로 확인. */
+    Optional<Long> verify(String accessToken);
+}
+
 /** 컨트롤러 파라미터에 붙이면 현재 사용자 id(Long)가 주입된다. 리졸버 구현은 auth/ 소유 */
 @Target(ElementType.PARAMETER) @Retention(RetentionPolicy.RUNTIME)
 public @interface CurrentUser {}
@@ -934,11 +971,15 @@ public @interface CurrentUser {}
 |---|---|---|
 | `RouteProvider` | 송준호 `route/` | 서준(조합 평가), 이승민(단독 요금 캐시) |
 | `HubPort` | 송준호 `route/` | 서준(출발 좌표), 이승민(요청 검증) |
-| `UserPort` | 임승현 `user/` | 서준(성별 필터), 임승현 `realtime/`(닉네임) |
+| `UserPort` | 임승현 `user/` | 서준(성별 필터), 임승현 `realtime/`(닉네임)·`auth/`(가입 중복 확인), 이승민 `ride/`(이용 제한) |
+| `UserAccountPort`·`CanonicalEmail` | 임승현 `user/` | 임승현 `auth/`(가입·로그인·재발급) — **auth 외 사용 금지** |
 | `RideRequestPort` | 이승민 `ride/` | 서준(대기열 읽기·상태 변경) |
 | `QueueStatusPort` | 이승민 `ride/` | 임승현 `realtime/`(대기 상태 push) |
 | `MatchHistoryPort` | 서준 `matching/` | 임승현 `realtime/`(채팅 인가), `user/`(신고 검증) |
+| `AccessTokenVerifier` | 임승현 `auth/` (구현 대기) | 임승현 `realtime/` (STOMP CONNECT 인증) |
 | `@CurrentUser` 리졸버 | 임승현 `auth/` | 컨트롤러 전부 |
+
+**Access 토큰 검증 계약 반영(2026-10-28):** 이승민이 임승현 T1-8의 요청에 따라 `AccessTokenVerifier` 인터페이스를 추가했다. `auth`의 검증 구현과 `realtime`의 STOMP 연결은 임승현의 후속 작업이다. 계약 추가만으로 STOMP 인증이 완료된 것은 아니다. 구현체는 필수 만료 시각·서명·subject 검증을 모두 적용하고, 토큰 유효성 오류는 `Optional.empty()`로 반환한다. 검증 설정·내부 처리의 장애가 발생해도 연결을 허용하지 않는다. Refresh 토큰 발급/회전과 계정 상태·그룹 멤버십 판정은 이 계약의 범위가 아니다.
 
 ### 14.2 이벤트 (`contract/event/`)
 
@@ -990,12 +1031,16 @@ public record GroupCompleted(Long groupId, List<Long> userIds) {}
 | 항목 | 값 |
 |---|---|
 | 엔드포인트 | `ws://host/ws` (SockJS 미사용) |
-| 인증 | STOMP `CONNECT` 프레임 헤더 `Authorization: Bearer {accessToken}`. 실패 시 연결 거부 |
+| 인증 | STOMP `CONNECT` 프레임 헤더 `Authorization: Bearer {accessToken}`. `realtime`이 접두사를 제거하고 `AccessTokenVerifier.verify`로 검증. 실패 시 연결 거부 |
 | 구독 `/user/queue/status` | 내 대기 상태. 5초마다 + 변경 즉시. 본문 = `QueueStatus` JSON |
 | 구독 `/user/queue/match` | 매칭 알림. `{ "type": "PROPOSED" \| "CONFIRMED" \| "RECALCULATED" \| "DISSOLVED" \| "COMPLETED", "groupId": 17, "message": "…" }` |
 | 구독 `/topic/chat/{groupId}` | 채팅 수신. 그룹 멤버만 구독 가능(서버가 거부). 본문 = `ChatMessage` |
 | 발신 `/app/chat/{groupId}` | `{ "type": "TEXT" \| "QUICK", "content": "…" }` |
 | `ChatMessage` | `{ "id", "groupId", "senderId", "senderNickname", "type": "TEXT"\|"QUICK"\|"SYSTEM", "content", "createdAt" }` |
+
+CONNECT 헤더 누락·형식 오류, 검증 결과 empty 또는 검증 장애 시 연결을 거부한다. 성공한 사용자 ID만 Principal로 설정하며 기본 사용자로 대체하지 않는다. 토큰 원문·서명 키는 로그나 STOMP 오류 응답에 포함하지 않는다. 이후 채팅 구독·송신의 그룹 멤버십은 `MatchHistoryPort`로 별도 확인한다.
+
+**현재 상태(2026-10-28):** 검증 계약은 제공했지만 실제 `auth` 구현·`realtime` 연동은 아직 반영 전이다. `DevStompUserInterceptor`는 local/test 전용이므로 운영 STOMP 인증 완료로 표시하지 않는다. 임승현이 실제 구현으로 교체한 뒤 유효·누락·만료·위조 토큰 연결 결과를 확인한다.
 
 프론트 개발 모드(`VITE_API_MODE=mock`)에서는 `shared/ws`의 가짜 클라이언트가 위 메시지를 타이머로 흘려 준다(오승원).
 
@@ -1008,9 +1053,21 @@ public record GroupCompleted(Long groupId, List<Long> userIds) {}
 | `/login`, `/signup`, `/signup/verify`, `/signup/profile` | 인증 | 오승원 |
 | `/` → `/request` | 매칭 요청 | 송준호 |
 | `/waiting` | 대기 | 송준호 |
-| `/groups/:groupId` | 매칭 성사·정산 상세 | 오승원 |
+| `/groups/:groupId` | 매칭 성사 (지도·분담액·하차 순서) | 오승원 |
+| `/groups/:groupId/fare` | 정산 상세 (구간별 몫·100원 보정 설명) — 2026-09-24 시안 확정으로 추가 | 오승원 |
 | `/groups/:groupId/chat` | 채팅 | 오승원 |
 | `/history`, `/me` | 이력·대시보드·프로필 | 오승원 |
+
+**디자인 기준** (2026-09-24 확정)
+
+- 확정 시안: `frontend/prototype/` (오승원, `13e0f4d`). Stitch 산출물 `toss_mobility_campus_transit` 을 React 로 옮긴 것이다. **토큰의 정본은 시안 `styles.css` 의 `:root`** 다 — 주요 동작 `#1769d4`(brand), 강조 `#3182f6`(accent, 장식용), 절감액 초록 `#087d4c`, 본문 `#191f28`, 보조 `#6b7684`, 선 `#e5e8eb`, 배경 `#f2f4f6`, 카드 흰색, 여백 20px, 최대 폭 440px, 고정 하단 탭, Pretendard(없으면 시스템 한글). DESIGN.md 의 frontmatter 값(`#0059b9` 등)은 본문과도 어긋나므로 쓰지 않는다. 오승원이 이 값을 `frontend/tailwind.config.js` 의 `theme.extend.colors`(brand·accent·saving·ink·muted·line·canvas)로 옮긴다.
+- `frontend/prototype` 은 **미리보기 전용**이다. 서버·지도·인증이 없고 fixtures 로 그리며, CI 는 검사하지 않는다(루트 eslint 가 `prototype/**` 을 무시). 실제 화면은 `frontend/src` 에 만들며, 옮길 때 지킬 것: 타입은 `src/generated/api.d.ts` 만(CLAUDE.md §5), 공통 UI 는 `shared/ui` 하나로(시안의 `shared/ui` 10개를 흡수), 색·간격은 Tailwind 토큰으로 옮기고 수작업 CSS(`styles.css` 2,018줄)는 남기지 않는다, 모바일 우선 360px·터치 44px·글자 최소 12px.
+- 하단 탭은 §14.6 라우트 표대로 **요청·대기·이력·내 정보** 를 유지한다(시안의 동승·채팅 탭은 채택하지 않음 — 그룹·채팅은 성사 뒤에만 의미가 있다). 시안의 탭 스타일만 흡수한다. 정산 상세는 `/groups/:groupId/fare` 하위 라우트로 둔다(아래 표에 추가).
+- 시안에 없는 화면(매칭 요청·대기, 송준호)은 Stitch 원본 이미지 **요청 `_2`, 대기 `_9`** 를 기준으로 같은 토큰·컴포넌트로 만든다. 단 `_2` 의 "혼자 가면 12,400원 · 3인 동승 시 약 4,100원" 사전 안내와 `_9` 의 "매칭 우선순위 높음 · 성사 확률" 배지는 뒷받침하는 API 가 없어 채택하지 않는다(필요하면 계약 변경 요청).
+- **법적 고지는 §2.2 원문 한 가지만** 쓴다: "본 서비스는 동승자 매칭 및 요금 분담 계산만 제공하며, 택시 호출·운송·결제를 중개하지 않습니다." 시안의 `LegalNotice` 가 이 문구이므로 본 앱 `Layout` footer 를 그것으로 교체하고, `Layout` 밖의 인증 화면(`/login`, `/signup*`)에도 둔다. Stitch·DESIGN.md 의 "이동 중개 도구", "직접 송금하여 정산" 표현은 쓰지 않는다.
+- Stitch 원본의 PRD 범위 밖 요소는 채택하지 않는다: 연락처 마스킹 표시 `010-••••-1234`(연락처를 받지 않는다, FR-03), "학생증 인증" 태그(웹메일 인증이다), 잔여 좌석·예약 표현(배치 매칭이라 좌석이 없다).
+- 시안이 요구해서 계약에 추가한 것(2026-09-24): `GroupMember.breakdown[]`·`roundingAdjustment`(정산 상세의 구간별 몫·100원 보정, 서준 `fare`), `GroupMember.destLat/destLng`(지도 하차 마커, 서준), `GET /api/history?yearMonth`(이력 월 필터, 서준 `stats`). 시안의 "예상 분담액 사전 안내"·"매칭 확률"은 추가하지 않았다.
+- 본 앱 화면이 모두 옮겨진 뒤 `frontend/prototype` 은 삭제한다(두 코드가 어긋나는 것을 막기 위해). 그때까지 시안을 고치면 본 앱에도 반영한다.
 
 **공유 모듈** (`src/shared/`, 오승원 소유. Phase 0에서 초기 버전 제공)
 - `api/client.ts` — `openapi-fetch` 클라이언트, 토큰 헤더, 401 시 refresh 후 재시도
@@ -1026,6 +1083,7 @@ export interface Stop { order: number; kind: 'PICKUP' | 'DROPOFF'; position: Lat
 export interface RouteMapProps {
   sections: { path: LatLng[] }[];   // 그룹 상세 응답의 route.sections 그대로
   stops: Stop[];                    // 탑승 1개 + 하차 N개
+  estimated?: boolean;              // 기본 false. true면 추정 경로를 점선(dash)으로 표시
   className?: string;
 }
 export function RouteMap(props: RouteMapProps): JSX.Element;
@@ -1036,6 +1094,12 @@ export interface DestinationPickerProps {
 }
 export function DestinationPicker(props: DestinationPickerProps): JSX.Element;
 ```
+
+**추정 경로 지도 계약 반영(2026-10-29):** 오승원이 `frontend/PROGRESS.md`에서 요청한 `estimated?: boolean`을 추가한다. 선택 속성이므로 생략하거나 `false`면 기존과 같은 실선(`strokeStyle='solid'`), `true`면 모든 경로 구간을 점선(`strokeStyle='dash'`)으로 표시한다. 기존 호출부는 변경 없이 사용할 수 있다.
+
+- **제공 — 송준호:** `features/map/RouteMap.tsx`에서 기본값 `false`와 실선/점선 전환을 구현한다. 같은 지도에서 값이 바뀌어도 경로선이 갱신되어야 한다.
+- **사용 — 오승원:** `GroupRouteMap`이 서버 응답의 `group.estimated`를 전달한다. `DemoPage`의 샘플 경로도 같은 컴포넌트를 통해 샘플의 `estimated` 값을 전달한다. 기존 추정 경로 안내 문구는 계속 표시한다.
+- **현재 상태:** 이승민의 문서 계약 반영은 완료했으며, 송준호의 지도 구현과 오승원의 값 전달·실선/점선 회귀 검사는 아직 후속 작업이다. 이번 계약 추가를 프론트 구현 완료로 기록하지 않는다.
 
 ### 14.7 Phase 0 스텁 목록 — 누가 무엇으로 바꾸나
 
@@ -1126,14 +1190,26 @@ export function DestinationPicker(props: DestinationPickerProps): JSX.Element;
 
 | 지표 | 목표 | 측정 방법 | 담당 |
 |---|---|---|---|
-| 매칭 성사율 | ≥ 60% | 성사 그룹 수 / 전체 요청 수 (베타 실측) | 송준호 |
+| 매칭 성사율 | ≥ 60% | 같은 요청 생성 코호트의 고유 성사 요청 수 / 전체 요청 수 (베타 실측, 아래 기준) | 송준호 |
 | 평균 요금 절감률 | ≥ 40% | (단독 요금 − 분담액) / 단독 요금 | 송준호 |
-| 평균 매칭 대기시간 | ≤ 5분 | 요청 생성 ~ 그룹 확정 | 서준 |
+| 평균 매칭 대기시간 | ≤ 5분 | 성사 요청별 생성 ~ 최초 그룹 확정 시간의 산술평균 | 서준 |
 | 정산 정확도 | 오차 0원 | 자동화 테스트 | 서준 |
 | API 응답 P95 | < 500ms | k6 부하 테스트 | 이승민 |
 | 베타 만족도 | ≥ 4.0 / 5.0 | 설문 (30명) | 서준·오승원 |
 | 테스트 커버리지 | `matching`·`fare` 80% | JaCoCo | 서준 |
 | **main 건강도** | CI 빨간 상태 24시간 이상 방치 0회 | GitHub Actions 이력 | 전원 |
+
+**성사율 집계 기준:** 거점·요청 생성 시간대로 묶은 실제 운영 요청의 고유 `requestId`를 분모로, 그중 최초 그룹 확정에 도달한 고유 요청 수를 분자로 센다. 취소·만료 요청은 분모에 포함하고, 검증 실패·데모·부하 테스트 요청은 제외한다. 재매칭·재확정은 같은 요청을 중복 계산하지 않는다. 요청 4건이 2인 그룹 2개로 모두 확정되면 성사율은 100%다. 분모 0은 미산출, 미결 요청이 남은 집계는 기준 시각·미결 건수와 함께 잠정치로 표시한다. 성사 후 해체·취소·완료는 별도 결과 지표로 다룬다.
+
+**대기시간 집계 기준:** 성사 요청의 평균을 목표와 비교하고 중앙값은 보조 지표로 보고한다. 미성사 요청의 대기는 이 평균에 포함되지 않으므로 성사율·표본 수도 함께 제시한다.
+
+### 16.1 교통 분석과 튜닝 근거
+
+- 세부 수집·전처리·지표·실험 기준은 [광주 시간대별 교통 분석 기준](traffic-analysis.md)을 따른다. 2026-10-28 현재 공식 데이터 목록과 분석 기준을 정리한 상태이며 원문 수집·실측 피크 분석은 미완료다.
+- 송준호 T3-1이 외부 데이터 수집·분석, T3-2가 베타 지표 산출, 서준이 `matching`·`stats` 구현 및 튜닝을 맡고, 이승민 T2-4가 공용 문서·계약 반영을 담당한다.
+- 외부 차량 교통량·승하차량은 수요의 보조 지표다. 내부 매칭 성사율을 대신할 수 없으며, PRD §10의 8~9시 동시 200명은 부하 테스트 가정이지 교통 실측 결론이 아니다.
+- 현재 최초 확정 시각·요청↔그룹 이력 계측은 준비 전이다. 통계 구현 전에 요청 코호트·중복 처리·테스트 데이터 제외 및 API의 `matchedCount`·0건·잠정치 표현을 합의한다. 문서 반영만으로 API·이벤트·DB 계약을 변경하지 않는다.
+- 분석 근거로 튜닝하더라도 사용자가 선택한 대기·우회 상한과 §5의 전원 절감 조건은 유지한다. 원문이 없는 상태에서 설정을 변경하거나 분석 작업을 완료 처리하지 않는다.
 
 ---
 
@@ -1164,8 +1240,10 @@ export function DestinationPicker(props: DestinationPickerProps): JSX.Element;
 
 ## 부록 B. 데이터 소스
 
-- 국토교통부 TIMS(택시운행정보관리시스템) — 격자별 영업통계, 노드링크 통행량
-- 광주광역시 빅데이터 통합플랫폼 — 교통·유동인구·대중교통 승하차 데이터
+- [교통 분석 문서](traffic-analysis.md) §3 — 공식 출처·관측 기간·공간/시간 단위·수집 상태를 관리하는 기준 목록. 현재 원문 수집 전.
+- [시내버스 노선별 승하차 인원](https://www.data.go.kr/data/15088456/fileData.do), [광주교통공사 역일시간대별 승하차량](https://www.data.go.kr/data/15060048/fileData.do) — 정류장·역 주변 이동량의 보조 지표. 도시철도 자료는 KTX 이용량이 아님.
+- [시간대별 교통량](https://www.data.go.kr/data/15158378/fileData.do) — 2024년 4개 교차로 조사, 일부 공개. 6개 거점 전체·최신 연속 관측을 대표하지 않음.
+- [TIMS 공식 안내](https://main.kotsa.or.kr/portal/contents.do?menuCode=01080600) — 공무원·운수사 대상, 대국민 서비스 없음. 일반 공개 수집원으로 전제하지 않음.
 
 ## 부록 C. v1.0 → v2.0 변경 사항
 

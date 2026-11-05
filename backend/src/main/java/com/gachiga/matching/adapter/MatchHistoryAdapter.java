@@ -27,6 +27,6 @@ public class MatchHistoryAdapter implements MatchHistoryPort {
             .map(group -> group.getMembers().stream()
                 .map(member -> member.getUserId())
                 .toList())
-            .orElse(null);
+            .orElse(List.of());
     }
 }

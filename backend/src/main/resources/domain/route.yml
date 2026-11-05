@@ -1,0 +1,8 @@
+# route 모듈 설정 — 소유: 송준호 (PRD §9.2)
+# application.yml 에는 쓰지 않는다 (CLAUDE.md §5).
+gachiga:
+  route:
+    cache-ttl-seconds: 600
+    max-calls-per-tick: 10
+    tick-window-seconds: 30
+    daily-call-limit: 1000

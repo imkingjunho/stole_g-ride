@@ -1,26 +1,54 @@
+# 전 프로파일 공통 설정. 환경별 값은 application-{profile}.yml 에 둔다.
 spring:
   application:
     name: gachiga
   profiles:
+    # 기본은 로컬. 운영은 SPRING_PROFILES_ACTIVE=prod 로 덮어쓴다
     default: local
+  # 모듈별 설정은 각 소유자가 자기 파일에만 쓴다 (PRD §9.2).
+  # 파일이 없어도 기동되도록 optional 로 둔다 — 아직 안 만든 사람이 있어도 남이 막히지 않는다.
+  config:
+    import:
+      - optional:classpath:domain/ride.yml
+      - optional:classpath:domain/matching.yml
+      - optional:classpath:domain/auth.yml
+      - optional:classpath:domain/route.yml
   jpa:
     hibernate:
-      ddl-auto: create
+      # 엔티티가 곧 스키마다 (PRD §7.3). Flyway 같은 마이그레이션 도구는 쓰지 않는다.
+      # 각자 자기 모듈 엔티티만 만들면 테이블이 자동 생성된다.
+      # 주의: 컬럼 삭제·이름 변경·타입 변경은 반영되지 않는다. 그런 변경을 했으면 단톡방에 공지하고
+      #       전원이 docker compose down -v && docker compose up -d --wait 로 DB 를 초기화한다.
+      # 운영(prod)은 validate 로 덮어쓴다 — application-prod.yml 참고.
+      ddl-auto: update
+    # 트랜잭션 밖 지연 로딩을 막아 N+1 을 조기에 드러낸다
     open-in-view: false
     properties:
       hibernate:
         format_sql: true
         jdbc:
           time_zone: Asia/Seoul
-  jackson:
-    time-zone: Asia/Seoul
-    serialization:
-      write-dates-as-timestamps: false
+  data:
+    redis:
+      # Redis 가 죽었을 때 요청 응답이 같이 멈추지 않도록 짧게 자른다.
+      # 대기열 갱신은 커밋 뒤(AFTER_COMMIT)에 같은 스레드에서 일어나므로, 여기서 오래 기다리면
+      # 이미 성공한 요청의 응답까지 늦어진다. Lettuce 기본값은 60초라 그대로 두면 안 된다.
+      # 대기열은 색인일 뿐이고 어긋나면 RideQueue.rebuild 로 복구한다.
+      timeout: 1s
+      connect-timeout: 1s
 
 server:
   port: ${SERVER_PORT:8080}
   shutdown: graceful
 
+# 브라우저에서 우리 API 를 부를 수 있는 출처.
+# REST(config/CorsConfig)와 WebSocket 핸드셰이크(realtime/WebSocketConfig)가 이 한 줄을 함께 읽는다.
+# 배포에서는 GACHIGA_CORS_ALLOWED_ORIGINS 환경변수로 덮어쓴다 (docker-compose.prod.yml 이 https://도메인 을 넣는다).
+gachiga:
+  cors:
+    allowed-origins: ${GACHIGA_CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
+
+# 제목·인증 UI 등 상세 설정은 config/SwaggerConfig 에 있다
 springdoc:
   swagger-ui:
     path: /swagger-ui.html

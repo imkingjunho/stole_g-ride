@@ -90,19 +90,32 @@ docker compose up -d --wait   # MySQL + Redis. Docker Desktop이 켜져 있어�
 ```
 
 **백엔드**
+
+루트 `.env`는 Docker Compose가 읽으며 `bootRun`은 자동으로 읽지 않습니다. 로그인까지 확인하려면 실행 셸이나
+IDE 환경변수에 `JWT_SECRET`(32바이트 이상)을 설정하세요. 아래는 로컬 테스트용 생성 예시입니다.
+같은 키를 유지해야 기존 Access 토큰이 계속 유효하며 운영 키는 별도로 관리합니다.
+
 ```bash
+export JWT_SECRET="$(openssl rand -hex 32)"   # macOS/Linux 로컬 예시
 cd backend
 ./gradlew bootRun             # Windows: gradlew.bat bootRun
 ```
 → `http://localhost:8080/swagger-ui.html` 열리면 성공 ✅
 
-**프론트엔드** (Phase 0 이후)
+**프론트엔드**
 ```bash
 cd frontend
+cp .env.example .env          # 처음 한 번만 (Windows: copy .env.example .env)
 npm install                   # 처음 한 번만
 npm run dev
 ```
-→ `http://localhost:5173` 열리면 성공 ✅ (기본은 가짜 서버(MSW) 모드. 실서버 연결은 `.env`의 `VITE_API_MODE=real`)
+→ `http://localhost:5173` 열리면 성공 ✅
+
+기본은 **가짜 서버(MSW) 모드**라 백엔드를 켜지 않아도 모든 화면이 돕니다. 실서버에 붙이려면 `frontend/.env`의 `VITE_API_MODE=real`로 바꾸세요. (루트 `.env`는 Docker용이라 다른 파일입니다.)
+
+백엔드 인증부터 요청 생성·취소까지 한 번에 검사하려면 [로컬 통합 검사 안내](deploy/scripts/README.md)를 따른다.
+테스트 전용 계정으로 13개 REST 항목을 확인하며, 기존 진행 요청이 있으면 변경 없이 중단한다.
+CI는 이 스크립트와 부하 스크립트의 회귀 검사를 외부 서비스 없이 자동 실행한다.
 
 ---
 
@@ -233,7 +246,7 @@ docker compose down -v && docker compose up -d --wait     # DB 초기화
 
 | 이름 | 파트 | 내 폴더 (여기만 수정) |
 |---|---|---|
-| **이승민** | ① 플랫폼·요청 | `backend/…/common/ config/ contract/ ride/`, `application*.yml`, `domain/ride.yml`, 루트 파일(`build.gradle` `docker-compose.yml` `.env.example` `.github/`), `docs/PRD.md` `docs/api-spec.yaml` `README.md` `CLAUDE.md` |
+| **이승민** | ① 플랫폼·요청 | `backend/…/common/ config/ contract/ ride/`, `application*.yml`, `domain/ride.yml`, 루트 파일(`build.gradle` `docker-compose.yml` `.env.example` `.github/` `.claude/`), `docs/PRD.md` `docs/api-spec.yaml` `docs/traffic-analysis.md` `README.md` `CLAUDE.md` |
 | **서준** | ② 매칭·정산·통계 | `backend/…/matching/ fare/ stats/`, `domain/matching.yml` |
 | **임승현** | ③ 계정·실시간 | `backend/…/auth/ user/ realtime/`, `domain/auth.yml` |
 | **송준호** | ④ 경로·지도·요청 화면 | `backend/…/route/`, `domain/route.yml`, `frontend/src/features/request/`, `frontend/src/features/map/` |
@@ -274,8 +287,14 @@ docker compose down -v && docker compose up -d --wait     # DB 초기화
 | `README.md` | 이 문서 | 막힐 때마다 |
 | `docs/PRD.md` | 제품 명세 + 파트 분배(§12) + 협업 방식(§13) + 모듈 간 계약(§14) + 로드맵(§15) | "이 기능 뭐 만드는 거지?", "이건 누구 담당?" |
 | `docs/roles/내이름.md` | **내 작업 체크리스트** | 매번 작업 시작할 때 |
-| `docs/api-spec.yaml` | API 계약 (Phase 0 이후) | 프론트-백엔드 연동할 때 |
+| `docs/api-spec.yaml` | API 계약 (OpenAPI) | 프론트-백엔드 연동할 때. 프론트는 `npm run gen:api`로 타입 생성 |
 | `CLAUDE.md` | AI 규칙 | 볼 일 없음 (AI가 알아서 읽음) |
+| `docs/schema.sql` | 실제 DB 스키마(DDL). 베타 서버는 이걸로 테이블을 만들고 `validate` 로 뜬다 | 엔티티를 바꿨을 때 (이승민이 다시 뽑는다) |
+| `docs/deploy.md` | 베타 배포 절차 — 서버 준비, `.env`, 프론트 빌드, `docker compose -f docker-compose.prod.yml` | 배포·업데이트·되돌리기 할 때 |
+| [docs/integration-check.md](docs/integration-check.md) | 최신 main 통합 점검 결과·검증 범위·담당자 후속 요청 | 배포 전, 팀원 작업을 연결할 때 |
+| `docs/performance.md` | 부하 테스트 결과와 개선 전후 수치 | 발표 자료 만들 때, 느려졌다 싶을 때 |
+| [docs/traffic-analysis.md](docs/traffic-analysis.md) | 광주 6개 거점의 교통·승하차 분석 기준, 공식 데이터 출처, 성사율·대기시간 정의. 원문 수집·실측 분석 전 | 송준호가 데이터를 수집·분석하고 서준이 매칭을 튜닝할 때. 공용 문서 반영은 이승민 |
+| `load/` | k6 부하 테스트 스크립트와 실행 방법 | 성능을 다시 잴 때 |
 
 ---
 
@@ -305,6 +324,7 @@ docker compose down -v && docker compose up -d --wait     # DB 초기화
 □ 1단계 프로그램 전부 설치
 □ git config로 내 이름 등록 (docs/roles/ 파일명과 동일하게)
 □ clone → docker compose up → 백엔드 실행 성공 (Swagger 확인)
+□ cd frontend → cp .env.example .env → npm install → npm run dev → 6개 화면 클릭 (백엔드 없이도 됩니다)
 □ docs/PRD.md §12(내 파트)·§13(올리는 법)·§14(계약) 읽기
 □ docs/roles/내이름.md 읽고 Phase 0 항목 진행
 □ 첫 push 연습: docs/roles/내이름.md 의 "환경 세팅 완료" 체크박스를 [x]로 바꿔 2단계 ⑤ 순서대로 main에 올려 보기

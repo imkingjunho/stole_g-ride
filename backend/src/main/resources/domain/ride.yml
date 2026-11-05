@@ -1,0 +1,34 @@
+# ride 모듈 설정 — 소유: 이승민 (PRD §9.2)
+#
+# 여기에는 gachiga.ride.* 아래에만 쓴다. application.yml 에는 쓰지 않는다 (CLAUDE.md §5).
+# application.yml 의 spring.config.import 가 이 파일을 읽는다.
+#
+# 다른 모듈 담당자는 domain/{자기모듈}.yml 에 같은 방식으로 쓰면 된다.
+gachiga:
+  ride:
+    # 사용자가 고를 수 있는 최대 대기시간(분). PRD FR-07
+    allowed-max-wait-minutes: [5, 10, 15, 20]
+    # 화면에서 미리 선택돼 있는 값(분). PRD §3.2 시나리오
+    default-max-wait-minutes: 10
+    # 사용자가 고를 수 있는 최대 우회율. PRD FR-07
+    allowed-detour-ratios: [0.10, 0.20, 0.30]
+    # 거점에서 목적지까지 이보다 가까우면 요청을 거절한다 (REQUEST_TOO_SHORT). PRD E-08
+    min-distance-meters: 500
+    # 만료가 이만큼도 안 남은 요청은 새 그룹에 넣지 않는다. PRD E-04
+    match-cutoff-seconds: 30
+    # 만료 처리 스케줄러가 도는 주기(초). PRD §9.2
+    expiry-interval-seconds: 30
+    # 기동할 때 DB 기준으로 Redis 대기열을 다시 만들지. 테스트(application-test.yml)는 끈다 —
+    # 켜 두면 ./gradlew build 가 개발용 Redis 의 대기열을 지운다
+    rebuild-queue-on-startup: true
+    # 데모 시뮬레이터 (T2-1, local 프로파일 전용). POST /api/dev/simulate
+    simulator:
+      # 한 번에 넣을 수 있는 최대 건수
+      max-count: 50
+      # 사용자 id 를 몇 개까지 시도해 볼지. 이만큼 시도해도 모자라면 멈춘다
+      user-scan-limit: 200
+      # 거점~가상 목적지 거리(m). 요청 최소 거리(min-distance-meters)보다 넉넉히 잡는다
+      min-distance-meters: 1500
+      max-distance-meters: 7000
+      # 목적지를 몰아 뿌릴 방향 갈래 수. 적을수록 경로가 겹쳐 매칭이 잘 난다
+      corridors: 3
