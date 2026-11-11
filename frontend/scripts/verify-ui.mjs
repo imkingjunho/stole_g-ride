@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 const require = createRequire(import.meta.url);
 const { chromium } = require(
@@ -442,6 +442,332 @@ try {
     await page.getByRole('button', { name: '탑승 완료', exact: true }).click();
     await page.getByRole('button', { name: '탑승 완료 확인' }).click();
     await page.waitForURL('**/history');
+  });
+  await check('그룹 응답 계약 오류·내 정보 위조 방지·복구', async () => {
+    await demo();
+    await page.evaluate(async () => {
+      window.__groupFetch = window.fetch;
+      window.__groupMode = 'bare';
+      window.fetch = async (input, init) => {
+        const url = typeof input === 'string' ? input : input.url;
+        if (new URL(url).pathname === '/api/groups/17') {
+          const { mockState } = await import('/src/shared/mocks/state.ts');
+          const group = structuredClone(mockState.group);
+          if (window.__groupMode === 'bare') {
+            // main GroupResponse의 현재 형식: ApiResponse·hub·route·isMe 등이 빠져 있다.
+            return Response.json({
+              id: group.groupId,
+              hubId: group.hub.id,
+              status: group.status,
+              totalFare: group.totalFare,
+              members: group.members.map((m) => ({ userId: m.userId, shareAmount: m.shareAmount })),
+            });
+          }
+          if (window.__groupMode === 'status') group.status = ['CONFIRMED'];
+          if (window.__groupMode === 'member') group.members.find((m) => m.isMe).userId = 999;
+          return Response.json({ success: true, data: group, error: null });
+        }
+        return window.__groupFetch(input, init);
+      };
+    });
+    try {
+      await navigate('/me');
+      await navigate('/groups/17');
+      await page.getByRole('alert').filter({ hasText: '동승 정보를 확인하지 못했어요.' }).waitFor();
+      assert.equal(await page.getByRole('button', { name: '탑승 완료', exact: true }).count(), 0);
+      await page.evaluate(() => {
+        window.__groupMode = 'status';
+      });
+      await page.getByRole('button', { name: '다시 시도', exact: true }).click();
+      await page.getByRole('alert').filter({ hasText: '동승 정보를 확인하지 못했어요.' }).waitFor();
+      await page.evaluate(() => {
+        window.__groupMode = 'member';
+      });
+      await page.getByRole('button', { name: '다시 시도', exact: true }).click();
+      await page.waitForTimeout(200);
+      await page.getByRole('alert').filter({ hasText: '동승 정보를 확인하지 못했어요.' }).waitFor();
+      assert.equal(await page.getByRole('link', { name: '동승자와 채팅하기' }).count(), 0);
+    } finally {
+      await page.evaluate(() => {
+        window.fetch = window.__groupFetch;
+        delete window.__groupFetch;
+        delete window.__groupMode;
+      });
+    }
+    await page.getByRole('button', { name: '다시 시도', exact: true }).click();
+    await page.getByRole('heading', { name: '동승이 성사됐어요!' }).waitFor();
+  });
+  await check('비구성원·잘못된 그룹 주소에서 채팅 구독과 조회 차단', async () => {
+    await page.evaluate(async () => {
+      const { stompClient } = await import('/src/shared/ws/stompClient.ts');
+      window.__groupSubscribe = stompClient.subscribe.bind(stompClient);
+      window.__groupSubscriptions = [];
+      stompClient.subscribe = (destination, handler) => {
+        if (destination.startsWith('/topic/chat/')) window.__groupSubscriptions.push(destination);
+        return window.__groupSubscribe(destination, handler);
+      };
+      window.__groupFetch = window.fetch;
+      window.__messageReads = 0;
+      window.fetch = (input, init) => {
+        const url = typeof input === 'string' ? input : input.url;
+        const path = new URL(url).pathname;
+        if (path === '/api/groups/999/messages') window.__messageReads++;
+        if (path === '/api/groups/999')
+          return Promise.resolve(
+            Response.json(
+              {
+                success: false,
+                data: null,
+                error: { code: 'GROUP_NOT_MEMBER', message: '그룹 구성원이 아닙니다.' },
+              },
+              { status: 403 },
+            ),
+          );
+        return window.__groupFetch(input, init);
+      };
+    });
+    try {
+      await navigate('/groups/999/chat');
+      await page
+        .getByRole('alert')
+        .filter({ hasText: '이 동승 그룹에 접근할 수 없어요.' })
+        .waitFor();
+      assert.deepEqual(await page.evaluate(() => window.__groupSubscriptions), []);
+      assert.equal(await page.evaluate(() => window.__messageReads), 0);
+      assert.equal(await page.getByLabel('메시지', { exact: true }).count(), 0);
+      await navigate('/groups/not-a-number/chat');
+      await page.getByRole('alert').filter({ hasText: '동승 정보를 확인하지 못했어요.' }).waitFor();
+      assert.deepEqual(await page.evaluate(() => window.__groupSubscriptions), []);
+    } finally {
+      await page.evaluate(async () => {
+        const { stompClient } = await import('/src/shared/ws/stompClient.ts');
+        stompClient.subscribe = window.__groupSubscribe;
+        window.fetch = window.__groupFetch;
+        delete window.__groupSubscribe;
+        delete window.__groupFetch;
+      });
+    }
+  });
+  await check('완료 알림 뒤 채팅 내역·입력 제거', async () => {
+    await demo();
+    await page.getByRole('link', { name: '동승자와 채팅하기' }).click();
+    await page.getByLabel('메시지', { exact: true }).fill('완료 후에는 숨겨질 대화');
+    await page.getByRole('button', { name: '보내기', exact: true }).click();
+    await page.getByText('완료 후에는 숨겨질 대화', { exact: true }).waitFor();
+    await page.evaluate(async () => {
+      const { mockState, notifyMatch } = await import('/src/shared/mocks/state.ts');
+      mockState.group.status = 'COMPLETED';
+      mockState.messages = [];
+      notifyMatch('COMPLETED', '탑승을 완료했어요.');
+    });
+    await page.getByText('대화가 종료되어 채팅 내역을 표시하지 않아요.', { exact: true }).waitFor();
+    assert.equal(await page.getByText('완료 후에는 숨겨질 대화', { exact: true }).count(), 0);
+    assert.equal(await page.getByLabel('메시지', { exact: true }).count(), 0);
+  });
+  await check('정산 재조회 실패 시 과거 금액 숨김·재시도', async () => {
+    await demo();
+    await navigate('/groups/17/fare');
+    await page.getByRole('heading', { name: '내 요금, 이렇게 나눴어요' }).waitFor();
+    await page.evaluate(() => {
+      window.__groupFetch = window.fetch;
+      window.fetch = (input, init) => {
+        const url = typeof input === 'string' ? input : input.url;
+        if (new URL(url).pathname === '/api/groups/17')
+          return Promise.resolve(
+            Response.json(
+              {
+                success: false,
+                data: null,
+                error: { code: 'INTERNAL_ERROR', message: '정산 확인 테스트 오류' },
+              },
+              { status: 500 },
+            ),
+          );
+        return window.__groupFetch(input, init);
+      };
+    });
+    try {
+      await navigate('/me');
+      await navigate('/groups/17/fare');
+      await page.getByRole('alert').filter({ hasText: '정산 확인 테스트 오류' }).waitFor();
+      assert.equal(
+        await page.getByRole('heading', { name: '내 요금, 이렇게 나눴어요' }).count(),
+        0,
+      );
+    } finally {
+      await page.evaluate(() => {
+        window.fetch = window.__groupFetch;
+        delete window.__groupFetch;
+      });
+    }
+    await page.getByRole('button', { name: '다시 시도', exact: true }).click();
+    await page.getByRole('heading', { name: '내 요금, 이렇게 나눴어요' }).waitFor();
+  });
+  await check('그룹 이동 뒤 늦은 완료 응답으로 화면 이동 방지', async () => {
+    await demo();
+    await page.evaluate(() => {
+      window.__groupFetch = window.fetch;
+      window.fetch = (input, init) => {
+        const url = typeof input === 'string' ? input : input.url;
+        if (new URL(url).pathname === '/api/groups/17/complete')
+          return new Promise((resolve) => {
+            window.__releaseComplete = () =>
+              resolve(Response.json({ success: true, data: null, error: null }));
+          });
+        return window.__groupFetch(input, init);
+      };
+    });
+    try {
+      await page.getByRole('button', { name: '탑승 완료', exact: true }).click();
+      await page.getByRole('button', { name: '탑승 완료 확인', exact: true }).click();
+      await page.waitForFunction(() => typeof window.__releaseComplete === 'function');
+      await navigate('/groups/999');
+      await page.getByRole('alert').filter({ hasText: '동승 정보를 찾을 수 없어요.' }).waitFor();
+      await page.evaluate(() => window.__releaseComplete());
+      await page.waitForTimeout(300);
+      assert.ok(page.url().endsWith('/groups/999'));
+    } finally {
+      await page.evaluate(() => {
+        window.fetch = window.__groupFetch;
+        delete window.__groupFetch;
+        delete window.__releaseComplete;
+      });
+    }
+  });
+  await check('수락 만료 응답 후 최신 해체 상태 재조회', async () => {
+    await demo(true);
+    await page.evaluate(() => {
+      window.__groupFetch = window.fetch;
+      window.fetch = async (input, init) => {
+        const url = typeof input === 'string' ? input : input.url;
+        if (new URL(url).pathname === '/api/groups/17/accept') {
+          const { mockState } = await import('/src/shared/mocks/state.ts');
+          mockState.group.status = 'DISSOLVED';
+          return Response.json(
+            {
+              success: false,
+              data: null,
+              error: { code: 'MATCH_EXPIRED', message: '수락 시간이 지났어요.' },
+            },
+            { status: 410 },
+          );
+        }
+        return window.__groupFetch(input, init);
+      };
+    });
+    try {
+      await page.getByRole('button', { name: '수락', exact: true }).click();
+      await page.getByRole('heading', { name: '동승 그룹이 해체됐어요' }).waitFor();
+      assert.equal(await page.getByRole('button', { name: '수락', exact: true }).count(), 0);
+    } finally {
+      await page.evaluate(() => {
+        window.fetch = window.__groupFetch;
+        delete window.__groupFetch;
+      });
+    }
+  });
+  await check('목 시연 체크리스트·기록 내보내기·초기화', async () => {
+    await navigate('/dev/demo');
+    await page.getByRole('heading', { name: '발표 시연 리허설' }).waitFor();
+    await page.getByRole('button', { name: '목 리허설 새로 시작', exact: true }).click();
+    await page.getByRole('status').filter({ hasText: '확인한 시연 항목 0/11' }).waitFor();
+    assert.equal(await page.getByRole('button', { name: '알림 닫기', exact: true }).count(), 0);
+    await page.getByLabel('1. 요청 작성 확인', { exact: true }).check();
+    await page.getByRole('status').filter({ hasText: '확인한 시연 항목 1/11' }).waitFor();
+    await navigate('/me');
+    await navigate('/dev/demo');
+    assert.ok(await page.getByLabel('1. 요청 작성 확인', { exact: true }).isChecked());
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('button', { name: '리허설 기록 다운로드' }).click(),
+    ]);
+    const report = JSON.parse(await readFile(await download.path(), 'utf8'));
+    assert.equal(report.scope, 'MOCK_REHEARSAL');
+    assert.equal(report.actualServerVerified, false);
+    assert.equal(report.results.filter((item) => item.checked).length, 1);
+    assert.equal(report.results.length, 11);
+    assert.ok(!JSON.stringify(report).includes('accessToken'));
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await page.screenshot({ path: `${output}/rehearsal-checklist.png`, fullPage: true });
+    await page.getByRole('button', { name: '목 리허설 새로 시작', exact: true }).click();
+    await page.getByRole('status').filter({ hasText: '확인한 시연 항목 0/11' }).waitFor();
+    assert.ok(
+      await page.evaluate(
+        async () =>
+          !!(await import('/src/shared/stores/authStore.ts')).useAuthStore.getState().accessToken,
+      ),
+    );
+  });
+  await check('시연 버튼으로 요청·대기·수락·정산·채팅·완료 재현', async () => {
+    const run = async (name) => {
+      await navigate('/dev/demo');
+      await page.getByRole('button', { name: `${name} 연습`, exact: true }).click();
+    };
+    await run('요청 작성');
+    await page.waitForURL('**/request');
+    await run('대기·취소');
+    await page.getByRole('heading', { name: '함께 갈 사람을 찾고 있어요' }).waitFor();
+    await page.getByRole('button', { name: '요청 취소', exact: true }).click();
+    await page.waitForURL('**/request');
+    await run('제안 수락');
+    await page.getByRole('heading', { name: '동승 제안이 도착했어요' }).waitFor();
+    await page.getByRole('button', { name: '수락', exact: true }).click();
+    await page.getByRole('heading', { name: '동승이 성사됐어요!' }).waitFor();
+    await run('요금 분담');
+    await page.getByRole('heading', { name: '내 요금, 이렇게 나눴어요' }).waitFor();
+    await run('채팅·신고');
+    await page.getByLabel('메시지', { exact: true }).fill('시연 연습 메시지');
+    await page.getByRole('button', { name: '보내기', exact: true }).click();
+    await page.getByRole('log').getByText('시연 연습 메시지', { exact: true }).waitFor();
+    await run('탑승 완료');
+    await page.getByRole('button', { name: '탑승 완료', exact: true }).click();
+    await page.getByRole('button', { name: '탑승 완료 확인', exact: true }).click();
+    await page.waitForURL('**/history');
+    await page.getByRole('link', { name: '시연 체크리스트로 돌아가기' }).click();
+    await page.getByRole('status').filter({ hasText: '확인한 시연 항목 0/11' }).waitFor();
+  });
+  await check('시연 버튼으로 거절·재계산·점선·오류 복구·목 갱신 재현', async () => {
+    const run = async (name) => {
+      await navigate('/dev/demo');
+      await page.getByRole('button', { name: `${name} 연습`, exact: true }).click();
+    };
+    await run('거절·재대기');
+    await page.getByRole('button', { name: '거절', exact: true }).click();
+    await page.waitForURL('**/waiting');
+    await page.getByRole('heading', { name: '함께 갈 사람을 찾고 있어요' }).waitFor();
+    await run('재계산·재동의');
+    await page.getByRole('heading', { name: '동승 제안이 도착했어요' }).waitFor();
+    await page.getByRole('button', { name: '목 재계산 알림 보내기' }).click();
+    await page.getByText('9,700원 → 9,600원', { exact: true }).waitFor();
+    assert.ok(
+      await page.evaluate(async () => {
+        const { mockState } = await import('/src/shared/mocks/state.ts');
+        return (
+          mockState.group.members.reduce((sum, member) => sum + member.shareAmount, 0) ===
+          mockState.group.totalFare
+        );
+      }),
+    );
+    await run('추정 경로');
+    await waitMapStyle('dash');
+    await page.getByText('추정 경로예요. 실제 도로와 이동 시간은 다를 수 있어요.').waitFor();
+    await run('오류·재시도');
+    await page
+      .getByRole('main')
+      .getByRole('alert')
+      .filter({ hasText: '일시적으로 정보를 불러오지 못했어요.' })
+      .waitFor();
+    await page.getByRole('main').getByRole('button', { name: '다시 시도', exact: true }).click();
+    await page.getByRole('heading', { name: '동승이 성사됐어요!' }).waitFor();
+    await run('목 세션 갱신');
+    await page.getByRole('heading', { name: '내 정보', exact: true }).waitFor();
+    const token = await page.evaluate(
+      async () =>
+        (await import('/src/shared/stores/authStore.ts')).useAuthStore.getState().accessToken,
+    );
+    assert.ok(token.startsWith('mock-access-'));
+    await navigate('/dev/demo');
+    await page.getByRole('button', { name: '목 리허설 새로 시작', exact: true }).click();
   });
   await check('401 동시 요청: refresh 한 번·원요청 재시도', async () => {
     const result = await page.evaluate(async () => {

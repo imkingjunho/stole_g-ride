@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
-import { api, unwrap, showError } from '@/shared/api/client';
+import { api, unwrap, showError, ApiError } from '@/shared/api/client';
 import { won, koreaTime } from '@/shared/api/format';
 import { Button, Badge, Card, Modal } from '@/shared/ui';
 import { QueryState } from '@/shared/ui/QueryState';
@@ -10,9 +10,14 @@ import { isMatchNotification, stompClient } from '@/shared/ws/stompClient';
 import { useGroup } from './useGroup';
 import { ReportButton } from './ReportButton';
 import { GroupRouteMap } from './GroupRouteMap';
+import { readGroupDetail } from './groupResponse';
+import { useAuthStore } from '@/shared/stores/authStore';
 export function GroupPage() {
   const query = useGroup();
   const group = query.data;
+  const currentGroup = useRef(query.id);
+  currentGroup.current = query.id;
+  const expiryCheck = useRef<string | null>(null);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [completeOpen, setCompleteOpen] = useState(false);
@@ -38,22 +43,44 @@ export function GroupPage() {
     [query.id, queryClient],
   );
   useEffect(() => {
-    if (group?.status === 'PENDING' && remaining === 0)
+    const key = `${query.id}:${group?.acceptDeadline}`;
+    if (group?.status === 'PENDING' && remaining === 0 && expiryCheck.current !== key) {
+      expiryCheck.current = key;
       void queryClient.invalidateQueries({ queryKey: ['group', query.id] });
-  }, [group?.status, remaining, query.id, queryClient]);
+    }
+  }, [group?.status, group?.acceptDeadline, remaining, query.id, queryClient]);
+  useEffect(() => {
+    setPreviousFare(null);
+    setCompleteOpen(false);
+  }, [query.id]);
   const action = useMutation({
-    mutationFn: async (kind: 'accept' | 'reject' | 'complete') => {
+    mutationFn: async ({
+      kind,
+      groupId,
+    }: {
+      kind: 'accept' | 'reject' | 'complete';
+      groupId: number;
+      sessionVersion: number;
+    }) => {
       const path =
         kind === 'accept'
           ? '/api/groups/{groupId}/accept'
           : kind === 'reject'
             ? '/api/groups/{groupId}/reject'
             : '/api/groups/{groupId}/complete';
-      const r = await api.POST(path, { params: { path: { groupId: query.id } } });
-      return unwrap<unknown>(r.data, r.error);
+      const r = await api.POST(path, { params: { path: { groupId } } });
+      const data = unwrap<unknown>(r.data, r.error);
+      return kind === 'accept'
+        ? readGroupDetail(data, groupId, useAuthStore.getState().user?.id)
+        : null;
     },
-    onSuccess: (_, kind) => {
-      void queryClient.invalidateQueries({ queryKey: ['group', query.id] });
+    onSuccess: (updated, { kind, groupId, sessionVersion }) => {
+      if (useAuthStore.getState().sessionVersion !== sessionVersion) return;
+      if (updated) queryClient.setQueryData(['group', groupId], updated);
+      void queryClient.invalidateQueries({ queryKey: ['group', groupId] });
+      void queryClient.invalidateQueries({ queryKey: ['myRequest'] });
+      // 다른 그룹으로 이동한 뒤 도착한 응답은 현재 화면을 이동시키지 않는다.
+      if (currentGroup.current !== groupId) return;
       if (kind === 'accept') setPreviousFare(null);
       if (kind === 'reject') navigate('/waiting', { replace: true });
       if (kind === 'complete') {
@@ -63,8 +90,27 @@ export function GroupPage() {
         navigate('/history');
       }
     },
-    onError: showError,
+    onError: (error, { groupId, sessionVersion }) => {
+      if (
+        useAuthStore.getState().sessionVersion !== sessionVersion ||
+        currentGroup.current !== groupId
+      )
+        return;
+      if (
+        error instanceof ApiError &&
+        ['MATCH_EXPIRED', 'GROUP_NOT_FOUND', 'GROUP_NOT_MEMBER'].includes(error.code)
+      )
+        void queryClient.invalidateQueries({ queryKey: ['group', groupId] });
+      showError(error);
+    },
   });
+  function act(kind: 'accept' | 'reject' | 'complete') {
+    action.mutate({
+      kind,
+      groupId: query.id,
+      sessionVersion: useAuthStore.getState().sessionVersion,
+    });
+  }
   if (query.error || !group)
     return (
       <QueryState
@@ -138,7 +184,7 @@ export function GroupPage() {
                 fullWidth
                 loading={action.isPending}
                 disabled={remaining === 0}
-                onClick={() => action.mutate('accept')}
+                onClick={() => act('accept')}
               >
                 수락
               </Button>
@@ -146,7 +192,7 @@ export function GroupPage() {
                 fullWidth
                 variant="secondary"
                 disabled={action.isPending || remaining === 0}
-                onClick={() => action.mutate('reject')}
+                onClick={() => act('reject')}
               >
                 거절
               </Button>
@@ -199,7 +245,7 @@ export function GroupPage() {
         title="탑승을 완료할까요?"
         description="완료 후에는 대화가 종료되고 채팅 내역이 삭제됩니다."
       >
-        <Button fullWidth loading={action.isPending} onClick={() => action.mutate('complete')}>
+        <Button fullWidth loading={action.isPending} onClick={() => act('complete')}>
           탑승 완료 확인
         </Button>
       </Modal>

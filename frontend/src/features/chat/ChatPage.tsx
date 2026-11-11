@@ -25,32 +25,42 @@ export function ChatPage() {
   const qc = useQueryClient();
   const [draft, setDraft] = useState('');
   const end = useRef<HTMLDivElement>(null);
-  const incoming = useRef<Message[]>([]);
+  const incoming = useRef<{ groupId: number; messages: Message[] }>({ groupId: id, messages: [] });
+  const canChat = !group.error && group.data?.status === 'CONFIRMED';
   const messages = useQuery({
     queryKey: ['messages', id],
-    enabled: Number.isSafeInteger(id) && id > 0,
+    enabled: canChat,
     queryFn: async () => {
       const r = await api.GET('/api/groups/{groupId}/messages', {
         params: { path: { groupId: id } },
       });
-      return mergeMessages(unwrap(r.data, r.error) ?? [], incoming.current);
+      return mergeMessages(
+        unwrap(r.data, r.error) ?? [],
+        incoming.current.groupId === id ? incoming.current.messages : [],
+      );
     },
   });
   useEffect(() => {
-    incoming.current = [];
+    if (incoming.current.groupId !== id) incoming.current = { groupId: id, messages: [] };
+    if (!canChat) {
+      incoming.current.messages = [];
+      return;
+    }
     return stompClient.subscribe(`/topic/chat/${id}`, (value) => {
       if (!isChatMessage(value) || value.groupId !== id) return;
-      incoming.current = mergeMessages(incoming.current, [value]);
+      if (incoming.current.groupId !== id) return;
+      incoming.current.messages = mergeMessages(incoming.current.messages, [value]);
       qc.setQueryData<Message[]>(['messages', id], (old) => mergeMessages(old ?? [], [value]));
     });
-  }, [id, qc]);
+  }, [id, qc, canChat]);
   useEffect(() => {
-    if (status === 'connected') void qc.invalidateQueries({ queryKey: ['messages', id] });
-  }, [status, qc, id]);
+    if (canChat && status === 'connected')
+      void qc.invalidateQueries({ queryKey: ['messages', id] });
+  }, [status, qc, id, canChat]);
   useEffect(() => {
     end.current?.scrollIntoView({ block: 'nearest' });
   }, [messages.data?.length]);
-  const closed = group.data?.status !== 'CONFIRMED';
+  const closed = !canChat;
   function send(content: string, type: 'TEXT' | 'QUICK') {
     if (closed || !content.trim() || content.trim().length > 500) return;
     try {
@@ -60,7 +70,7 @@ export function ChatPage() {
       showError(e);
     }
   }
-  if (!group.data)
+  if (group.error || !group.data)
     return (
       <QueryState
         loading={group.isLoading}
@@ -82,58 +92,67 @@ export function ChatPage() {
           연결이 끊겼어요. 다시 연결하고 있어요.
         </p>
       )}
-      <Card className="space-y-4">
-        <div
-          role="log"
-          aria-label="대화 내역"
-          aria-live="polite"
-          className="max-h-[45dvh] space-y-4 overflow-y-auto"
-        >
-          {messages.isLoading || messages.error ? (
-            <QueryState
-              loading={messages.isLoading}
-              error={messages.error}
-              retry={() => void messages.refetch()}
-            />
-          ) : messages.data?.length ? (
-            messages.data.map((m) =>
-              m.type === 'SYSTEM' ? (
-                <p
-                  key={m.id}
-                  className="rounded-control bg-canvas p-3 text-center text-xs text-slate-600"
-                >
-                  {m.content}
-                </p>
-              ) : (
-                <article key={m.id} className={m.senderId === userId ? 'ml-6 text-right' : 'mr-6'}>
-                  <p className="mb-1 text-xs text-slate-600">
-                    {m.senderNickname}
-                    {m.senderId === userId ? ' · 나' : ''}
-                  </p>
+      {!canChat ? (
+        <Card>
+          <p role="status">대화가 종료되어 채팅 내역을 표시하지 않아요.</p>
+        </Card>
+      ) : (
+        <Card className="space-y-4">
+          <div
+            role="log"
+            aria-label="대화 내역"
+            aria-live="polite"
+            className="max-h-[45dvh] space-y-4 overflow-y-auto"
+          >
+            {messages.isLoading || messages.error ? (
+              <QueryState
+                loading={messages.isLoading}
+                error={messages.error}
+                retry={() => void messages.refetch()}
+              />
+            ) : messages.data?.length ? (
+              messages.data.map((m) =>
+                m.type === 'SYSTEM' ? (
                   <p
-                    className={`inline-block max-w-full whitespace-pre-wrap break-words rounded-control p-3 text-left text-sm ${m.senderId === userId ? 'bg-brand text-white' : 'bg-canvas text-ink'}`}
+                    key={m.id}
+                    className="rounded-control bg-canvas p-3 text-center text-xs text-slate-600"
                   >
                     {m.content}
                   </p>
-                  {m.content.includes('***') && (
-                    <p className="mt-1 text-xs text-slate-600">개인정보가 가려진 메시지</p>
-                  )}
-                  <time className="mt-1 block text-xs text-slate-600">
-                    {koreaTime(m.createdAt).toLocaleTimeString('ko-KR', {
-                      timeZone: 'Asia/Seoul',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </time>
-                </article>
-              ),
-            )
-          ) : (
-            <p className="text-sm text-slate-600">첫 인사를 나눠 보세요.</p>
-          )}
-          <div ref={end} />
-        </div>
-      </Card>
+                ) : (
+                  <article
+                    key={m.id}
+                    className={m.senderId === userId ? 'ml-6 text-right' : 'mr-6'}
+                  >
+                    <p className="mb-1 text-xs text-slate-600">
+                      {m.senderNickname}
+                      {m.senderId === userId ? ' · 나' : ''}
+                    </p>
+                    <p
+                      className={`inline-block max-w-full whitespace-pre-wrap break-words rounded-control p-3 text-left text-sm ${m.senderId === userId ? 'bg-brand text-white' : 'bg-canvas text-ink'}`}
+                    >
+                      {m.content}
+                    </p>
+                    {m.content.includes('***') && (
+                      <p className="mt-1 text-xs text-slate-600">개인정보가 가려진 메시지</p>
+                    )}
+                    <time className="mt-1 block text-xs text-slate-600">
+                      {koreaTime(m.createdAt).toLocaleTimeString('ko-KR', {
+                        timeZone: 'Asia/Seoul',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </time>
+                  </article>
+                ),
+              )
+            ) : (
+              <p className="text-sm text-slate-600">첫 인사를 나눠 보세요.</p>
+            )}
+            <div ref={end} />
+          </div>
+        </Card>
+      )}
       {closed ? (
         <p role="status" className="text-sm text-slate-600">
           현재 그룹 상태에서는 대화를 보낼 수 없어요.

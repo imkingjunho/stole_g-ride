@@ -7,7 +7,7 @@ export function FarePage() {
   const q = useGroup();
   const g = q.data;
   const me = g?.members.find((m) => m.isMe);
-  if (!g)
+  if (q.error || !g)
     return <QueryState loading={q.isLoading} error={q.error} retry={() => void q.refetch()} />;
   const totalSoloDistance = g.members.reduce((sum, member) => sum + member.soloDistance, 0);
   return (

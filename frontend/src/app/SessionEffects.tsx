@@ -34,6 +34,8 @@ export function SessionEffects() {
       void queryClient.invalidateQueries({ queryKey: ['group', value.groupId] });
       void queryClient.invalidateQueries({ queryKey: ['history'] });
       void queryClient.invalidateQueries({ queryKey: ['stats'] });
+      if (value.type === 'COMPLETED' || value.type === 'DISSOLVED')
+        queryClient.removeQueries({ queryKey: ['messages', value.groupId], exact: true });
       useToastStore.getState().notify(value.message);
       if (value.type === 'DISSOLVED') navigate('/waiting', { replace: true });
       else if (value.type === 'PROPOSED' || value.type === 'CONFIRMED')

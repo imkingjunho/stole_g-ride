@@ -1,5 +1,6 @@
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { isMockMode } from '@/shared/api/config';
+import { RehearsalStatus } from './rehearsal/RehearsalPanel';
 import { SessionEffects } from './SessionEffects';
 import { useConnectionStore } from '@/shared/ws/connectionStore';
 import { Badge } from '@/shared/ui';
@@ -40,6 +41,7 @@ export function Layout() {
             : '실시간 연결이 끊겼어요. 다시 연결하는 동안 대기 상태를 주기적으로 확인해요.'}
         </p>
       )}
+      <RehearsalStatus />
       <main id="main-content" className="flex-1">
         <Outlet />
       </main>

@@ -4,3 +4,8 @@ dist/
 *.local
 
 qa-output/
+
+# 실제 베타 응답·피드백과 결과는 로컬에서 보관한다.
+beta/survey-responses.csv
+beta/feedback.csv
+beta/results/

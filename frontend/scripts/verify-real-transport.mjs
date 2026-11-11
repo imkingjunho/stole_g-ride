@@ -102,6 +102,22 @@ try {
   await page.getByLabel('비밀번호').fill('test-password');
   await page.getByRole('button', { name: '로그인', exact: true }).click();
   await page.waitForURL('**/request');
+  assert.equal(await page.getByRole('heading', { name: '발표 시연 리허설' }).count(), 0);
+  assert.equal(await page.getByRole('link', { name: 'DEV · 기능 체험' }).count(), 0);
+  const blocked = await page.evaluate(async () => {
+    const { resetMockRehearsal, prepareRehearsalStep } =
+      await import('/src/app/rehearsal/scenarios.ts');
+    return [() => resetMockRehearsal(), () => prepareRehearsalStep('waiting')].map((action) => {
+      try {
+        action();
+        return false;
+      } catch {
+        return true;
+      }
+    });
+  });
+  assert.deepEqual(blocked, [true, true]);
+  console.log('PASS real 모드에서 목 리허설 UI·데이터 변경 차단');
   const values = await page.evaluate(async () => {
     const { api, unwrap } = await import('/src/shared/api/client.ts');
     const responses = await Promise.all([api.GET('/api/users/me'), api.GET('/api/stats/me')]);

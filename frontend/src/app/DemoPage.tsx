@@ -4,6 +4,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Button, Card, Badge } from '@/shared/ui';
 import { mockState, resetGroup, notifyMatch, createMockRequest } from '@/shared/mocks/state';
 import { mockGroup, mockRideRequest } from '@/shared/mocks/data';
+import { RehearsalPanel } from './rehearsal/RehearsalPanel';
 import { GroupRouteMap } from '@/features/group/GroupRouteMap';
 export function DemoPage() {
   const [estimated, setEstimated] = useState(false);
@@ -39,6 +40,7 @@ export function DemoPage() {
       <p className="text-sm text-slate-600">
         아래 동작은 목 데이터에만 적용돼요. 성사·수락·정산·채팅 흐름을 확인할 수 있어요.
       </p>
+      <RehearsalPanel />
       <Card className="space-y-3">
         <h2 className="font-bold">요청 · 예외 상태 확인</h2>
         <Button

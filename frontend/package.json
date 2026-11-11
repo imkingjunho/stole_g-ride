@@ -13,7 +13,9 @@
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
     "gen:api": "openapi-typescript ../docs/api-spec.yaml -o src/generated/api.d.ts",
-    "verify:deployment": "node scripts/verify-deployment.mjs"
+    "verify:deployment": "node scripts/verify-deployment.mjs",
+    "beta:summary": "node scripts/summarize-beta.mjs",
+    "test:beta": "node --test scripts/summarize-beta.test.mjs"
   },
   "dependencies": {
     "@stomp/stompjs": "^7.1.1",
