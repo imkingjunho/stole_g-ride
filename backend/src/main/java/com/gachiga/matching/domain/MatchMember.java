@@ -1,13 +1,15 @@
 package com.gachiga.matching.domain;
 
 import jakarta.persistence.*;
+
 import lombok.*;
+
 import java.math.BigDecimal;
 
 @Entity
-@Table(name = "match_members", uniqueConstraints = {
-    @UniqueConstraint(columnNames = {"group_id", "user_id"})
-})
+@Table(
+        name = "match_members",
+        uniqueConstraints = {@UniqueConstraint(columnNames = {"group_id", "user_id"})})
 @Getter
 @Setter(AccessLevel.PACKAGE)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -52,4 +54,15 @@ public class MatchMember {
     @Builder.Default
     @Column(nullable = false)
     private Boolean accepted = false;
+
+    private String destName;
+    private Double destLat;
+    private Double destLng;
+    private Integer soloDistance;
+    private Integer soloFare;
+    @Builder.Default private Boolean completed = false;
+
+    public void complete() {
+        this.completed = true;
+    }
 }

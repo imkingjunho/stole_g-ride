@@ -118,23 +118,28 @@ try {
     await page.getByRole('button', { name: '목 데이터로 둘러보기' }).click();
     await page.waitForURL(/\/(request|waiting)$/);
     await demo();
-    await page.getByText('함께 9,700원', { exact: true }).waitFor();
+    await page.getByText('함께 7,895원', { exact: true }).waitFor();
     await page.getByRole('link', { name: '내 요금은 어떻게 계산됐나요? →' }).click();
-    await page.getByText('100원 단위·총액 보정: -50원', { exact: true }).waitFor();
+    await page.getByRole('heading', { name: '거리 비율로 계산해요' }).waitFor();
     const sums = await page.evaluate(async () => {
       const { mockState } = await import('/src/shared/mocks/state.ts');
       const g = mockState.group;
       return {
         total: g.totalFare,
         sum: g.members.reduce((s, m) => s + m.shareAmount, 0),
-        breakdowns: g.members.every(
-          (m) =>
-            m.breakdown.reduce((s, x) => s + x.share, 0) + m.roundingAdjustment === m.shareAmount,
-        ),
+        validShares:
+          g.fareMethod === 'DISTANCE_RATIO' &&
+          g.members.every(
+            (m) =>
+              m.soloDistance > 0 &&
+              m.shareAmount >= 0 &&
+              m.shareAmount <= m.soloFare &&
+              m.savingAmount === m.soloFare - m.shareAmount,
+          ),
       };
     });
     assert.equal(sums.total, sums.sum);
-    assert.ok(sums.breakdowns);
+    assert.ok(sums.validShares);
     for (const width of [360, 440, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       for (const route of ['/groups/17', '/groups/17/fare', '/groups/17/chat', '/history', '/me']) {
@@ -377,11 +382,11 @@ try {
       const { mockState, notifyMatch } = await import('/src/shared/mocks/state.ts');
       mockState.group.status = 'PENDING';
       mockState.group.acceptDeadline = new Date(Date.now() + 60000).toISOString();
-      mockState.group.members.find((m) => m.isMe).shareAmount = 9600;
+      mockState.group.members.find((m) => m.isMe).shareAmount = 7800;
       mockState.group.members.forEach((m) => (m.accepted = false));
       notifyMatch('RECALCULATED', '경로가 변경됐어요.');
     });
-    await page.getByText('9,700원 → 9,600원', { exact: true }).waitFor();
+    await page.getByText('7,895원 → 7,800원', { exact: true }).waitFor();
     await page.getByRole('button', { name: '거절', exact: true }).click();
     await page.waitForURL('**/waiting');
     await demo(true);

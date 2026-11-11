@@ -1,60 +1,41 @@
 package com.gachiga.matching.api;
 
-import com.gachiga.matching.domain.MatchGroup;
-import com.gachiga.matching.domain.MatchMember;
-import com.gachiga.matching.domain.GroupStatus;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.Builder;
+import com.gachiga.contract.route.HubInfo;
+import com.gachiga.contract.route.RouteResult;
+
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
-@Getter
-@Builder
-@AllArgsConstructor
-public class GroupResponse {
-    private Long id;
-    private Long hubId;
-    private Integer totalFare;
-    private Integer totalDistance;
-    private Integer totalDuration;
-    private GroupStatus status;
-    private LocalDateTime createdAt;
-    private LocalDateTime confirmedAt;
-    private LocalDateTime closedAt;
-    private List<MemberInfo> members;
+/** API 명세의 GroupDetail. 금액과 경로는 저장된 평가 결과를 그대로 반환한다. */
+public record GroupResponse(
+        Long groupId,
+        String status,
+        boolean estimated,
+        HubInfo hub,
+        int totalFare,
+        int totalDistance,
+        int totalDuration,
+        Route route,
+        List<MemberInfo> members,
+        LocalDateTime acceptDeadline,
+        LocalDateTime createdAt,
+        String fareMethod) {
+    public record Route(List<RouteResult.Section> sections) {}
 
-    @Getter
-    @Builder
-    @AllArgsConstructor
-    public static class MemberInfo {
-        private Long userId;
-        private Long requestId;
-        private int boardingOrder;
-        private Integer shareAmount;
-        private Integer savingAmount;
-    }
-
-    public static GroupResponse from(MatchGroup group, List<MatchMember> members) {
-        return GroupResponse.builder()
-            .id(group.getId())
-            .hubId(group.getHubId())
-            .totalFare(group.getTotalFare())
-            .totalDistance(group.getTotalDistance())
-            .totalDuration(group.getTotalDuration())
-            .status(group.getStatus())
-            .createdAt(group.getCreatedAt())
-            .confirmedAt(group.getConfirmedAt())
-            .closedAt(group.getClosedAt())
-            .members(members.stream()
-                .map(m -> MemberInfo.builder()
-                    .userId(m.getUserId())
-                    .requestId(m.getRequestId())
-                    .boardingOrder(m.getBoardingOrder())
-                    .shareAmount(m.getShareAmount())
-                    .savingAmount(m.getSavingAmount())
-                    .build())
-                .toList())
-            .build();
-    }
+    public record MemberInfo(
+            Long userId,
+            String nickname,
+            boolean isMe,
+            int boardingOrder,
+            int dropoffOrder,
+            String destName,
+            double destLat,
+            double destLng,
+            int soloDistance,
+            int shareAmount,
+            int soloFare,
+            int savingAmount,
+            BigDecimal detourRatio,
+            boolean accepted) {}
 }

@@ -69,6 +69,7 @@ export const mockRideRequest: Schemas['RideRequestDetail'] = {
 /** PRD §5.2 계산 예시 그대로 — 3인, 총 15,000원, 구간 3개 */
 export const mockGroup: Schemas['GroupDetail'] = {
   groupId: 17,
+  fareMethod: 'DISTANCE_RATIO',
   status: 'CONFIRMED',
   estimated: false,
   hub: mockHubs[1],
@@ -111,9 +112,10 @@ export const mockGroup: Schemas['GroupDetail'] = {
       boardingOrder: 1,
       dropoffOrder: 1,
       destName: '경신여고',
-      shareAmount: 1500,
+      soloDistance: 3000,
+      shareAmount: 2368,
       soloFare: 5600,
-      savingAmount: 4100,
+      savingAmount: 3232,
       detourRatio: 0.02,
       accepted: true,
     },
@@ -124,9 +126,10 @@ export const mockGroup: Schemas['GroupDetail'] = {
       boardingOrder: 1,
       dropoffOrder: 2,
       destName: '유스퀘어',
-      shareAmount: 3750,
+      soloDistance: 6000,
+      shareAmount: 4737,
       soloFare: 8200,
-      savingAmount: 4450,
+      savingAmount: 3463,
       detourRatio: 0.05,
       accepted: true,
     },
@@ -137,9 +140,10 @@ export const mockGroup: Schemas['GroupDetail'] = {
       boardingOrder: 1,
       dropoffOrder: 3,
       destName: '광주송정역',
-      shareAmount: 9700,
+      soloDistance: 10000,
+      shareAmount: 7895,
       soloFare: 12400,
-      savingAmount: 2700,
+      savingAmount: 4505,
       detourRatio: 0.09,
       accepted: true,
     },
@@ -148,19 +152,11 @@ export const mockGroup: Schemas['GroupDetail'] = {
   createdAt: '2026-09-26T08:31:00+09:00',
 };
 
-// 정산 명세 §5.2: 각 사용자 구간 몫 + 보정 = 최종 금액, 합계 15,000원.
+// PRD §5.2: 단독 거리 3/6/10km, 상한 적용 및 원 단위 보정 후 합계 15,000원.
 mockGroup.members.forEach((member, index) => {
   const destinations = [mockHubs[3], mockHubs[4], mockHubs[5]];
   member.destLat = destinations[index].lat;
   member.destLng = destinations[index].lng;
-  member.breakdown = [
-    { sectionIndex: 0, sectionFare: 4500, onboardCount: 3, share: 1500 },
-    ...(index >= 1 ? [{ sectionIndex: 1, sectionFare: 4500, onboardCount: 2, share: 2250 }] : []),
-    ...(index >= 2 ? [{ sectionIndex: 2, sectionFare: 6000, onboardCount: 1, share: 6000 }] : []),
-  ];
-  member.roundingAdjustment = [0, 50, -50][index];
-  member.shareAmount = [1500, 3800, 9700][index];
-  member.savingAmount = member.soloFare - member.shareAmount;
 });
 
 export const mockMessages: Schemas['ChatMessage'][] = [
@@ -192,9 +188,9 @@ export const mockHistory: Schemas['HistoryPage'] = {
       hubName: '전남대 후문',
       destName: '광주송정역',
       memberCount: 3,
-      shareAmount: 9700,
+      shareAmount: 7895,
       soloFare: 12400,
-      savingAmount: 2700,
+      savingAmount: 4505,
     },
   ],
   page: 0,

@@ -1,145 +1,50 @@
 package com.gachiga.matching;
 
 import com.gachiga.contract.ride.RideRequestPort;
-import com.gachiga.contract.ride.WaitingRequest;
-import com.gachiga.contract.route.RouteProvider;
-import com.gachiga.contract.user.UserPort;
-import com.gachiga.contract.route.RouteResult;
 import com.gachiga.matching.algorithm.*;
-import com.gachiga.matching.domain.MatchGroup;
-import com.gachiga.matching.domain.GroupStatus;
-import com.gachiga.matching.domain.MatchMember;
-import com.gachiga.matching.port.MatchGroupRepository;
-import com.gachiga.matching.port.MatchMemberRepository;
+import com.gachiga.matching.domain.MatchCandidate;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import java.util.*;
 
+import java.util.ArrayList;
+
+/** 경로 평가는 트랜잭션 밖에서, 조건부 배정과 그룹 저장은 그룹별 트랜잭션으로 처리한다. */
 @Slf4j
 @Service
 @RequiredArgsConstructor
-@Transactional
 public class MatchingEngine {
-
     private final RideRequestPort rideRequestPort;
-    private final RouteProvider routeProvider;
-    private final UserPort userPort;
-    private final MatchGroupRepository groupRepository;
-    private final MatchMemberRepository memberRepository;
+    private final CombinationEvaluator evaluator;
+    private final GroupService groupService;
 
-    private double w1 = 1.0;
-    private double w2 = 0.5;
-    private double w3 = 0.3;
+    @Value("${gachiga.matching.max-evaluations-per-tick:30}")
+    private int maxEvaluations = 30;
 
-    @Scheduled(fixedRate = 30000)
-    public void executeTick() {
-        long startTime = System.currentTimeMillis();
-
-        try {
-            log.info("=== Matching TICK Started ===");
-
-            List<WaitingRequest> waiting = rideRequestPort.findWaiting();
-            if (waiting.isEmpty()) {
-                log.info("No waiting requests");
-                return;
+    @Scheduled(fixedDelayString = "${gachiga.matching.tick-millis:30000}")
+    public synchronized void executeTick() {
+        var combinations =
+                CombinationGenerator.generateCombinations(
+                        Clustering.cluster(rideRequestPort.findWaiting()));
+        var candidates = new ArrayList<MatchCandidate>();
+        for (var combination : combinations.stream().limit(maxEvaluations).toList()) {
+            try {
+                var candidate = evaluator.evaluate(combination);
+                if (candidate != null) candidates.add(candidate);
+            } catch (RuntimeException e) {
+                log.warn("매칭 조합 평가 실패", e);
             }
-
-            List<List<WaitingRequest>> clusters = Clustering.cluster(waiting);
-            List<List<WaitingRequest>> combinations = CombinationGenerator.generateCombinations(clusters);
-
-            CombinationEvaluator evaluator = new CombinationEvaluator(routeProvider, w1, w2, w3);
-            List<com.gachiga.matching.domain.MatchCandidate> candidates = new ArrayList<>();
-            for (List<WaitingRequest> combo : combinations) {
-                var candidate = evaluator.evaluate(combo);
-                if (candidate != null) {
-                    candidates.add(candidate);
-                }
-            }
-
-            var selected = GreedySelector.select(candidates);
-            log.info("Selected {} groups", selected.size());
-
-            // T1-8: 그룹 생성 및 자동 성사
-            for (var candidate : selected) {
-                // candidate에서 requestIds 추출하여 원래 WaitingRequest 찾기
-                // 임시로 waiting 리스트에서 찾음
-                List<WaitingRequest> combination = new ArrayList<>();
-                for (Long requestId : candidate.requestIds()) {
-                    waiting.stream()
-                        .filter(r -> r.requestId().equals(requestId))
-                        .findFirst()
-                        .ifPresent(combination::add);
-                }
-                if (combination.size() == candidate.requestIds().size()) {
-                    createAndConfirmGroup(combination, candidate);  // ← candidate 전달
-                    }
-            }
-
-            long duration = System.currentTimeMillis() - startTime;
-            log.info("=== Matching TICK Completed in {}ms ===", duration);
-
-        } catch (Exception e) {
-            log.error("Error in matching tick", e);
         }
-    }
-
-    /**
-     * 그룹 생성 및 자동 성사
-     */
-    private void createAndConfirmGroup(List<WaitingRequest> combination, com.gachiga.matching.domain.MatchCandidate candidate) {
-    // RouteProvider로 실제 경로 조회
-    List<com.gachiga.contract.route.Coordinate> waypoints = new ArrayList<>();
-    for (int i = 1; i < combination.size() - 1; i++) {
-        waypoints.add(combination.get(i).destination());
-    }
-    
-    RouteResult route = routeProvider.findRoute(
-        combination.get(0).destination(),
-        waypoints,
-        combination.get(combination.size() - 1).destination()
-    );
-    
-    // 1. MatchGroup 생성
-    MatchGroup group = MatchGroup.builder()
-        .hubId(combination.get(0).hubId())
-        .totalFare(route.totalFare())
-        .totalDistance(route.totalDistance())
-        .totalDuration(route.totalDuration())
-        .estimated(route.estimated())
-        .status(GroupStatus.PENDING)
-        .build();
-
-    MatchGroup saved = groupRepository.save(group);
-    log.info("Created group {}", saved.getId());
-
-    // 2. 멤버 추가
-    for (int i = 0; i < combination.size(); i++) {
-        WaitingRequest req = combination.get(i);
-        MatchMember member = MatchMember.builder()
-            .groupId(saved.getId())
-            .requestId(req.requestId())
-            .userId(req.userId())
-            .boardingOrder(i)
-            .dropoffOrder(i)
-            .sharedDistance(0)
-            .shareAmount(candidate.shares().get(req.userId()))      // ← 변경
-            .savingAmount(candidate.savings().get(req.userId()))    // ← 변경
-            .accepted(false)
-            .build();
-        memberRepository.save(member);
-    }
-
-        // 3. CONFIRMED로 변경
-        saved.confirm();
-        groupRepository.save(saved);
-        log.info("Group {} confirmed", saved.getId());
-
-        // 4. RideRequestPort 업데이트
-        for (WaitingRequest req : combination) {
-            rideRequestPort.markConfirmed(req.requestId());
+        for (var candidate : GreedySelector.select(candidates)) {
+            try {
+                groupService.create(candidate);
+            } catch (RuntimeException e) {
+                log.warn("매칭 그룹 저장 실패 — 해당 그룹 배정은 롤백된다", e);
+            }
         }
     }
 }

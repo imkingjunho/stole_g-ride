@@ -33,6 +33,9 @@ LC_ALL=C sort > "$scratch/expected.txt" <<'EXPECTED'
 chat_messages|PRIMARY|id
 chat_messages|INDEX|group_id,created_at
 hubs|PRIMARY|id
+match_groups|PRIMARY|id
+match_members|PRIMARY|id
+match_members|UNIQUE|group_id,user_id
 refresh_tokens|PRIMARY|id
 refresh_tokens|UNIQUE|token_hash
 refresh_tokens|INDEX|user_id
@@ -50,4 +53,4 @@ if ! diff -u "$scratch/expected.txt" "$scratch/actual.txt"; then
   echo "인덱스 불일치: 엔티티·docs/schema.sql과 실제 DB를 확인한다. 이 검사는 DB를 변경하지 않는다." >&2
   exit 1
 fi
-echo "인덱스 확인 완료: 6개 테이블, PK 6개·UNIQUE 4개·조회 인덱스 4개. 컬럼·타입은 prod validate로 확인한다."
+echo "인덱스 확인 완료: 8개 테이블, PK 8개·UNIQUE 5개·조회 인덱스 4개. 컬럼·타입은 prod validate로 확인한다."

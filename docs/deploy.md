@@ -98,13 +98,16 @@ docker compose -f docker-compose.prod.yml exec -T mysql sh -eu -c \
 # §4 백업을 완료한 뒤, 두 테이블이 없는 이전 스키마에만 실행한다.
 docker compose -f docker-compose.prod.yml exec -T mysql sh -eu -c \
   'MYSQL_PWD="$MYSQL_PASSWORD" exec mysql --user="$MYSQL_USER" --database="$MYSQL_DATABASE"' < docs/schema-upgrade-20261028.sql
+# 이어서 매칭 테이블도 없는 4→6개 테이블 업그레이드 경로에서만 실행한다.
+docker compose -f docker-compose.prod.yml exec -T mysql sh -c \
+  'MYSQL_PWD="$MYSQL_PASSWORD" exec mysql --user="$MYSQL_USER" --database="$MYSQL_DATABASE"' < docs/schema-upgrade-20261111.sql
 bash deploy/scripts/check-schema-indexes.sh "$(docker compose -f docker-compose.prod.yml ps -q mysql)"
 docker compose -f docker-compose.prod.yml up -d --build backend
 ```
 
 변경분은 테이블 추가만 하며 기존 4개 테이블이나 데이터를 삭제하지 않는다. MySQL DDL은 자동 커밋되므로 중간 실패 시
-적용된 테이블을 먼저 확인한다. 검증 결과: MySQL 8.0.46의 새 DB·이전 스키마 업그레이드 모두 6개 테이블과
-PK 6개·UNIQUE 4개·조회 인덱스 4개가 일치했다. 격리 로컬 환경의 prod `validate` 기동도 성공했다.
+적용된 테이블을 먼저 확인한다. 2026-10-28 당시 검증 결과는 MySQL 8.0.46의 새 DB·이전 스키마 업그레이드 모두 6개 테이블과
+PK 6개·UNIQUE 4개·조회 인덱스 4개가 일치했다. 격리 로컬 환경의 prod `validate` 기동도 성공했다. **현재 최종 기준은 아래 2026-11-11 절의 8개 테이블**이며, 위 명령은 4→6→8 순서다.
 실제 베타 서버 검증과는 구분한다([통합 점검 기록](integration-check.md)).
 
 ## 3. 되돌리기
@@ -147,3 +150,16 @@ docker compose -f docker-compose.prod.yml exec -T mysql sh -eu -c \
 | 지도가 안 뜸 | 카카오 콘솔에 도메인 미등록 | 송준호에게 JS 키 도메인 추가 요청 |
 | `MAIL_PASSWORD` 넣었는데 메일이 안 감 | Gmail 계정 비밀번호를 넣음 | 2단계 인증 후 "앱 비밀번호" 발급 |
 | compose 가 `JWT_SECRET` 누락으로 거절하거나 토큰 발급이 서명 키 길이 오류로 실패함 | JWT 키 누락·길이 부족 | `.env`에 32바이트 이상 무작위 `JWT_SECRET`을 설정하고 `up -d backend`로 컨테이너를 다시 만든다 |
+
+### 2026-11-11: 매칭 테이블·정산 스냅샷 반영
+
+운영은 `ddl-auto: validate`이므로 앱을 교체하기 **전에** DB를 백업하고 해당 경로의 SQL을 적용한다. 로컬 `update`는 컬럼을 추가하지만 과거 그룹의 스냅샷을 복원하지 않는다.
+
+- 기존 6개 테이블이며 `match_groups`·`match_members`가 **둘 다 없는 DB**: `docs/schema-upgrade-20261111.sql` 적용.
+- `358a3bb` 매칭 테이블이 이미 있는 8개 테이블 DB: `SHOW COLUMNS`로 스냅샷 컬럼이 아직 없는지 확인하고 `docs/schema-upgrade-20261111-snapshots.sql`을 한 번 적용.
+- 새 빈 DB: 최신 `docs/schema.sql` 전체 적용.
+- 일부 컬럼만 이미 있는 DB: 전체 변경분을 반복 실행하지 말고 실제 누락 컬럼만 대조해 적용한다.
+
+검사 명령은 기존 `check-schema-indexes.sh`를 사용한다. 기대값은 **8개 테이블, PK 8개·UNIQUE 5개·조회 인덱스 4개**다. MySQL 8.0.46 격리 DB에서 위 세 경로의 인덱스 검사와 prod `validate` 기동을 확인했다.
+
+새 그룹에는 평가 당시 거점·경로·목적지·단독 거리/요금과 구성원별 완료 여부가 저장된다. 과거 그룹에는 근거 데이터가 없으므로 기존 정산액을 임의로 재계산하지 않는다. 스냅샷 없는 그룹 상세는 `400 INVALID_INPUT`과 새 매칭 안내를 반환한다. 기존 데이터 삭제는 필요하지 않다.

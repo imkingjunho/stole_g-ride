@@ -1,3 +1,5 @@
+> 2026-11-11: 이 폴더는 과거 디자인 시안이다. 현재 서비스 정산은 PRD §5.2 단독 거리 비율 방식이며, 시안의 구간별 인원·100원 보정은 사용하지 않는다. 실행 앱은 `frontend/src`다.
+
 # 가치가 — Stitch 디자인을 반영한 독립 화면 시안
 
 전남대학교 동승 프로젝트의 프론트엔드 시안입니다. 사용자가 제공한 `stitch_taxi_dispatch_app_design.zip`을 기준으로 기존 `frontend/prototype`의 화면과 스타일을 교체했습니다. React 18, TypeScript, Vite, Tailwind CSS를 사용합니다.

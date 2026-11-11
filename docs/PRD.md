@@ -30,7 +30,7 @@
 
 ### 1.1 한 줄 정의
 
-전남대학교 재학생 인증을 거친 학생끼리, 이동 경로가 비슷한 사람을 실시간으로 묶어주고 **택시 요금을 구간 단위로 공정하게 나눠주는** 폐쇄형 동승 매칭 서비스.
+전남대학교 재학생 인증을 거친 학생끼리, 이동 경로가 비슷한 사람을 실시간으로 묶어주고 **택시 요금을 단독 이동 거리 비율과 단독요금 상한으로 나눠주는** 폐쇄형 동승 매칭 서비스.
 
 ### 1.2 해결하려는 문제
 
@@ -42,7 +42,7 @@
 ### 1.3 핵심 차별점
 
 1. **택시 호출·배차를 하지 않는다.** 매칭과 요금 분담이라는 본질에만 집중 → 규제·제휴 리스크 회피, MVP 실현 가능성 확보.
-2. **구간 분할 정산.** 단순 1/N이 아니라, 카카오 API가 반환하는 구간별 거리를 그 구간에 탑승 중인 인원으로 나눠 요금을 산정 → "먼저 내리는 사람이 손해 본다"는 기존 동승의 근본 불만 해소.
+2. **단독 이동 거리 비율 정산.** 각자의 단독 이동 거리에 비례해 총 요금을 배분하고, 단독요금 상한과 총액 보존을 지킨다. 화면에서 계산 기준과 절감액을 설명한다.
 3. **폐쇄형 신뢰 네트워크.** 학교 웹메일 인증으로 가입을 제한하고, 동성 매칭 옵션을 제공.
 
 ### 1.4 서비스 대상 거점
@@ -59,7 +59,7 @@
 - 출발 거점 선택 + 목적지 검색(카카오 로컬 API)
 - 실시간 동승 매칭 (최대 4인)
 - 카카오모빌리티 다중 경유지 길찾기 기반 경로·요금 산출
-- 구간 분할 요금 정산 가이드 (실결제 없음)
+- 단독 거리 비율 요금 정산 가이드 (실결제 없음)
 - 매칭된 그룹 전용 휘발성 인앱 채팅
 - 매칭 이력 및 절감액 통계
 
@@ -154,7 +154,7 @@
 | ID | 기능 | 상세 | 우선순위 | 담당 |
 |---|---|---|---|---|
 | FR-15 | 합승 경로 산출 | 카카오모빌리티 다중 경유지 길찾기 호출 (§6.2). 실패 시 추정치 fallback | P0 | 백 송준호 |
-| FR-16 | 구간 분할 정산 | §5.2 공식으로 1인당 분담액 산출. 100원 단위 올림 | P0 | 백 서준 |
+| FR-16 | 단독 거리 비율 정산 | §5.2 거리 비율·단독요금 상한으로 분담액 산출. 1원 단위 잔액 보정 | P0 | 백 서준 |
 | FR-17 | 절감액 표시 | 단독 탑승 요금 대비 절감액·절감률 표시 | P0 | 백 서준 / 프 오승원 |
 | FR-18 | 우회 보상 할인 | 우회율이 임계치를 넘는 사용자에게 §5.3 할인 계수 적용 | P1 | 백 서준 |
 | FR-19 | 경로 시각화 | 카카오맵 JS SDK Polyline. 탑승/하차 지점 순서 마커 | P0 | 프 송준호 |
@@ -221,65 +221,59 @@ saving_i = fare_solo_i - share_i    (share_i는 §5.2로 계산)
 
 ```
 ∀i : detour_ratio_i ≤ max_detour_i   (사용자 설정값)
-∀i : saving_i > 0                    (아무도 손해 보지 않음)
+∀i : saving_i ≥ 0                    (단독요금보다 많이 내지 않음; 상한 적용 시 절감 0원 허용)
 ```
 
 #### Step 4 — 점수화 및 선택
 
 ```
-score(g) = w₁ · Σsaving_i  −  w₂ · avg(detour_ratio)·10000  −  w₃ · max(wait_time_i)
+score(g) = 1000 × (w₁ · Σsaving_i + w₂ · (1 − avg(detour_ratio))
+                  + w₃ · min(max(wait_seconds_i) / 300, 1))
 
-초기 가중치: w₁ = 1.0, w₂ = 1.0, w₃ = 50
+현재 가중치: w₁ = 1.0, w₂ = 0.5, w₃ = 0.3 (matching.yml)
+정수 점수로 반올림. 동률은 후보 생성 순서를 따른다.
 ```
 
-점수 내림차순으로 그리디 선택하되, 이미 배정된 사용자는 제외. 미배정 요청은 다음 tick으로 이월하며 대기시간이 누적될수록 `w₃` 항에 의해 우선순위가 자연 상승한다.
+점수 내림차순으로 그리디 선택하되, 이미 배정된 사용자는 제외. 미배정 요청은 다음 tick으로 이월하며 대기시간 보너스는 최대 300초까지만 증가한다. 현재 가중치는 절감액 중심이며, 장기 대기 요청의 공정한 선택이나 최적 매칭을 보장하지 않는다. tick당 최대 30개 조합을 평가하는 상한은 `matching.yml`에서 관리한다.
 
 > **알고리즘 근거:** T-Share(IEEE ICDE)의 삽입 기반 스케줄링과 ExMAS의 그래프 그룹화 프레임워크를 참고. 본 서비스는 출발지가 소수 거점으로 고정되므로 일반 DARP보다 탐색 공간이 작아 그리디 휴리스틱으로 충분하다.
 
-### 5.2 구간 분할 정산 (Fair Fare Calculator) — 핵심 로직
+### 5.2 단독 이동 거리 비율 정산 (Distance Ratio Fare) — 핵심 로직
 
-카카오모빌리티 API는 경유지가 N개일 때 **N+1개의 `sections`**를 반환하며, 각 section마다 `distance`(m)를 제공한다. 이를 이용해 "각 구간의 요금을 그 구간에 실제로 타고 있던 인원으로 나누는" 방식으로 정산한다.
-
-```
-총 요금            : F        = routes[0].summary.fare.taxi
-총 거리            : D        = routes[0].summary.distance
-구간 k의 거리       : d_k      = sections[k].distance
-구간 k의 탑승 인원   : p_k      (해당 구간 주행 시 차량에 타고 있는 사람 수)
-
-구간 k의 요금       : F_k      = F × (d_k / D)
-사용자 i의 분담액    : share_i  = Σ_{k ∈ onboard(i)} (F_k / p_k)
-```
-
-**검증 조건 (반드시 테스트 코드로 확인):**
+**2026-11-11 결정:** 현재 거리 비율 방식을 유지한다. 단독 이동 거리(`RideRequest.soloDistance`)를 가중치로 총 예상 요금을 배분하고, 누구도 단독 예상 요금보다 많이 내지 않도록 상한을 적용한다. 구간별 탑승 인원으로 나누던 이전 공식과 100원 올림 규칙은 사용하지 않는다.
 
 ```
-Σ share_i == F   (100원 단위 반올림 전 기준, 오차 허용치 1원 이내)
+F = 평가한 동승 경로의 총 예상 요금 (원)
+d_i = 거점 → 사용자 목적지의 단독 이동 거리 (m, 양수)
+c_i = 해당 요청에 저장된 단독 예상 요금 (원)
+기본 배분액_i = F × d_i / Σ d_j
 ```
 
-**반올림 규칙:** 각 `share_i`를 100원 단위 올림 → 합계가 `F`를 초과하는 잔액은 **분담액이 가장 큰 사용자**에게서 차감. (개별 사용자가 손해 보지 않도록)
+1. `F > Σ c_i`이면 단독요금 상한과 총액 보존을 동시에 만족시킬 수 없으므로 조합을 거절한다.
+2. 기본 배분액이 `c_i`를 넘는 사람의 분담액을 `c_i`로 고정한다. 남은 요금을 아직 고정하지 않은 사람들의 단독 거리 비율로 다시 배분한다. 상한 초과자가 없어질 때까지 반복한다.
+3. 남은 배분액을 **1원 단위로 내림**한다. 남은 원 수만큼 소수 부분이 큰 사람부터 1원씩 더한다. 소수 부분이 같으면 `userId` 오름차순이다. 입력 순서와 무관하게 결과가 같다.
+4. 금액 곱셈·나눗셈은 정수(`long` 중간값, 결과 `int`)로 처리한다. 화면은 서버의 최종 분담액을 그대로 표시한다.
+
+**반드시 테스트할 조건:** `Σ share_i == F`(오차 0원), `0 ≤ share_i ≤ c_i`, `saving_i = c_i - share_i ≥ 0`, 입력 순서를 바꿔도 같은 결과. 개인별 허용 우회율은 정산과 별도로 매칭 평가에서 검사한다.
 
 #### 계산 예시
 
-3인 합승, 총 요금 15,000원 / 총 거리 10,000m
+총 예상 요금 15,000원, 단독 거리 합 19,000m. 이 예시에는 상한 초과자가 없다.
 
-| 구간 | 거리 | 탑승 인원 | 구간 요금 | 인당 |
+| 사용자 | 단독 거리 | 단독 요금 | 원 단위 보정 후 분담액 | 절감액 |
 |---|---|---|---|---|
-| S1: 출발 → A하차 | 3,000m | A,B,C (3명) | 4,500원 | 1,500원 |
-| S2: A → B하차 | 3,000m | B,C (2명) | 4,500원 | 2,250원 |
-| S3: B → C하차 | 4,000m | C (1명) | 6,000원 | 6,000원 |
+| A | 3,000m | 5,600원 | 2,368원 | 3,232원 |
+| B | 6,000m | 8,200원 | 4,737원 | 3,463원 |
+| C | 10,000m | 12,400원 | 7,895원 | 4,505원 |
+| 합계 | 19,000m | 26,200원 | **15,000원** | **11,200원** |
 
-```
-A = 1,500원        (단독 시 약 5,600원 → 73% 절감)
-B = 1,500 + 2,250 = 3,750원
-C = 1,500 + 2,250 + 6,000 = 9,750원
-합계 = 15,000원 ✓
-```
+카카오 `sections`는 지도·하차 순서·개인별 우회 거리 확인에 사용한다. 정산 가중치의 분모는 **단독 거리의 합**이며, 동승 경로의 총 거리나 구간별 인원 수가 아니다. 가까운 목적지에 더 낮은 기본 비율을 주는 설명 가능한 정책이지만, 모든 공정성 기준이나 모든 승객의 엄격한 절감을 보장하는 것은 아니다. 상한에 도달한 사람의 절감액은 0원일 수 있다.
 
-> 단순 1/N이었다면 A는 5,000원을 냈을 것이다. 구간 분할 방식은 **먼저 내리는 사람이 손해 보지 않는다**는 점에서 공정성이 근본적으로 다르며, 이것이 본 서비스의 핵심 설득 포인트다.
+현재 구현 위치는 `matching/algorithm/FareCalculator`이다. `matching`이 다른 도메인인 `fare`를 직접 import하지 않도록 순수 정산 함수를 매칭 내부에서 사용한다.
 
 ### 5.3 우회 보상 할인 (다이내믹 프라이싱)
 
-마지막 하차자는 우회를 감수하지만 구간 분할상 가장 많은 금액을 부담한다. 이를 보정:
+P1 후속 기능(현재 정산에는 미적용). 우회를 감수한 사용자의 부담을 추가로 줄이는 정책이다. 구현 시 §5.2 단독요금 상한을 유지하며 재분배할 수 있는 경우에만 적용한다:
 
 ```
 if detour_ratio_i > 0.15:
@@ -327,7 +321,7 @@ Content-Type: application/json
 | `routes[0].summary.fare.taxi` | 예상 택시 요금(원) | 총 요금 F |
 | `routes[0].summary.distance` | 총 거리(m) | 총 거리 D |
 | `routes[0].summary.duration` | 총 소요시간(초) | 예상 도착 시간 |
-| `routes[0].sections[k].distance` | 구간 거리(m) | **구간 분할 정산의 d_k** |
+| `routes[0].sections[k].distance` | 구간 거리(m) | 지도 표시·하차 지점까지의 누적 거리·우회율 계산 |
 | `routes[0].sections[k].roads[].vertexes` | 좌표 배열 `[x, y, x, y, ...]` | 지도 Polyline |
 | `routes[0].result_code` | 0이면 성공 | 실패 처리 분기 |
 
@@ -396,7 +390,8 @@ match_groups                          -- 소유: matching (서준)
   id BIGINT PK
   hub_id BIGINT
   total_fare INT, total_distance INT, total_duration INT
-  route_json JSON                     -- RouteResult 원본(sections 포함)
+  route_json LONGTEXT                 -- 평가 당시 RouteResult JSON 문자열(sections 포함)
+  hub_name VARCHAR(255), hub_lat DOUBLE, hub_lng DOUBLE, hub_type VARCHAR(255) -- 거점 스냅샷
   estimated BOOLEAN                   -- fallback 추정치 여부
   status ENUM('PENDING','CONFIRMED','COMPLETED','DISSOLVED')
   created_at, confirmed_at, closed_at DATETIME
@@ -406,10 +401,13 @@ match_members                         -- 소유: matching (서준)
   group_id BIGINT, request_id BIGINT, user_id BIGINT
   boarding_order INT, dropoff_order INT
   shared_distance INT                 -- 합승 경로 내 실제 이동 거리
-  detour_ratio DECIMAL(4,3)
+  detour_ratio DECIMAL(5,3)
   share_amount INT                    -- 최종 분담액(원)
   saving_amount INT                   -- 절감액(원)
   accepted BOOLEAN DEFAULT FALSE
+  completed BOOLEAN DEFAULT FALSE    -- 각 구성원의 탑승 완료
+  dest_name VARCHAR(255), dest_lat DOUBLE, dest_lng DOUBLE
+  solo_distance INT, solo_fare INT    -- 요청 생성 당시 단독 거리·요금 스냅샷
   UNIQUE(group_id, user_id)
 
 chat_messages                         -- 소유: realtime (임승현)
@@ -538,7 +536,7 @@ backend/src/main/java/com/gachiga/
 ├── contract/    이승민   ⚠️ 동결. 모듈 간 port 인터페이스·DTO·이벤트·@CurrentUser  (§14)
 ├── ride/        이승민   RideRequest, 요청 API, Redis 대기열, 만료 스케줄러, RideRequestPort·QueueStatusPort 구현
 ├── matching/    서준     매칭 엔진·tick 스케줄러, MatchGroup·MatchMember, 그룹 API, MatchHistoryPort 구현
-├── fare/        서준     구간 분할 정산, 우회 보상 할인
+├── fare/        서준     별도 정산 모듈 예약 (현재 계산기는 matching/algorithm 내부)
 ├── stats/       서준     이력·통계 API
 ├── auth/        임승현   Security 설정, JWT, 웹메일 인증, @CurrentUser 리졸버
 ├── user/        임승현   User, 프로필, 신고, UserPort 구현
@@ -618,7 +616,7 @@ frontend/src/
 | E-04 | 대기시간 만료 직전 매칭 | 만료 30초 전부터는 `findWaiting()` 결과에서 제외 (신규 배정 중단) | 이승민 |
 | E-05 | 노쇼 (수락 후 미등장) | 채팅 내 "노쇼 신고" 버튼 → `POST /api/reports`. 누적 시 이용 제한 | 임승현·오승원 |
 | E-06 | 동성 옵션 충돌 | 그룹 내 1명이라도 동성 옵션 ON이면 전원 동성이어야 함 (§5.1 필터 3) | 서준 |
-| E-07 | 목적지가 사실상 동일 (100m 이내) | 경유지 생성 없이 단일 목적지로 처리, 균등 분할 | 서준 |
+| E-07 | 목적지가 사실상 동일 (100m 이내) | 경유지 생성 없이 단일 목적지로 처리, 거리 비율 정산 유지 | 서준 |
 | E-08 | 우회율 계산 시 분모 0 | 출발지=목적지인 비정상 요청은 생성 단계에서 차단 (최소 500m, `REQUEST_TOO_SHORT`) | 이승민 |
 | E-09 | 인증 토큰 만료 중 매칭 진행 | 프론트 인터셉터가 Refresh 자동 갱신. 실패 시 요청은 유지하되 재로그인 유도 | 오승원·임승현 |
 | E-10 | 채팅 중 그룹 해체 | `GroupDissolved` 수신 → 시스템 메시지 발송 후 5분 뒤 방 삭제 | 임승현 |
@@ -640,7 +638,7 @@ frontend/src/
 | 파트 | 담당 | 한 줄 정의 | 소유 폴더 | 담당 FR | 비중 |
 |---|---|---|---|---|---|
 | ① 플랫폼·요청 | **이승민** | 뼈대·계약·공통·매칭 요청/대기열·통합 | `backend/…/common/ config/ contract/ ride/`, `resources/application*.yml`, `resources/domain/ride.yml`, 저장소 루트 파일(`build.gradle`, `docker-compose.yml`, `.env.example`, `.gitignore`, `.github/`), `docs/PRD.md`, `docs/api-spec.yaml`, `docs/traffic-analysis.md`, `README.md`, `CLAUDE.md` | FR-07(API), 08, 09(데이터), 10 + Phase 0 + 통합·성능 | ~20% |
-| ② 매칭·정산·통계 | **서준** | 매칭 엔진, 구간 정산, 그룹 API, 이력·통계, PM | `backend/…/matching/ fare/ stats/`, `resources/domain/matching.yml` | FR-11, 12, 13, 14, 16, 17, 18, 24, 25, 26 | ~20% |
+| ② 매칭·정산·통계 | **서준** | 매칭 엔진, 거리 비율 정산, 그룹 API, 이력·통계, PM | `backend/…/matching/ fare/ stats/`, `resources/domain/matching.yml` | FR-11, 12, 13, 14, 16, 17, 18, 24, 25, 26 | ~20% |
 | ③ 계정·실시간 | **임승현** | 웹메일 인증·JWT·프로필·신고, WebSocket 전부(대기 push·매칭 알림·채팅) | `backend/…/auth/ user/ realtime/`, `resources/domain/auth.yml` | FR-01, 02, 03, 04, 09(push), 12(push), 20, 21, 22, 23 | ~20% |
 | ④ 경로·지도·요청 화면 | **송준호** | 카카오 연동·거점·장소 검색, 지도 컴포넌트, 요청·대기 화면 | `backend/…/route/`, `resources/domain/route.yml`, `frontend/src/features/request/`, `frontend/src/features/map/` | FR-05, 06, 07(UI), 15, 19 + FR-08·09·10 화면 | ~20% |
 | ⑤ 프론트 기반·핵심 화면 | **오승원** | 디자인 시스템·라우팅·API 클라이언트, 인증·매칭 성사·정산·채팅·이력 화면, 베타 UX | `frontend/` 전체 (단, `features/request/`·`features/map/` 제외) | FR-01~04 화면, 12·13·17 화면, 20·22·24·25 화면 | ~20% |
@@ -666,7 +664,7 @@ frontend/src/
 
 #### ② 서준 — 매칭·정산·통계 (+ PM)
 
-- **하는 일:** §5 알고리즘 전체(하드 필터 → 클러스터링 → 조합 평가 → 점수화), 30초 tick 스케줄러, `MatchGroup`·`MatchMember`, 그룹 상세·수락·거절·완료 API, 해체·재계산(E-01), 구간 분할 정산(§5.2)과 우회 할인(§5.3), 이력·통계 API. PM으로 주간 통합 점검 진행, 베타 테스트 설계·진행, 기술 백서.
+- **하는 일:** §5 알고리즘 전체(하드 필터 → 클러스터링 → 조합 평가 → 점수화), 30초 tick 스케줄러, `MatchGroup`·`MatchMember`, 그룹 상세·수락·거절·완료 API, 해체·재계산(E-01), 단독 거리 비율 정산(§5.2)과 우회 할인(§5.3), 이력·통계 API. PM으로 주간 통합 점검 진행, 베타 테스트 설계·진행, 기술 백서.
 - **혼자서 시연 가능한 것:** `FixedRouteProvider`(스텁)와 인메모리 요청 목록으로 정산 단위 테스트, 시뮬레이션 1,000건 매칭 결과.
 - **다른 파트와의 접점:** `RideRequestPort`(이승민)·`RouteProvider`·`HubPort`(송준호)·`UserPort`(임승현)를 **사용**하고, `MatchHistoryPort`를 **제공**하며, `GroupProposed/Confirmed/Recalculated/Dissolved/Completed` 이벤트를 **발행**한다.
 - **특수성:** 기술 난도 최상. 그래서 남을 기다리지 않도록 계약이 먼저 얼려진다. **§5를 임의로 단순화하지 않는다** — 특히 정산을 1/N으로 바꾸지 않는다.
@@ -688,7 +686,7 @@ frontend/src/
 
 #### ⑤ 오승원 — 프론트 기반·핵심 화면
 
-- **하는 일:** 디자인 토큰·공통 컴포넌트(Button, Input, Card, Modal, Toast, Spinner, Badge), 레이아웃·라우팅·인증 라우트 가드, `openapi-fetch` API 클라이언트와 토큰 자동 갱신 인터셉터(E-09), STOMP 클라이언트 래퍼, MSW 핸들러 유지, 인증 3화면(가입·코드·프로필)+로그인, **매칭 성사 화면**(절감액 강조, 탑승·하차 순서, `RouteMap` 배치, P1에서 60초 수락/거절), **정산 상세 화면**(구간별 누가 어디까지 타고 얼마 내는지 시각화), 채팅 화면(퀵 버튼·마스킹 표시·휘발성 안내), 이력·누적 절감 대시보드, 에러·빈 상태·추정치 배지·`DEV` 배지, 반응형(360px~)·접근성, 베타 피드백 UX 반영.
+- **하는 일:** 디자인 토큰·공통 컴포넌트(Button, Input, Card, Modal, Toast, Spinner, Badge), 레이아웃·라우팅·인증 라우트 가드, `openapi-fetch` API 클라이언트와 토큰 자동 갱신 인터셉터(E-09), STOMP 클라이언트 래퍼, MSW 핸들러 유지, 인증 3화면(가입·코드·프로필)+로그인, **매칭 성사 화면**(절감액 강조, 탑승·하차 순서, `RouteMap` 배치, P1에서 60초 수락/거절), **정산 상세 화면**(단독 거리 비율·단독요금 상한·최종 분담액 시각화), 채팅 화면(퀵 버튼·마스킹 표시·휘발성 안내), 이력·누적 절감 대시보드, 에러·빈 상태·추정치 배지·`DEV` 배지, 반응형(360px~)·접근성, 베타 피드백 UX 반영.
 - **혼자서 시연 가능한 것:** MSW만으로 §3.2 시나리오 전체를 클릭으로 한 바퀴.
 - **다른 파트와의 접점:** `api-spec.yaml`(이승민)에서 타입 생성, `RouteMap`(송준호) 사용, WS 프로토콜(임승현) 구독.
 - **특수성:** 심사자가 보는 건 결국 화면이다. **매칭 성사 화면과 정산 상세 화면이 프로젝트의 하이라이트**다.
@@ -762,7 +760,7 @@ git push origin main
 {type}({모듈}): {무엇을} (FR-XX)
 
 feat(ride): 매칭 요청 생성 API (FR-08)
-feat(fare): 구간 분할 정산 계산기 (FR-16)
+feat(fare): 단독 거리 비율 정산 계산기 (FR-16)
 fix(route): 캐시 키 좌표 반올림 누락 수정 (FR-15)
 test(matching): 정산 합계 보존 프로퍼티 테스트 (FR-16)
 feat(fe-group): 매칭 성사 화면 절감액 표시 (FR-17)
@@ -1014,13 +1012,13 @@ public record GroupCompleted(Long groupId, List<Long> userIds) {}
 
 ```json
 {
-  "groupId": 17, "status": "CONFIRMED", "estimated": false,
+  "groupId": 17, "fareMethod": "DISTANCE_RATIO", "status": "CONFIRMED", "estimated": false,
   "hub": { "id": 2, "name": "전남대 후문", "lat": 35.1760, "lng": 126.8977 },
   "totalFare": 15000, "totalDistance": 10000, "totalDuration": 1320,
   "route": { "sections": [ { "distance": 3000, "duration": 400, "path": [ {"lat": 35.17, "lng": 126.89}, ... ] } ] },
   "members": [
     { "userId": 1, "nickname": "후문호랑이", "isMe": true, "boardingOrder": 1, "dropoffOrder": 1,
-      "destName": "경신여고", "shareAmount": 1500, "soloFare": 5600, "savingAmount": 4100, "detourRatio": 0.02, "accepted": true }
+      "destName": "경신여고", "soloDistance": 3000, "shareAmount": 2368, "soloFare": 5600, "savingAmount": 3232, "detourRatio": 0.02, "accepted": true }
   ],
   "acceptDeadline": "2026-10-20T08:31:00"
 }
@@ -1054,7 +1052,7 @@ CONNECT 헤더 누락·형식 오류, 검증 결과 empty 또는 검증 장애 �
 | `/` → `/request` | 매칭 요청 | 송준호 |
 | `/waiting` | 대기 | 송준호 |
 | `/groups/:groupId` | 매칭 성사 (지도·분담액·하차 순서) | 오승원 |
-| `/groups/:groupId/fare` | 정산 상세 (구간별 몫·100원 보정 설명) — 2026-09-24 시안 확정으로 추가 | 오승원 |
+| `/groups/:groupId/fare` | 정산 상세 (단독 거리 비율·상한·1원 잔액 보정 설명) — 2026-09-24 시안 확정으로 추가 | 오승원 |
 | `/groups/:groupId/chat` | 채팅 | 오승원 |
 | `/history`, `/me` | 이력·대시보드·프로필 | 오승원 |
 
@@ -1066,7 +1064,7 @@ CONNECT 헤더 누락·형식 오류, 검증 결과 empty 또는 검증 장애 �
 - 시안에 없는 화면(매칭 요청·대기, 송준호)은 Stitch 원본 이미지 **요청 `_2`, 대기 `_9`** 를 기준으로 같은 토큰·컴포넌트로 만든다. 단 `_2` 의 "혼자 가면 12,400원 · 3인 동승 시 약 4,100원" 사전 안내와 `_9` 의 "매칭 우선순위 높음 · 성사 확률" 배지는 뒷받침하는 API 가 없어 채택하지 않는다(필요하면 계약 변경 요청).
 - **법적 고지는 §2.2 원문 한 가지만** 쓴다: "본 서비스는 동승자 매칭 및 요금 분담 계산만 제공하며, 택시 호출·운송·결제를 중개하지 않습니다." 시안의 `LegalNotice` 가 이 문구이므로 본 앱 `Layout` footer 를 그것으로 교체하고, `Layout` 밖의 인증 화면(`/login`, `/signup*`)에도 둔다. Stitch·DESIGN.md 의 "이동 중개 도구", "직접 송금하여 정산" 표현은 쓰지 않는다.
 - Stitch 원본의 PRD 범위 밖 요소는 채택하지 않는다: 연락처 마스킹 표시 `010-••••-1234`(연락처를 받지 않는다, FR-03), "학생증 인증" 태그(웹메일 인증이다), 잔여 좌석·예약 표현(배치 매칭이라 좌석이 없다).
-- 시안이 요구해서 계약에 추가한 것(2026-09-24): `GroupMember.breakdown[]`·`roundingAdjustment`(정산 상세의 구간별 몫·100원 보정, 서준 `fare`), `GroupMember.destLat/destLng`(지도 하차 마커, 서준), `GET /api/history?yearMonth`(이력 월 필터, 서준 `stats`). 시안의 "예상 분담액 사전 안내"·"매칭 확률"은 추가하지 않았다.
+- 시안이 요구해서 계약에 추가한 것(2026-09-24): `GroupMember.breakdown[]`·`roundingAdjustment`(이전 구간 정산용. 2026-11-11부터 deprecated, 새 응답에서는 제공하지 않음), `GroupMember.destLat/destLng`(지도 하차 마커, 서준), `GET /api/history?yearMonth`(이력 월 필터, 서준 `stats`). 시안의 "예상 분담액 사전 안내"·"매칭 확률"은 추가하지 않았다.
 - 본 앱 화면이 모두 옮겨진 뒤 `frontend/prototype` 은 삭제한다(두 코드가 어긋나는 것을 막기 위해). 그때까지 시안을 고치면 본 앱에도 반영한다.
 
 **공유 모듈** (`src/shared/`, 오승원 소유. Phase 0에서 초기 버전 제공)
@@ -1263,3 +1261,11 @@ export function DestinationPicker(props: DestinationPickerProps): JSX.Element;
 | 수락 단계 | P1 | P1 유지. **P0는 자동 성사**로 M1 단순화 |
 | 로드맵 | 8월 ~ 12월 (5개월) | **9/21 ~ 12월 중순 (12주), Phase 0~3** |
 | 회의 | 화·금 스크럼, 격주 스프린트 | **주 1회 통합 점검 30분** + 월말 데모 데이 |
+
+### 2026-11-11 정산·그룹 통합 변경
+
+- `GroupDetail.fareMethod=DISTANCE_RATIO`, `GroupMember.soloDistance`를 필수 필드로 추가했다. 구간별 `breakdown`·`roundingAdjustment`는 과거 계약 호환용 deprecated 필드다.
+- 그룹 저장 전에 모든 요청을 `tryMarkMatched(id, version)`로 조건부 배정한다. 하나라도 실패하면 전체 트랜잭션을 롤백한다.
+- 평가한 경로·요금과 거점·목적지·단독 거리/요금을 그룹에 저장해 조회 시 같은 결과를 제공한다. 커밋 뒤 계약 `GroupProposed`·`GroupConfirmed`로 요청의 groupId와 상태를 반영한다.
+- 그룹 상세·완료는 구성원만 가능하다. 완료는 구성원별로 기록하고 전원 완료 시 계약 `GroupCompleted`를 발행한다.
+- 신규 그룹은 완전한 상세를 반환한다. 이전 데이터에 경로·정산 스냅샷이 없으면 임의로 재계산하지 않고 `400 INVALID_INPUT`으로 새 매칭 안내를 반환한다.

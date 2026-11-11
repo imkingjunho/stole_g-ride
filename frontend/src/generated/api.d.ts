@@ -271,7 +271,7 @@ export interface paths {
         /**
          * [P0] 그룹 상세 (경로·순서·분담액·절감액)
          * @description 매칭 성사 화면과 정산 상세 화면이 쓰는 핵심 응답이다 (PRD §14.4).
-         *     `members[].shareAmount` 는 구간 분할 정산 결과이고(PRD §5.2), 그 합은 `totalFare` 와 같다.
+         *     `members[].shareAmount` 는 단독 거리 비율 정산 결과이고(PRD §5.2), 그 합은 `totalFare` 와 같다.
          *     `estimated` 가 true 면 카카오 대신 추정치를 쓴 것이므로 화면에 "추정치" 배지를 띄운다 (E-03).
          */
         get: operations["getGroupsByGroupId"];
@@ -623,7 +623,10 @@ export interface components {
              * @example 2
              */
             hubId: number;
-            /** @example 광주송정역 */
+            /**
+             * @description 목적지명. 공백만으로 이루어진 문자열은 허용하지 않는다.
+             * @example 광주송정역
+             */
             destName: string;
             /**
              * Format: double
@@ -716,6 +719,11 @@ export interface components {
          */
         GroupDetail: {
             /**
+             * @description 단독 거리 비율·단독요금 상한·원 단위 잔액 보정 (PRD §5.2)
+             * @enum {string}
+             */
+            fareMethod: "DISTANCE_RATIO";
+            /**
              * Format: int64
              * @example 17
              */
@@ -757,7 +765,7 @@ export interface components {
         Route: {
             sections: components["schemas"]["RouteSection"][];
         };
-        /** @description 한 정차 지점에서 다음 지점까지. 정산에서 요금을 나누는 단위다 (PRD §5.2) */
+        /** @description 한 정차 지점에서 다음 지점까지. 지도·하차 순서·누적 이동 거리 및 우회율에 사용한다. 정산 가중치는 soloDistance다 */
         RouteSection: {
             /**
              * @description 구간 거리(m). 모든 구간의 합은 totalDistance 와 같다
@@ -772,7 +780,10 @@ export interface components {
             /** @description 지도에 그릴 좌표들. 추정치일 때는 시작·끝 두 점만 올 수 있다 */
             path: components["schemas"]["Coordinate"][];
         };
-        /** @description 한 사람의 한 구간 몫 (§5.2 구간 분할). `GroupMember.breakdown` 의 항목 */
+        /**
+         * @deprecated
+         * @description 이전 구간 정산용 타입. DISTANCE_RATIO 응답은 제공하지 않는다
+         */
         FareBreakdownItem: {
             /** @description `route.sections` 의 인덱스 (0부터) */
             sectionIndex: number;
@@ -784,8 +795,8 @@ export interface components {
             share: number;
         };
         /**
-         * @description `shareAmount` 는 구간 분할 정산 결과다 (PRD §5.2). 먼저 내리는 사람이 적게 낸다 —
-         *     단순 1/N 이 아니라는 점이 이 서비스의 핵심이므로 화면에서 그 차이를 보여 준다.
+         * @description `shareAmount` 는 단독 이동 거리 비율로 배분한 뒤 단독요금 상한과 원 단위 잔액을 보정한 결과다 (PRD §5.2).
+         *     가중치는 `soloDistance`이며, 화면은 서버 최종 금액을 그대로 표시한다. 절감액은 0원일 수 있다.
          */
         GroupMember: {
             /** Format: int64 */
@@ -810,8 +821,13 @@ export interface components {
             /** @example 경신여고 */
             destName: string;
             /**
-             * @description 최종 분담액(원). 100원 단위
-             * @example 1500
+             * @description 거점부터 이 목적지까지 단독 이동 거리(m). 정산 가중치이며 요청 생성 당시 값
+             * @example 3000
+             */
+            soloDistance: number;
+            /**
+             * @description 최종 분담액(원). 1원 단위이며 soloFare 이하
+             * @example 2368
              */
             shareAmount: number;
             /**
@@ -821,7 +837,7 @@ export interface components {
             soloFare: number;
             /**
              * @description 절감액(원) = soloFare - shareAmount
-             * @example 4100
+             * @example 3232
              */
             savingAmount: number;
             /**
@@ -843,14 +859,13 @@ export interface components {
              */
             destLng?: number;
             /**
-             * @description 이 사람의 분담액이 어떻게 나왔는지 — 구간별 (§5.2). 정산 상세 화면이 "구간 1 4,500원 ÷ 3명 = 1,500원" 처럼
-             *     그린다. 순서는 `route.sections` 와 같고, 이 사람이 타지 않은 구간은 들어 있지 않다.
-             *     `Σ share + roundingAdjustment == shareAmount` 가 항상 성립한다. 서준 `fare` 모듈이 채운다.
+             * @deprecated
+             * @description 이전 구간 정산 전용. DISTANCE_RATIO 응답은 제공하지 않으며 새 UI에서 사용하지 않는다
              */
             breakdown?: components["schemas"]["FareBreakdownItem"][];
             /**
-             * @description 100원 단위 보정액(원). 구간 몫의 합을 100원 단위로 올린 뒤 총액이 맞도록 최대 분담자에게서 뺀 값이다 (§5.2).
-             *     0 이면 보정 없음. 음수일 수 있다. 화면에는 "반올림 보정 +50원" 처럼 보여 준다
+             * @deprecated
+             * @description 이전 100원 보정 전용. DISTANCE_RATIO 응답은 제공하지 않는다
              */
             roundingAdjustment?: number;
         };
@@ -1520,6 +1535,15 @@ export interface operations {
                     "application/json": components["schemas"]["ApiResponse"] & {
                         data?: components["schemas"]["GroupDetail"];
                     };
+                };
+            };
+            /** @description 이전 그룹에 경로·정산 스냅샷이 없음 (`INVALID_INPUT`). 새 매칭 안내 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
             401: components["responses"]["Unauthorized"];

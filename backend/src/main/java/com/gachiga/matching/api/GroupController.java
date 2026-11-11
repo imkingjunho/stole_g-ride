@@ -1,40 +1,28 @@
 package com.gachiga.matching.api;
 
-import com.gachiga.matching.domain.MatchGroup;
-import com.gachiga.matching.port.MatchGroupRepository;
-import com.gachiga.matching.port.MatchMemberRepository;
+import com.gachiga.common.response.ApiResponse;
+import com.gachiga.contract.auth.CurrentUser;
+import com.gachiga.matching.GroupService;
+
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.ResponseEntity;
+
 import org.springframework.web.bind.annotation.*;
 
-@Slf4j
 @RestController
 @RequestMapping("/api/groups")
 @RequiredArgsConstructor
 public class GroupController {
+    private final GroupService groupService;
 
-    private final MatchGroupRepository groupRepository;
-    private final MatchMemberRepository memberRepository;
-
-    @GetMapping("/{id}")
-    public ResponseEntity<GroupResponse> getGroup(@PathVariable Long id) {
-        return groupRepository.findById(id)
-            .map(group -> ResponseEntity.ok(
-                GroupResponse.from(group, memberRepository.findByGroupId(group.getId()))))
-            .orElseGet(() -> ResponseEntity.notFound().build());
+    @GetMapping("/{groupId}")
+    public ApiResponse<GroupResponse> getGroup(
+            @PathVariable Long groupId, @CurrentUser Long userId) {
+        return ApiResponse.ok(groupService.detail(groupId, userId));
     }
 
-    @PostMapping("/{id}/complete")
-    public ResponseEntity<GroupResponse> completeGroup(@PathVariable Long id) {
-        return groupRepository.findById(id)
-            .map(group -> {
-                group.complete();
-                MatchGroup saved = groupRepository.save(group);
-                log.info("Group {} completed", id);
-                return ResponseEntity.ok(
-                    GroupResponse.from(saved, memberRepository.findByGroupId(saved.getId())));
-            })
-            .orElseGet(() -> ResponseEntity.notFound().build());
+    @PostMapping("/{groupId}/complete")
+    public ApiResponse<Void> completeGroup(@PathVariable Long groupId, @CurrentUser Long userId) {
+        groupService.complete(groupId, userId);
+        return ApiResponse.ok();
     }
 }

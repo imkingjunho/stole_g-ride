@@ -1,5 +1,5 @@
 -- 가치가(WE-Meet) 스키마 — docs/schema.sql (T3-2)
--- 추출일: 2026-10-28, MySQL 8.0.46
+-- 추출일: 2026-11-11, MySQL 8.0.46
 -- 출처: 지정한 MySQL DB의 실제 mysqldump --no-data 결과.
 -- 재추출 전 최신 앱을 별도 빈 검증 DB에 local(ddl-auto: update)로 기동한다.
 -- 재현: bash deploy/scripts/export-schema.sh <MySQL 컨테이너> docs/schema.sql
@@ -28,6 +28,45 @@ CREATE TABLE `hubs` (
   `name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
   `type` enum('CAMPUS','STATION','TERMINAL','SCHOOL') COLLATE utf8mb4_unicode_ci NOT NULL,
   PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE `match_groups` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `closed_at` datetime(6) DEFAULT NULL,
+  `confirmed_at` datetime(6) DEFAULT NULL,
+  `created_at` datetime(6) DEFAULT NULL,
+  `estimated` bit(1) NOT NULL,
+  `hub_id` bigint DEFAULT NULL,
+  `hub_lat` double DEFAULT NULL,
+  `hub_lng` double DEFAULT NULL,
+  `hub_name` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `hub_type` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `route_json` longtext COLLATE utf8mb4_unicode_ci,
+  `status` enum('PENDING','CONFIRMED','COMPLETED','DISSOLVED') COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `total_distance` int NOT NULL,
+  `total_duration` int NOT NULL,
+  `total_fare` int NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE `match_members` (
+  `id` bigint NOT NULL AUTO_INCREMENT,
+  `accepted` bit(1) NOT NULL,
+  `boarding_order` int NOT NULL,
+  `completed` bit(1) DEFAULT NULL,
+  `dest_lat` double DEFAULT NULL,
+  `dest_lng` double DEFAULT NULL,
+  `dest_name` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `detour_ratio` decimal(5,3) DEFAULT NULL,
+  `dropoff_order` int NOT NULL,
+  `group_id` bigint NOT NULL,
+  `request_id` bigint NOT NULL,
+  `saving_amount` int NOT NULL,
+  `share_amount` int NOT NULL,
+  `shared_distance` int NOT NULL,
+  `solo_distance` int DEFAULT NULL,
+  `solo_fare` int DEFAULT NULL,
+  `user_id` bigint NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `UKlospuc7s3k556d5r7mouv1oec` (`group_id`,`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE `refresh_tokens` (
   `id` bigint NOT NULL AUTO_INCREMENT,
