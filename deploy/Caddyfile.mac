@@ -1,0 +1,26 @@
+# Cloudflare가 HTTPS를 종료한다. 이 포트는 Docker에서 127.0.0.1에만 바인딩한다.
+:80 {
+	encode gzip
+	@private path /api/dev /api/dev/* /swagger-ui* /v3/api-docs*
+	handle @private {
+		respond 404
+	}
+	@backend path /api/* /ws /ws/*
+	handle @backend {
+		reverse_proxy host.docker.internal:8080 {
+			header_up -Forwarded
+			header_up -X-Forwarded-Prefix
+			header_up X-Forwarded-Proto https
+		}
+	}
+	handle {
+		root * /srv/frontend
+		try_files {path} /index.html
+		file_server
+	}
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+}

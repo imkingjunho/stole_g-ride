@@ -34,3 +34,6 @@ Thumbs.db
 .claude/settings.local.json
 load/k6/last-result.json
 load/k6/result-*.json
+
+# Mac 임시 공개 서버의 PID·로그·빌드 결과 (키는 .env.mac.local)
+.local-server/

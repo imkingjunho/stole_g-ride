@@ -134,11 +134,39 @@ docker compose -f docker-compose.prod.yml exec -T mysql sh -eu -c \
 
 ## 5. 도메인·서버가 없을 때 — 터널
 
-팀원 노트북에서 `docker compose -f docker-compose.prod.yml up -d` 로 띄우고 `cloudflared tunnel --url http://localhost:80` 같은 터널로
-임시 https 주소를 받는다. 이때 `BETA_DOMAIN` 은 터널이 준 주소, Caddy 는 인증서를 받을 수 없으므로 `deploy/Caddyfile` 의 사이트 주소 줄
-`{$BETA_DOMAIN} {` 을 `:80 {` 으로 바꿔 평문으로 띄우고 터널이 HTTPS 를 맡긴다. 이 구성에서 Caddy 는 백엔드에 `X-Forwarded-Proto: http` 를
-보내므로 리다이렉트·쿠키가 http 기준이 된다 — `reverse_proxy backend:8080 { header_up X-Forwarded-Proto https }` 로 고정하면 된다.
-주소가 매번 바뀌므로 카카오 콘솔 도메인 등록이 번거롭다 — 시연 리허설용.
+Mac을 켜 두는 동안 팀원이 실제 API를 사용할 수 있는 임시 공개 방법이다. **Vercel 계정이나 별도 도메인 없이 화면까지 함께 제공**한다.
+Cloudflare Quick Tunnel은 테스트용이며 재시작 때 주소가 바뀐다. Mac 종료·잠자기·네트워크 단절 때 접속할 수 없다.
+공식 제약: [Quick Tunnels](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/).
+
+필요한 것: Docker Desktop 실행, Java 17, Node 24, `cloudflared`, 기존 로컬 `.env`와 최신 스키마의 MySQL DB.
+이 도구는 로컬 DB 데이터를 그대로 사용하고 **prod/validate**로 기동하므로 새 DB나 구버전 DB에는 앞 절의 스키마 준비가 먼저 필요하다.
+기존 `bootRun` 등으로 8080 포트를 쓰고 있다면 먼저 종료한다. 다른 프로세스를 자동으로 죽이지 않는다.
+
+저장소 루트에서:
+
+```bash
+node deploy/scripts/mac-server.mjs start   # 빌드·백엔드·프론트·HTTPS 터널 시작, 공유 주소 출력
+node deploy/scripts/mac-server.mjs status  # 현재 주소·실행 상태 확인
+node deploy/scripts/mac-server.mjs stop    # 공개 접속과 백엔드만 종료. DB·Redis·데이터는 유지
+```
+
+- `.env`를 읽고 `.env.mac.local`로 덮어쓴다. JWT 키가 없으면 한 번 생성해 `.env.mac.local`에 저장하고 다음 시작에도 재사용한다. 두 파일 모두 Git 제외 대상이다.
+- `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`를 `.env.mac.local`에 설정해야 **신규 회원가입 메일**을 보낼 수 있다. 누락 시 기존 계정 로그인은 가능하지만 신규 가입은 발송 오류로 끝난다. 발신 계정·앱 비밀번호는 임승현에게 받아 로컬 파일에만 입력한다.
+- 프론트는 `VITE_API_MODE=real`로 빌드한다. 카카오 JS 키는 `frontend/.env`의 `VITE_KAKAO_JS_KEY`를 읽는다. 새 공유 주소를 카카오 콘솔 허용 도메인에 추가해야 지도가 표시된다.
+- `.local-server/`에 실행 정보·로그·배포용 빌드를 저장한다. 비밀과 실행 자료를 커밋하지 않는다.
+- `deploy/Caddyfile.mac`이 정적 화면과 `/api/*`, `/ws`를 같은 주소로 제공한다. 개발 API·Swagger는 공개하지 않는다. DB·Redis 및 Caddy의 로컬 진입 포트는 루프백에만 연다.
+- `stop`은 이 도구가 기록한 PID의 시작 시각·실행 파일과 컨테이너 ID를 확인한 뒤 해당 자원만 종료한다. Docker 볼륨을 삭제하지 않는다.
+
+**기존 Vercel 주소도 사용할 경우:** 기본 허용 출처는 `https://stole-g-ride-bpwm.vercel.app`이다. 다른 주소라면 `.env.mac.local`의
+`MAC_FRONTEND_ORIGIN`에 정확한 HTTPS 출처를 넣는다. Vercel 소유자가 Production 환경변수를 아래처럼 설정하고 **재배포**한다.
+
+```dotenv
+VITE_API_MODE=real
+VITE_API_BASE_URL=https://시작할-때-출력된-주소.trycloudflare.com
+```
+
+`VITE_API_BASE_URL` 끝에 `/api`를 붙이지 않는다. 같은 주소로 WebSocket도 연결한다. 터널을 다시 만들면 Vercel 값도 바꿔 재배포해야 하므로,
+자주 재시작할 때는 출력된 공유 주소로 직접 접속하는 편이 간단하다. Vercel 자체는 계속 열려 있어도 Mac이 꺼지면 API 기능은 작동하지 않는다.
 
 ## 6. 문제가 생기면
 
