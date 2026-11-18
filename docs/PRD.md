@@ -476,6 +476,8 @@ Flyway 같은 마이그레이션 도구는 **쓰지 않는다.** 5명이 마이�
 | GET | `/api/groups/{id}/messages` | 채팅 이전 메시지 조회 (재접속용) | ✔ | P0 | 임승현 |
 | GET | `/api/history` | 내 매칭 이력 | ✔ | P1 | 서준 |
 | GET | `/api/stats/me` | 누적 절감 리포트 | ✔ | P2 | 서준 |
+| GET | `/api/admin/access` | 로그인한 회원의 운영 현황 조회 권한 | ✔ | P2 | 이승민 |
+| GET | `/api/admin/dashboard` | 대기·수락 중·확정 인원과 최근 7일 확정 그룹 수 (한국 시각, 그룹당 1건) | 관리자 | P2 | 이승민 |
 | GET | `/api/admin/stats` | 관리자 통계 | ✔ | P2 | 서준 |
 | WS | `/ws` | STOMP 엔드포인트 (대기 상태·매칭 알림·채팅 — §14.5) | ✔ | P0 | 임승현 |
 

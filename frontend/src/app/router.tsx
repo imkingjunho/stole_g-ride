@@ -11,6 +11,7 @@ import { ChatPage } from '@/features/chat/ChatPage';
 import { GroupPage } from '@/features/group/GroupPage';
 import { FarePage } from '@/features/group/FarePage';
 import { HistoryPage } from '@/features/history/HistoryPage';
+import { AdminPage } from '@/features/admin/AdminPage';
 import { MyPage } from '@/features/history/MyPage';
 import { RequestPage } from '@/features/request/RequestPage';
 import { WaitingPage } from '@/features/request/WaitingPage';
@@ -44,6 +45,7 @@ export const router = createBrowserRouter([
           { path: 'groups/:groupId/fare', element: <FarePage /> },
           { path: 'groups/:groupId/chat', element: <ChatPage /> },
           { path: 'history', element: <HistoryPage /> },
+          { path: 'admin', element: <AdminPage /> },
           { path: 'me', element: <MyPage /> },
           ...(import.meta.env.DEV && isMockMode
             ? [

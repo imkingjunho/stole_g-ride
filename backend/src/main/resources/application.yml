@@ -45,6 +45,8 @@ server:
 # REST(config/CorsConfig)와 WebSocket 핸드셰이크(realtime/WebSocketConfig)가 이 한 줄을 함께 읽는다.
 # 배포에서는 GACHIGA_CORS_ALLOWED_ORIGINS 환경변수로 덮어쓴다 (docker-compose.prod.yml 이 https://도메인 을 넣는다).
 gachiga:
+  admin:
+    user-ids: ${GACHIGA_ADMIN_USER_IDS:}
   cors:
     allowed-origins: ${GACHIGA_CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
 

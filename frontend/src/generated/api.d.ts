@@ -448,6 +448,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 내 운영 현황 조회 권한 */
+        get: operations["getAdminAccess"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 실시간 매칭 운영 현황과 최근 7일 확정 그룹 수 */
+        get: operations["getAdminDashboard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/stats": {
         parameters: {
             query?: never;
@@ -1028,6 +1062,31 @@ export interface components {
             averageSavingRate: number;
             /** @example 전남대 후문 */
             mostUsedHubName?: string | null;
+        };
+        AdminDashboard: {
+            /** Format: date-time */
+            asOf: string;
+            waiting: {
+                nickname: string;
+                hubName: string;
+                /** Format: date-time */
+                requestedAt: string;
+            }[];
+            matched: {
+                nickname: string;
+                hubName: string;
+                /** Format: int64 */
+                groupId: number;
+                /** @description 그룹 전원 수락 여부 */
+                confirmed: boolean;
+            }[];
+            /** @description 한국 시각 확정일 기준 최근 7일. 0건인 날을 포함해 과거부터 정렬한다. */
+            daily: {
+                /** Format: date */
+                date: string;
+                /** Format: int64 */
+                groups: number;
+            }[];
         };
         AdminStats: {
             byHub: components["schemas"]["HubStat"][];
@@ -1876,6 +1935,53 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             500: components["responses"]["InternalError"];
+        };
+    };
+    getAdminAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 내 운영 현황 조회 권한 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data: boolean;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    getAdminDashboard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 실시간 매칭 운영 현황과 최근 7일 확정 그룹 수 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data: components["schemas"]["AdminDashboard"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     getAdminStats: {

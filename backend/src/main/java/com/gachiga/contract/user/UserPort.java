@@ -1,5 +1,7 @@
 package com.gachiga.contract.user;
 
+import java.util.Collection;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -12,6 +14,9 @@ import java.util.Optional;
  * <p>구현체는 {@code user/UserAdapter} 하나다 (T1-7 에서 {@code StubUserAdapter} 를 대체).
  */
 public interface UserPort {
+
+    /** 운영 화면에 표시할 닉네임만 일괄 조회한다. */
+    Map<Long, String> nicknames(Collection<Long> userIds);
 
     /**
      * 사용자 한 명을 찾는다.

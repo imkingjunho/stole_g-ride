@@ -868,6 +868,50 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/admin/access:
+    get:
+      operationId: getAdminAccess
+      tags: [history]
+      summary: "내 운영 현황 조회 권한"
+      responses:
+        "200":
+          description: "내 운영 현황 조회 권한"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    required: [data]
+                    properties:
+                      data:
+                        type: boolean
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/admin/dashboard:
+    get:
+      operationId: getAdminDashboard
+      tags: [history]
+      summary: "실시간 매칭 운영 현황과 최근 7일 확정 그룹 수"
+      responses:
+        "200":
+          description: "실시간 매칭 운영 현황과 최근 7일 확정 그룹 수"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/ApiResponse"
+                  - type: object
+                    required: [data]
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AdminDashboard"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
   /api/admin/stats:
     get:
       operationId: getAdminStats
@@ -1747,6 +1791,40 @@ components:
           type: string
           nullable: true
           example: 전남대 후문
+
+    AdminDashboard:
+      type: object
+      required: [asOf, waiting, matched, daily]
+      properties:
+        asOf: {type: string, format: date-time}
+        waiting:
+          type: array
+          items:
+            type: object
+            required: [nickname, hubName, requestedAt]
+            properties:
+              nickname: {type: string}
+              hubName: {type: string}
+              requestedAt: {type: string, format: date-time}
+        matched:
+          type: array
+          items:
+            type: object
+            required: [nickname, hubName, groupId, confirmed]
+            properties:
+              nickname: {type: string}
+              hubName: {type: string}
+              groupId: {type: integer, format: int64}
+              confirmed: {type: boolean, description: 그룹 전원 수락 여부}
+        daily:
+          description: 한국 시각 확정일 기준 최근 7일. 0건인 날을 포함해 과거부터 정렬한다.
+          type: array
+          items:
+            type: object
+            required: [date, groups]
+            properties:
+              date: {type: string, format: date}
+              groups: {type: integer, format: int64}
 
     AdminStats:
       type: object

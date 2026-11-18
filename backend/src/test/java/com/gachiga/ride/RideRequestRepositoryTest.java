@@ -54,6 +54,18 @@ class RideRequestRepositoryTest {
     }
 
     @Test
+    void dashboardIncludesLastSecondsOfWaitButNotMatchedOrExpiredRequests() {
+        repository.save(newRequest(41L, 1L, NOW));
+        var assigned = newRequest(42L, 1L, NOW);
+        assigned.markMatched();
+        repository.saveAndFlush(assigned);
+        assertThat(repository.waitingRoster(NOW.plusMinutes(10).minusSeconds(1)))
+                .extracting(com.gachiga.contract.ride.WaitingRosterPort.Entry::userId)
+                .containsExactly(41L);
+        assertThat(repository.waitingRoster(NOW.plusMinutes(10))).isEmpty();
+    }
+
+    @Test
     @DisplayName("배정은 한 번만 성공한다 — 같은 버전으로 두 번째는 0건 (E-02)")
     void matchOnlyOnce() {
         RideRequest saved = repository.saveAndFlush(newRequest(1L, 2L, NOW.plusMinutes(5)));

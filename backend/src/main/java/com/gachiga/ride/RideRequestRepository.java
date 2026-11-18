@@ -1,5 +1,6 @@
 package com.gachiga.ride;
 
+import com.gachiga.contract.ride.WaitingRosterPort;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -16,6 +17,13 @@ import org.springframework.data.repository.query.Param;
  * 낙관적 락이 걸린 갱신({@code tryMarkMatched})은 T1-5 에서 추가한다.
  */
 public interface RideRequestRepository extends JpaRepository<RideRequest, Long> {
+
+    @Query("""
+            select new com.gachiga.contract.ride.WaitingRosterPort$Entry(r.userId, r.hubId, r.createdAt)
+            from RideRequest r where r.status = com.gachiga.ride.RideRequestStatus.WAITING
+              and r.expiresAt > :now order by r.createdAt, r.id
+            """)
+    List<WaitingRosterPort.Entry> waitingRoster(@Param("now") LocalDateTime now);
 
     /**
      * 사용자에게 진행 중인 요청이 있는지. 1인 1건 제한 검사에 쓴다 (FR-08).

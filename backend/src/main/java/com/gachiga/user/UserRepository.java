@@ -1,5 +1,7 @@
 package com.gachiga.user;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -9,6 +11,13 @@ import org.springframework.data.jpa.repository.JpaRepository;
  * <p>이메일·닉네임 중복 검사(T1-2·T1-3)와 로그인(T1-4)이 여기 메서드를 쓴다.
  */
 public interface UserRepository extends JpaRepository<User, Long> {
+
+    interface NicknameRow {
+        Long getId();
+        String getNickname();
+    }
+
+    List<NicknameRow> findAllProjectedByIdIn(Collection<Long> ids);
 
     /** 로그인, 이메일 중복 가입 검사에 쓴다 */
     Optional<User> findByEmail(String email);

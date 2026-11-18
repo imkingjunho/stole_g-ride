@@ -50,6 +50,29 @@ class RideHistoryIntegrationTest {
     }
 
     @Test
+    void dailyCountsUseConfirmationDateOncePerGroupIncludingFinishedRides() {
+        var start = LocalDateTime.of(2026, 11, 12, 0, 0);
+        var active = group("후문");
+        active.setConfirmedAt(start);
+        member(active, 31, false, null, 10000, 2000);
+        member(active, 32, true, start, 10000, 2000);
+        var finished = group("정문");
+        finished.setConfirmedAt(start.plusHours(23));
+        finished.complete();
+        member(finished, 33, true, start.plusDays(1), 10000, 2000);
+        var outside = group("정문");
+        outside.setConfirmedAt(start.plusDays(1));
+        var proposed = groups.saveAndFlush(MatchGroup.builder().hubName("정문").build());
+        member(proposed, 34, false, null, 10000, 2000);
+        em.flush();
+        assertThat(groups.confirmedBetween(start, start.plusDays(1)))
+                .containsExactly(new com.gachiga.contract.matching.MatchOperationsPort.Day(start.toLocalDate(), 2));
+        assertThat(groups.currentMembers())
+                .extracting("userId", "confirmed")
+                .containsExactly(tuple(34L, false), tuple(31L, true));
+    }
+
+    @Test
     void ownCompletionIsVisibleBeforeEveryoneCompletesAndStatsSpanPages() {
         var nov = LocalDateTime.of(2026, 11, 1, 0, 0);
         var g = group("후문");

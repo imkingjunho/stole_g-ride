@@ -5,6 +5,7 @@ import com.gachiga.contract.ride.QueueStatus;
 import com.gachiga.contract.ride.QueueStatusPort;
 import com.gachiga.contract.ride.RideRequestPort;
 import com.gachiga.contract.ride.WaitingRequest;
+import com.gachiga.contract.ride.WaitingRosterPort;
 import com.gachiga.contract.route.Coordinate;
 import java.time.Clock;
 import java.time.LocalDateTime;
@@ -35,7 +36,12 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class RideRequestAdapter implements RideRequestPort, QueueStatusPort {
+public class RideRequestAdapter implements RideRequestPort, QueueStatusPort, WaitingRosterPort {
+
+    @Override
+    public List<WaitingRosterPort.Entry> waitingAt(LocalDateTime now) {
+        return rideRequestRepository.waitingRoster(now);
+    }
 
     /** 진행 중으로 보는 상태. 대기 상태 조회에 쓴다 */
     private static final List<RideRequestStatus> IN_PROGRESS =

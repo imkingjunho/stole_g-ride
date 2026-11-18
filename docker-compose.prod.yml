@@ -84,6 +84,7 @@ services:
         condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: prod
+      GACHIGA_ADMIN_USER_IDS: ${GACHIGA_ADMIN_USER_IDS:-}
       DB_HOST: mysql
       DB_PORT: "3306"
       DB_NAME: ${DB_NAME:-gachiga}

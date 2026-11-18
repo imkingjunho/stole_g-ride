@@ -1,5 +1,8 @@
 package com.gachiga.user;
 
+import java.util.stream.Collectors;
+import java.util.Collection;
+import java.util.Map;
 import com.gachiga.contract.user.CanonicalEmail;
 import com.gachiga.contract.user.UserPort;
 import com.gachiga.contract.user.UserSummary;
@@ -18,6 +21,13 @@ import org.springframework.stereotype.Component;
 public class UserAdapter implements UserPort {
 
     private final UserRepository userRepository;
+
+    @Override
+    public Map<Long, String> nicknames(Collection<Long> ids) {
+        if (ids.isEmpty()) return Map.of();
+        return userRepository.findAllProjectedByIdIn(ids).stream().collect(
+                Collectors.toMap(UserRepository.NicknameRow::getId, UserRepository.NicknameRow::getNickname));
+    }
 
     @Override
     public Optional<UserSummary> findById(Long userId) {

@@ -220,5 +220,31 @@ export const handlers = [
       mostUsedHubName: mockGroup.hub.name,
     } satisfies S['MyStats']),
   ),
+  // 체험 모드의 관리자 화면은 예시 데이터만 보여 준다.
+  http.get(`${BASE}/api/admin/access`, () => ok(true)),
+  http.get(`${BASE}/api/admin/dashboard`, () => {
+    const now = Date.now();
+    const kstDate = (time: number) => new Date(time + 9 * 3600000).toISOString().slice(0, 10);
+    return ok({
+      asOf: new Date(now).toISOString(),
+      waiting: [
+        {
+          nickname: '정문다람쥐',
+          hubName: '전남대 정문',
+          requestedAt: new Date(now - 180000).toISOString(),
+        },
+      ],
+      matched: mockGroup.members.map((m) => ({
+        nickname: m.nickname,
+        hubName: mockGroup.hub.name,
+        groupId: mockGroup.groupId,
+        confirmed: true,
+      })),
+      daily: [3, 0, 2, 1, 4, 2, 1].map((groups, i) => ({
+        date: kstDate(now - (6 - i) * 86400000),
+        groups,
+      })),
+    } satisfies S['AdminDashboard']);
+  }),
   http.get(`${BASE}/api/admin/stats`, () => ok({ byHub: [], byHour: [] })),
 ];

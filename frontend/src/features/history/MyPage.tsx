@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api, unwrap, showError } from '@/shared/api/client';
 import type { components } from '@/generated/api';
 import { useAuthStore } from '@/shared/stores/authStore';
@@ -12,6 +12,16 @@ export function MyPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const stats = useStats();
+  const sessionVersion = useAuthStore((s) => s.sessionVersion);
+  const id = useAuthStore((s) => s.user?.id);
+  const admin = useQuery({
+    queryKey: ['admin-access', id, sessionVersion],
+    queryFn: async ({ signal }) => {
+      const result = await api.GET('/api/admin/access', { signal });
+      return unwrap(result.data, result.error);
+    },
+    retry: false,
+  });
   const [edit, setEdit] = useState(false);
   const [nickname, setNickname] = useState('');
   const [department, setDepartment] = useState('');
@@ -115,6 +125,11 @@ export function MyPage() {
           <p className="mt-3 text-sm text-slate-600">누적 통계 준비 중</p>
         )}
       </Card>
+      {admin.data && (
+        <Link className="link" to="/admin">
+          매칭 운영 현황
+        </Link>
+      )}
       <Button
         fullWidth
         variant="secondary"
