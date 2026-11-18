@@ -1,3 +1,4 @@
+import { PickupGuide } from '@/shared/ui/PickupGuide';
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
@@ -11,6 +12,7 @@ import { useGroup } from './useGroup';
 import { ReportButton } from './ReportButton';
 import { GroupRouteMap } from './GroupRouteMap';
 import { readGroupDetail } from './groupResponse';
+import { useToastStore } from '@/shared/stores/toastStore';
 import { useAuthStore } from '@/shared/stores/authStore';
 export function GroupPage() {
   const query = useGroup();
@@ -87,7 +89,9 @@ export function GroupPage() {
         setCompleteOpen(false);
         void queryClient.invalidateQueries({ queryKey: ['history'] });
         void queryClient.invalidateQueries({ queryKey: ['stats'] });
-        navigate('/history');
+        useToastStore
+          .getState()
+          .notify('탑승 완료했어요. 함께한 이동에 저장됐고 채팅은 계속할 수 있어요.', 'success');
       }
     },
     onError: (error, { groupId, sessionVersion }) => {
@@ -144,6 +148,7 @@ export function GroupPage() {
           {group.hub.name}에서 {group.members.length}명이 함께 출발해요.
         </p>
       </header>
+      <PickupGuide hub={group.hub} />
       <Card>
         {group.estimated && <Badge variant="estimated" />}
         {me ? (
@@ -228,14 +233,24 @@ export function GroupPage() {
             ))}
         </ol>
       </Card>
-      {group.status === 'CONFIRMED' && (
+      {['CONFIRMED', 'COMPLETED'].includes(group.status) && (
         <div className="space-y-3">
           <Link className="link w-full bg-brand text-white" to={`/groups/${group.groupId}/chat`}>
             동승자와 채팅하기
           </Link>
-          <Button fullWidth variant="secondary" onClick={() => setCompleteOpen(true)}>
-            탑승 완료
-          </Button>
+          {group.status === 'CONFIRMED' && (
+            <Button
+              fullWidth
+              variant="secondary"
+              disabled={me?.completed}
+              onClick={() => setCompleteOpen(true)}
+            >
+              {me?.completed ? '탑승 완료했어요' : '탑승 완료'}
+            </Button>
+          )}
+          <Link className="link w-full" to="/history">
+            함께한 이동 보기
+          </Link>
         </div>
       )}
       <ReportButton group={group} />
@@ -243,7 +258,7 @@ export function GroupPage() {
         open={completeOpen}
         onClose={() => setCompleteOpen(false)}
         title="탑승을 완료할까요?"
-        description="완료 후에는 대화가 종료되고 채팅 내역이 삭제됩니다."
+        description="내 동승 내역에 저장돼요. 채팅은 매칭 확정 후 3시간까지 계속할 수 있어요."
       >
         <Button fullWidth loading={action.isPending} onClick={() => act('complete')}>
           탑승 완료 확인

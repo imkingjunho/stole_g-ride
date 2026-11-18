@@ -1,3 +1,4 @@
+import { PickupGuide } from '@/shared/ui/PickupGuide';
 import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
@@ -80,6 +81,7 @@ export function WaitingPage() {
         </p>
       </header>
 
+      <PickupGuide hub={request.hub} />
       <Card className="space-y-5 text-center">
         {expired ? (
           <p className="text-sm text-slate-600">
@@ -94,7 +96,12 @@ export function WaitingPage() {
               </p>
             </div>
             <p className="text-sm text-slate-600">
-              현재 함께 기다리는 사람 <strong className="text-ink">{request.candidateCount}명</strong>
+              같은 출발지에서 기다리는 사람{' '}
+              <strong className="text-ink">{request.candidateCount}명</strong>
+            </p>
+            <p className="text-xs text-slate-600">
+              새 요청이 들어오면 바로 매칭 조건을 확인해요. 목적지·출발 시간·우회 조건이 맞는
+              동승자가 필요해요.
             </p>
             {request.estimated && (
               <p className="text-xs text-slate-600">혼자 이동 요금은 추정치예요.</p>

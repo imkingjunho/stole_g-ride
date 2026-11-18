@@ -68,6 +68,60 @@ paths:
   # ─────────────────────────────────────────────────────────────
   # auth — 임승현
   # ─────────────────────────────────────────────────────────────
+  /api/auth/password-reset/request:
+    post:
+      operationId: passwordResetRequest
+      tags: [auth]
+      summary: "비밀번호 재설정 메일 발송"
+      description: "가입 코드와 분리된 일회용 코드. 10분 유효, 발송 간격 60초, 5회 실패 시 30분 제한. 재설정 시 기존 Refresh 토큰을 폐기한다. 기존 Access 토큰은 만료까지 유효하다."
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignupRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/NoContentSuccess"
+        "400":
+          description: 입력 오류 또는 코드 불일치
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "429":
+          description: 재발송 간격 또는 인증 시도 제한
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/auth/password-reset/confirm:
+    post:
+      operationId: passwordResetConfirm
+      tags: [auth]
+      summary: "비밀번호 재설정 완료"
+      description: "가입 코드와 분리된 일회용 코드. 10분 유효, 발송 간격 60초, 5회 실패 시 30분 제한. 재설정 시 기존 Refresh 토큰을 폐기한다. 기존 Access 토큰은 만료까지 유효하다."
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordResetRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/NoContentSuccess"
+        "400":
+          description: 입력 오류 또는 코드 불일치
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "429":
+          description: 재발송 간격 또는 인증 시도 제한
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/auth/signup:
     post:
       operationId: postAuthSignup
@@ -691,7 +745,7 @@ paths:
       description: |
         실시간 수신은 WebSocket `/topic/chat/{groupId}` 이 맡는다 (PRD §14.5).
         이 엔드포인트는 방에 다시 들어왔을 때 지난 메시지를 채우는 용도다.
-        메시지는 탑승 완료 또는 3시간 경과 시 물리 삭제되므로 빈 배열이 정상일 수 있다 (FR-21).
+        메시지는 탑승 완료 직후 지우지 않는다. 매칭 확정 후 3시간까지 송수신 가능하며, 기한이 지나면 정리 작업으로 물리 삭제된다 (FR-21).
       parameters:
         - $ref: "#/components/parameters/GroupId"
         - name: before
@@ -1034,6 +1088,23 @@ components:
           description: 인증 코드 유효 시간(초)
           example: 600
 
+    PasswordResetRequest:
+      type: object
+      required: [email, code, password]
+      properties:
+        email:
+          type: string
+          format: email
+        code:
+          type: string
+          pattern: "^[0-9]{6}$"
+        password:
+          type: string
+          format: password
+          minLength: 8
+          maxLength: 64
+          description: UTF-8 기준 72바이트 이하
+
     VerifyRequest:
       type: object
       required: [email, code, password, nickname, gender]
@@ -1347,6 +1418,11 @@ components:
       required:
         [groupId, status, estimated, hub, totalFare, totalDistance, totalDuration, route, members, fareMethod]
       properties:
+        chatExpiresAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: 매칭 확정 후 3시간. 완료 후에도 이 시각 전까지 채팅 가능. 미확정은 null
         fareMethod:
           type: string
           enum: [DISTANCE_RATIO]
@@ -1493,6 +1569,9 @@ components:
           format: double
           description: 우회율. 0.02 = 2%
           example: 0.02
+        completed:
+          type: boolean
+          description: 본인의 탑승 완료 기록 여부. true이면 내 이력에 표시된다
         accepted:
           type: boolean
           description: P1 수락 여부. P0 에서는 항상 true (FR-13)
@@ -1626,7 +1705,7 @@ components:
         ridedAt:
           type: string
           format: date-time
-          description: 탑승 완료 시각
+          description: 본인의 탑승 완료 시각. 이전 데이터는 그룹 완료·확정 시각 순으로 보완
         hubName:
           type: string
           example: 전남대 후문

@@ -4,6 +4,46 @@
  */
 
 export interface paths {
+    "/api/auth/password-reset/request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 비밀번호 재설정 메일 발송
+         * @description 가입 코드와 분리된 일회용 코드. 10분 유효, 발송 간격 60초, 5회 실패 시 30분 제한. 재설정 시 기존 Refresh 토큰을 폐기한다. 기존 Access 토큰은 만료까지 유효하다.
+         */
+        post: operations["passwordResetRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/password-reset/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 비밀번호 재설정 완료
+         * @description 가입 코드와 분리된 일회용 코드. 10분 유효, 발송 간격 60초, 5회 실패 시 30분 제한. 재설정 시 기존 Refresh 토큰을 폐기한다. 기존 Access 토큰은 만료까지 유효하다.
+         */
+        post: operations["passwordResetConfirm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/signup": {
         parameters: {
             query?: never;
@@ -357,7 +397,7 @@ export interface paths {
          * [P0] 채팅 이전 메시지 조회 (재접속용)
          * @description 실시간 수신은 WebSocket `/topic/chat/{groupId}` 이 맡는다 (PRD §14.5).
          *     이 엔드포인트는 방에 다시 들어왔을 때 지난 메시지를 채우는 용도다.
-         *     메시지는 탑승 완료 또는 3시간 경과 시 물리 삭제되므로 빈 배열이 정상일 수 있다 (FR-21).
+         *     메시지는 탑승 완료 직후 지우지 않는다. 매칭 확정 후 3시간까지 송수신 가능하며, 기한이 지나면 정리 작업으로 물리 삭제된다 (FR-21).
          */
         get: operations["getGroupsByGroupIdMessages"];
         put?: never;
@@ -506,6 +546,16 @@ export interface components {
              * @example 600
              */
             expiresInSeconds: number;
+        };
+        PasswordResetRequest: {
+            /** Format: email */
+            email: string;
+            code: string;
+            /**
+             * Format: password
+             * @description UTF-8 기준 72바이트 이하
+             */
+            password: string;
         };
         VerifyRequest: {
             /** Format: email */
@@ -719,6 +769,11 @@ export interface components {
          */
         GroupDetail: {
             /**
+             * Format: date-time
+             * @description 매칭 확정 후 3시간. 완료 후에도 이 시각 전까지 채팅 가능. 미확정은 null
+             */
+            chatExpiresAt?: string | null;
+            /**
              * @description 단독 거리 비율·단독요금 상한·원 단위 잔액 보정 (PRD §5.2)
              * @enum {string}
              */
@@ -846,6 +901,8 @@ export interface components {
              * @example 0.02
              */
             detourRatio: number;
+            /** @description 본인의 탑승 완료 기록 여부. true이면 내 이력에 표시된다 */
+            completed?: boolean;
             /** @description P1 수락 여부. P0 에서는 항상 true (FR-13) */
             accepted: boolean;
             /**
@@ -933,7 +990,7 @@ export interface components {
             groupId: number;
             /**
              * Format: date-time
-             * @description 탑승 완료 시각
+             * @description 본인의 탑승 완료 시각. 이전 데이터는 그룹 완료·확정 시각 순으로 보완
              */
             ridedAt: string;
             /** @example 전남대 후문 */
@@ -1068,6 +1125,72 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    passwordResetRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignupRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["NoContentSuccess"];
+            /** @description 입력 오류 또는 코드 불일치 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description 재발송 간격 또는 인증 시도 제한 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
+    passwordResetConfirm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordResetRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["NoContentSuccess"];
+            /** @description 입력 오류 또는 코드 불일치 */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description 재발송 간격 또는 인증 시도 제한 */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            500: components["responses"]["InternalError"];
+        };
+    };
     postAuthSignup: {
         parameters: {
             query?: never;

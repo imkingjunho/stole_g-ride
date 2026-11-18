@@ -20,7 +20,8 @@ public record GroupResponse(
         List<MemberInfo> members,
         LocalDateTime acceptDeadline,
         LocalDateTime createdAt,
-        String fareMethod) {
+        String fareMethod,
+        LocalDateTime chatExpiresAt) {
     public record Route(List<RouteResult.Section> sections) {}
 
     public record MemberInfo(
@@ -37,5 +38,6 @@ public record GroupResponse(
             int soloFare,
             int savingAmount,
             BigDecimal detourRatio,
-            boolean accepted) {}
+            boolean accepted,
+            boolean completed) {}
 }

@@ -57,6 +57,9 @@ export function LoginPage() {
           로그인
         </Button>
       </form>
+      <Link className="link w-full" to="/password-reset">
+        비밀번호를 잊으셨나요?
+      </Link>
       <Link className="link w-full" to="/signup">
         학교 이메일로 회원가입
       </Link>

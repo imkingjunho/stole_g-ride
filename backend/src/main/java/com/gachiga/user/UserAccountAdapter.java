@@ -6,14 +6,16 @@ import com.gachiga.contract.user.AccountProfile;
 import com.gachiga.contract.user.CanonicalEmail;
 import com.gachiga.contract.user.NewAccount;
 import com.gachiga.contract.user.UserAccountPort;
-import java.nio.charset.StandardCharsets;
-import java.time.LocalDateTime;
-import java.util.Optional;
-import java.util.UUID;
+
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.util.Optional;
+import java.util.UUID;
 
 /**
  * {@link UserAccountPort} 실구현 (T1-3·T1-4). 가입·로그인 검증을 담당한다.
@@ -30,10 +32,9 @@ public class UserAccountAdapter implements UserAccountPort {
     private final PasswordEncoder passwordEncoder;
 
     /**
-     * 없는 이메일일 때도 소모할 더미 해시. 실제로 이 해시와 맞는 비밀번호는 없다 — {@link
-     * #authenticate} 가 이메일 존재 여부와 무관하게 항상 해시 비교를 한 번 하게 만들어 응답 시간으로
-     * 계정 존재 여부를 알아낼 수 없게 한다. 생성자에서 실제 인코더로 만들어 둔다 — 상수 문자열을 쓰면
-     * 인코더가 바뀌었을 때(예: cost factor) 시간이 어긋날 수 있다.
+     * 없는 이메일일 때도 소모할 더미 해시. 실제로 이 해시와 맞는 비밀번호는 없다 — {@link #authenticate} 가 이메일 존재 여부와 무관하게 항상 해시
+     * 비교를 한 번 하게 만들어 응답 시간으로 계정 존재 여부를 알아낼 수 없게 한다. 생성자에서 실제 인코더로 만들어 둔다 — 상수 문자열을 쓰면 인코더가 바뀌었을
+     * 때(예: cost factor) 시간이 어긋날 수 있다.
      */
     private final String dummyHash;
 
@@ -95,6 +96,19 @@ public class UserAccountAdapter implements UserAccountPort {
             return Optional.empty();
         }
         return found.map(this::toProfile);
+    }
+
+    @Override
+    @Transactional
+    public Optional<Long> resetPassword(String email, String rawPassword) {
+        requirePasswordWithinByteLimit(rawPassword);
+        return userRepository
+                .findByEmail(CanonicalEmail.of(email))
+                .map(
+                        user -> {
+                            user.changePassword(passwordEncoder.encode(rawPassword));
+                            return user.getId();
+                        });
     }
 
     private void requirePasswordWithinByteLimit(String rawPassword) {

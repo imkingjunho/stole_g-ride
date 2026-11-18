@@ -2,6 +2,7 @@ import { Navigate, createBrowserRouter } from 'react-router-dom';
 import { RouteError } from './RouteError';
 import { Layout } from '@/app/Layout';
 import { RequireAuth, GuestOnly } from './RouteGuards';
+import { PasswordResetPage } from '@/features/auth/PasswordResetPage';
 import { LoginPage } from '@/features/auth/LoginPage';
 import { ProfilePage } from '@/features/auth/ProfilePage';
 import { SignupPage } from '@/features/auth/SignupPage';
@@ -22,6 +23,7 @@ export const router = createBrowserRouter([
     errorElement: <RouteError />,
     children: [
       { path: '/login', element: <LoginPage /> },
+      { path: '/password-reset', element: <PasswordResetPage /> },
       { path: '/signup', element: <SignupPage /> },
       { path: '/signup/verify', element: <VerifyPage /> },
       { path: '/signup/profile', element: <ProfilePage /> },

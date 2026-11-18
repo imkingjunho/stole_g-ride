@@ -62,7 +62,11 @@ public class MatchMember {
     private Integer soloFare;
     @Builder.Default private Boolean completed = false;
 
+    private java.time.LocalDateTime completedAt;
+
     public void complete() {
+        if (Boolean.TRUE.equals(completed)) return;
         this.completed = true;
+        this.completedAt = java.time.LocalDateTime.now();
     }
 }

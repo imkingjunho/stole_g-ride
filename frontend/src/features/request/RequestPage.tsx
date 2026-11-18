@@ -1,3 +1,4 @@
+import { PickupGuide } from '@/shared/ui/PickupGuide';
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
@@ -36,8 +37,7 @@ export function RequestPage() {
   const [locationMessage, setLocationMessage] = useState<string | null>(null);
   const [maxWaitMin, setMaxWaitMin] = useState<CreateRideRequest['maxWaitMin']>(10);
   const [sameGenderOnly, setSameGenderOnly] = useState(true);
-  const [maxDetourRatio, setMaxDetourRatio] =
-    useState<CreateRideRequest['maxDetourRatio']>(0.2);
+  const [maxDetourRatio, setMaxDetourRatio] = useState<CreateRideRequest['maxDetourRatio']>(0.2);
 
   const hubsQuery = useQuery({
     queryKey: ['hubs'],
@@ -94,16 +94,11 @@ export function RequestPage() {
     setDestination(next);
     const nextRecentDestinations = [
       next,
-      ...recentDestinations.filter(
-        (recent) => recent.lat !== next.lat || recent.lng !== next.lng,
-      ),
+      ...recentDestinations.filter((recent) => recent.lat !== next.lat || recent.lng !== next.lng),
     ].slice(0, MAX_RECENT_DESTINATIONS);
     setRecentDestinations(nextRecentDestinations);
     try {
-      window.localStorage.setItem(
-        RECENT_DESTINATIONS_KEY,
-        JSON.stringify(nextRecentDestinations),
-      );
+      window.localStorage.setItem(RECENT_DESTINATIONS_KEY, JSON.stringify(nextRecentDestinations));
       setRecentDestinationsError(null);
     } catch (error) {
       if (!(error instanceof DOMException)) throw error;
@@ -167,7 +162,7 @@ export function RequestPage() {
   const selectedHub = hubsQuery.data?.find((hub) => hub.id === hubId);
   const sortedHubs = currentLocation
     ? sortHubsByDistance(hubsQuery.data ?? [], currentLocation)
-    : hubsQuery.data ?? [];
+    : (hubsQuery.data ?? []);
 
   if (hubsQuery.isLoading || (!isMockMode && currentRequestQuery.isLoading)) {
     return <QueryState loading />;
@@ -194,18 +189,16 @@ export function RequestPage() {
       <header>
         <p className="text-sm font-semibold text-brand">가치가 · 함께 타고, 공정하게 나눠요</p>
         <h1 className="mt-2 text-title font-bold">어디로 갈까요?</h1>
-        <p className="mt-2 text-sm text-slate-600">출발 거점과 목적지를 선택해 동승을 요청하세요.</p>
+        <p className="mt-2 text-sm text-slate-600">
+          출발 거점과 목적지를 선택해 동승을 요청하세요.
+        </p>
       </header>
 
       <Card className="space-y-4">
         <fieldset>
           <legend className="mb-3 text-sm font-semibold">출발 거점</legend>
           <div className="mb-3 flex flex-wrap gap-2">
-            <Button
-              variant="secondary"
-              loading={isLocating}
-              onClick={requestCurrentLocation}
-            >
+            <Button variant="secondary" loading={isLocating} onClick={requestCurrentLocation}>
               현재 위치에서 가까운 순
             </Button>
             {currentLocation && (
@@ -247,10 +240,7 @@ export function RequestPage() {
             <ul className="flex flex-wrap gap-2">
               {recentDestinations.map((recent) => (
                 <li key={`${recent.lat}-${recent.lng}`}>
-                  <Button
-                    variant="secondary"
-                    onClick={() => handleDestinationChange(recent)}
-                  >
+                  <Button variant="secondary" onClick={() => handleDestinationChange(recent)}>
                     {recent.name}
                   </Button>
                 </li>
@@ -312,6 +302,7 @@ export function RequestPage() {
         </fieldset>
       </Card>
 
+      {selectedHub && <PickupGuide hub={selectedHub} />}
       <Button
         fullWidth
         loading={createRequest.isPending}

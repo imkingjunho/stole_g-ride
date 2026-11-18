@@ -21,7 +21,11 @@ export const rehearsalSteps = [
     check: '추정치 배지와 점선을 확인한다. 실제 도로 검증은 별도다.',
   },
   { id: 'error', label: '오류·재시도', check: '오류 안내에서 재시도하면 성사 화면을 복구한다.' },
-  { id: 'complete', label: '탑승 완료', check: '완료 확인 후 이력으로 이동하고 채팅이 닫힌다.' },
+  {
+    id: 'complete',
+    label: '탑승 완료',
+    check: '채팅에서 탑승 완료를 기록하고 이력을 확인한다. 보관 기한까지 대화가 유지된다.',
+  },
   {
     id: 'refresh',
     label: '목 세션 갱신',

@@ -3,8 +3,11 @@ package com.gachiga.matching.adapter;
 import com.gachiga.contract.matching.MatchHistoryPort;
 import com.gachiga.matching.domain.MatchMember;
 import com.gachiga.matching.port.MatchMemberRepository;
+
 import lombok.RequiredArgsConstructor;
+
 import org.springframework.stereotype.Component;
+
 import java.util.List;
 
 @Component
@@ -12,6 +15,20 @@ import java.util.List;
 public class MatchHistoryAdapter implements MatchHistoryPort {
 
     private final MatchMemberRepository memberRepository;
+    private final com.gachiga.matching.port.MatchGroupRepository groupRepository;
+
+    @Override
+    public java.util.Optional<java.time.LocalDateTime> confirmedAt(Long groupId) {
+        return groupRepository
+                .findById(groupId)
+                .filter(
+                        g ->
+                                g.getStatus() == com.gachiga.matching.domain.GroupStatus.CONFIRMED
+                                        || g.getStatus()
+                                                == com.gachiga.matching.domain.GroupStatus
+                                                        .COMPLETED)
+                .map(com.gachiga.matching.domain.MatchGroup::getConfirmedAt);
+    }
 
     @Override
     public boolean isMember(Long groupId, Long userId) {
@@ -22,7 +39,7 @@ public class MatchHistoryAdapter implements MatchHistoryPort {
     public List<Long> memberUserIds(Long groupId) {
         // 그룹이 없으면 빈 리스트 (MatchHistoryPort 계약)
         return memberRepository.findByGroupId(groupId).stream()
-            .map(MatchMember::getUserId)
-            .toList();
+                .map(MatchMember::getUserId)
+                .toList();
     }
 }

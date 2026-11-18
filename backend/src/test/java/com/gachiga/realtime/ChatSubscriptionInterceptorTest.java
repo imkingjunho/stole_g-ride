@@ -7,6 +7,7 @@ import static org.mockito.BDDMockito.given;
 import com.gachiga.common.exception.BusinessException;
 import com.gachiga.common.exception.ErrorCode;
 import com.gachiga.contract.matching.MatchHistoryPort;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -33,7 +34,10 @@ class ChatSubscriptionInterceptorTest {
         @Test
         @DisplayName("구성원이면 통과시킨다")
         void allowsMember() {
-            interceptor = new ChatSubscriptionInterceptor(matchHistoryPort);
+            interceptor =
+                    new ChatSubscriptionInterceptor(
+                            matchHistoryPort,
+                            org.mockito.Mockito.mock(com.gachiga.realtime.chat.ChatAccess.class));
             given(matchHistoryPort.isMember(17L, 3L)).willReturn(true);
             Message<byte[]> message = subscribe("/topic/chat/17", "3");
 
@@ -43,7 +47,10 @@ class ChatSubscriptionInterceptorTest {
         @Test
         @DisplayName("구성원이 아니면 GROUP_NOT_MEMBER")
         void rejectsNonMember() {
-            interceptor = new ChatSubscriptionInterceptor(matchHistoryPort);
+            interceptor =
+                    new ChatSubscriptionInterceptor(
+                            matchHistoryPort,
+                            org.mockito.Mockito.mock(com.gachiga.realtime.chat.ChatAccess.class));
             given(matchHistoryPort.isMember(17L, 3L)).willReturn(false);
             Message<byte[]> message = subscribe("/topic/chat/17", "3");
 
@@ -56,7 +63,10 @@ class ChatSubscriptionInterceptorTest {
         @Test
         @DisplayName("Principal 이 없으면 UNAUTHORIZED")
         void rejectsWithoutPrincipal() {
-            interceptor = new ChatSubscriptionInterceptor(matchHistoryPort);
+            interceptor =
+                    new ChatSubscriptionInterceptor(
+                            matchHistoryPort,
+                            org.mockito.Mockito.mock(com.gachiga.realtime.chat.ChatAccess.class));
             StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.SUBSCRIBE);
             accessor.setDestination("/topic/chat/17");
             Message<byte[]> message =
@@ -72,7 +82,10 @@ class ChatSubscriptionInterceptorTest {
     @Test
     @DisplayName("채팅 구독이 아니면 그냥 통과시킨다")
     void ignoresNonChatDestinations() {
-        interceptor = new ChatSubscriptionInterceptor(matchHistoryPort);
+        interceptor =
+                new ChatSubscriptionInterceptor(
+                        matchHistoryPort,
+                        org.mockito.Mockito.mock(com.gachiga.realtime.chat.ChatAccess.class));
         Message<byte[]> message = subscribe("/user/queue/status", "3");
 
         assertThat(interceptor.preSend(message, null)).isSameAs(message);
@@ -81,7 +94,10 @@ class ChatSubscriptionInterceptorTest {
     @Test
     @DisplayName("SUBSCRIBE 가 아니면 손대지 않는다")
     void ignoresOtherCommands() {
-        interceptor = new ChatSubscriptionInterceptor(matchHistoryPort);
+        interceptor =
+                new ChatSubscriptionInterceptor(
+                        matchHistoryPort,
+                        org.mockito.Mockito.mock(com.gachiga.realtime.chat.ChatAccess.class));
         StompHeaderAccessor accessor = StompHeaderAccessor.create(StompCommand.SEND);
         Message<byte[]> message =
                 MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
@@ -92,7 +108,10 @@ class ChatSubscriptionInterceptorTest {
     @Test
     @DisplayName("재접속 — 끊겼다가 다시 구독해도 매번 새로 인가를 검사한다 (T2-6)")
     void reconnectReevaluatesAuthorizationEachTime() {
-        interceptor = new ChatSubscriptionInterceptor(matchHistoryPort);
+        interceptor =
+                new ChatSubscriptionInterceptor(
+                        matchHistoryPort,
+                        org.mockito.Mockito.mock(com.gachiga.realtime.chat.ChatAccess.class));
         given(matchHistoryPort.isMember(17L, 3L)).willReturn(true);
 
         // 첫 연결에서 구독

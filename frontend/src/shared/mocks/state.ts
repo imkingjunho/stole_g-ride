@@ -92,7 +92,8 @@ export function resetGroup(status: S['GroupStatus'] = 'CONFIRMED') {
 export function addMockChat(body: S['ChatSendRequest']) {
   const content = body.content.trim();
   if (!content || content.length > 500) throw new Error('메시지는 1~500자로 입력해 주세요.');
-  if (mockState.group.status !== 'CONFIRMED') throw new Error('대화가 종료됐어요.');
+  if (!['CONFIRMED', 'COMPLETED'].includes(mockState.group.status))
+    throw new Error('대화가 종료됐어요.');
   const message: S['ChatMessage'] = {
     id: Math.max(0, ...mockState.messages.map((m) => m.id)) + 1,
     groupId: mockState.group.groupId,

@@ -9,16 +9,18 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
 import jakarta.persistence.Table;
-import java.time.LocalDateTime;
+
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
+
 /**
  * 채팅 메시지 한 건 (PRD §7.1 {@code chat_messages}).
  *
- * <p>그룹은 {@code Long groupId} 로만 들고 있다 — {@code matching} 의 엔티티를 참조하지 않는다
- * (PRD §7.2). 탑승 완료 또는 개설 3시간 경과 시 스케줄러가 물리 삭제한다(T1-13, FR-21).
+ * <p>그룹은 {@code Long groupId} 로만 들고 있다 — {@code matching} 의 엔티티를 참조하지 않는다 (PRD §7.2). 매칭 확정 후 3시간
+ * 경과 시 스케줄러가 물리 삭제한다(T1-13, FR-21).
  */
 @Entity
 @Getter

@@ -12,7 +12,11 @@ export function useGroup() {
     queryKey: ['group', id],
     enabled: validId && !!userId,
     refetchInterval: (state) =>
-      !isMockMode && !state.state.error && state.state.data?.status === 'PENDING' ? 3000 : false,
+      !isMockMode &&
+      !state.state.error &&
+      ['PENDING', 'CONFIRMED'].includes(state.state.data?.status ?? '')
+        ? 3000
+        : false,
     retry: (count, error) => !(error instanceof GroupResponseError) && count < 1,
     queryFn: async () => {
       if (!validId) throw new GroupResponseError();

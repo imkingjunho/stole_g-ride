@@ -40,6 +40,9 @@ public class GroupService {
     private final ObjectMapper objectMapper;
     private final PlatformTransactionManager transactionManager;
 
+    @org.springframework.beans.factory.annotation.Value("${gachiga.chat.retention-hours:3}")
+    private int chatRetentionHours = 3;
+
     /** 일부 배정 실패도 전체 롤백한다. 이미 배정된 다른 요청을 수동으로 WAITING으로 되돌리지 않는다. */
     public Long create(MatchCandidate candidate) {
         String routeJson;
@@ -162,7 +165,8 @@ public class GroupService {
                                                 m.getSoloFare(),
                                                 m.getSavingAmount(),
                                                 m.getDetourRatio(),
-                                                m.getAccepted()))
+                                                m.getAccepted(),
+                                                Boolean.TRUE.equals(m.getCompleted())))
                         .toList();
         return new GroupResponse(
                 group.getId(),
@@ -181,7 +185,10 @@ public class GroupService {
                 detailMembers,
                 null,
                 group.getCreatedAt(),
-                "DISTANCE_RATIO");
+                "DISTANCE_RATIO",
+                group.getConfirmedAt() == null
+                        ? null
+                        : group.getConfirmedAt().plusHours(chatRetentionHours));
     }
 
     /** 각 멤버가 완료를 눌러야 전체 완료된다. 행 잠금으로 동시 완료·중복 이벤트를 막는다. */

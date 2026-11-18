@@ -8,7 +8,6 @@ type Envelope<T> = Pick<components['schemas']['ApiResponse'], 'success' | 'error
   data?: T | null;
 };
 const errorMessages: Record<string, string> = {
-  VERIFY_LOCKED: '인증 시도 횟수를 초과했어요. 30분 뒤 다시 시도해 주세요.',
   VERIFY_CODE_MISMATCH: '인증 코드가 일치하지 않거나 만료됐어요.',
   EMAIL_DOMAIN_NOT_ALLOWED: '전남대 웹메일(@jnu.ac.kr)을 입력해 주세요.',
   GROUP_NOT_MEMBER: '이 동승 그룹에 접근할 수 없어요.',
@@ -90,6 +89,8 @@ async function authorizedFetch(input: Request) {
     '/api/auth/verify',
     '/api/auth/login',
     '/api/auth/refresh',
+    '/api/auth/password-reset/request',
+    '/api/auth/password-reset/confirm',
   ];
   // logout은 인증이 필요하다. 만료된 Access로도 갱신 후 서버 Refresh 폐기까지 수행한다.
   if (response.status !== 401 || publicAuth.includes(path)) return response;

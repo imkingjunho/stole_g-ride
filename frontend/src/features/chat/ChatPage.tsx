@@ -1,3 +1,4 @@
+import { PickupGuide } from '@/shared/ui/PickupGuide';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
@@ -10,6 +11,8 @@ import { useConnectionStore } from '@/shared/ws/connectionStore';
 import { Button, Card } from '@/shared/ui';
 import { QueryState } from '@/shared/ui/QueryState';
 import { useGroup } from '@/features/group/useGroup';
+import { CompleteRideButton } from '@/features/group/CompleteRideButton';
+import { useCountdown } from '@/shared/ui/useCountdown';
 import { ReportButton } from '@/features/group/ReportButton';
 type Message = components['schemas']['ChatMessage'];
 function mergeMessages(a: Message[], b: Message[]) {
@@ -26,7 +29,13 @@ export function ChatPage() {
   const [draft, setDraft] = useState('');
   const end = useRef<HTMLDivElement>(null);
   const incoming = useRef<{ groupId: number; messages: Message[] }>({ groupId: id, messages: [] });
-  const canChat = !group.error && group.data?.status === 'CONFIRMED';
+  const seconds = useCountdown(
+    group.data?.chatExpiresAt ? koreaTime(group.data.chatExpiresAt).getTime() : 0,
+  );
+  const canChat =
+    !group.error &&
+    ['CONFIRMED', 'COMPLETED'].includes(group.data?.status ?? '') &&
+    (!group.data?.chatExpiresAt || seconds > 0);
   const messages = useQuery({
     queryKey: ['messages', id],
     enabled: canChat,
@@ -85,9 +94,12 @@ export function ChatPage() {
           ← 동승 정보
         </Link>
         <h1 className="text-2xl font-bold">동승 채팅</h1>
-        <p className="mt-2 text-sm text-slate-600">이 대화는 탑승 완료 후 삭제됩니다.</p>
+        <p className="mt-2 text-sm text-slate-600">
+          탑승 완료 후에도 매칭 확정 시점부터 3시간까지 대화할 수 있어요.
+        </p>
       </header>
-      {status !== 'connected' && (
+      <PickupGuide hub={group.data.hub} />
+      {canChat && status !== 'connected' && (
         <p role="status" className="rounded-control bg-amber-100 p-3 text-sm text-amber-900">
           연결이 끊겼어요. 다시 연결하고 있어요.
         </p>
@@ -210,6 +222,10 @@ export function ChatPage() {
           </form>
         </>
       )}
+      <CompleteRideButton key={id} group={group.data} />
+      <Link className="link" to="/history">
+        함께한 이동 보기
+      </Link>
       <ReportButton group={group.data} />
     </section>
   );

@@ -16,11 +16,7 @@ import com.gachiga.contract.user.UserStatus;
 import com.gachiga.contract.user.UserSummary;
 import com.gachiga.realtime.chat.dto.ChatMessageResponse;
 import com.gachiga.realtime.chat.dto.ChatSendRequest;
-import java.time.Clock;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.util.List;
-import java.util.Optional;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -34,6 +30,12 @@ import org.mockito.quality.Strictness;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.List;
+import java.util.Optional;
+
 /** {@link ChatService} 검증. DB·WebSocket 브로커 없이 도는 순수 로직 테스트다 (CLAUDE.md §7). */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -41,8 +43,7 @@ class ChatServiceTest {
 
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 10, 20, 9, 0);
     private static final Clock CLOCK =
-            Clock.fixed(
-                    NOW.atZone(ZoneId.of("Asia/Seoul")).toInstant(), ZoneId.of("Asia/Seoul"));
+            Clock.fixed(NOW.atZone(ZoneId.of("Asia/Seoul")).toInstant(), ZoneId.of("Asia/Seoul"));
 
     @Mock private ChatMessageRepository chatMessageRepository;
     @Mock private MatchHistoryPort matchHistoryPort;
@@ -55,7 +56,12 @@ class ChatServiceTest {
     void setUp() {
         chatService =
                 new ChatService(
-                        chatMessageRepository, matchHistoryPort, userPort, messagingTemplate, CLOCK);
+                        chatMessageRepository,
+                        matchHistoryPort,
+                        userPort,
+                        messagingTemplate,
+                        CLOCK,
+                        org.mockito.Mockito.mock(ChatAccess.class));
         given(userPort.findById(1L))
                 .willReturn(Optional.of(new UserSummary(1L, "후문호랑이", Gender.M, UserStatus.ACTIVE)));
     }
@@ -75,7 +81,9 @@ class ChatServiceTest {
 
             ArgumentCaptor<ChatMessageResponse> captor =
                     ArgumentCaptor.forClass(ChatMessageResponse.class);
-            verify(messagingTemplate).convertAndSend(org.mockito.ArgumentMatchers.eq("/topic/chat/17"), captor.capture());
+            verify(messagingTemplate)
+                    .convertAndSend(
+                            org.mockito.ArgumentMatchers.eq("/topic/chat/17"), captor.capture());
             assertThat(captor.getValue().senderNickname()).isEqualTo("후문호랑이");
             assertThat(captor.getValue().content()).isEqualTo("안녕하세요");
             assertThat(captor.getValue().type()).isEqualTo("TEXT");
@@ -113,8 +121,7 @@ class ChatServiceTest {
         void rejectsUnknownType() {
             given(matchHistoryPort.isMember(17L, 1L)).willReturn(true);
 
-            assertThatThrownBy(
-                            () -> chatService.send(17L, 1L, new ChatSendRequest("SYSTEM", "안녕")))
+            assertThatThrownBy(() -> chatService.send(17L, 1L, new ChatSendRequest("SYSTEM", "안녕")))
                     .isInstanceOf(BusinessException.class)
                     .extracting(e -> ((BusinessException) e).getErrorCode())
                     .isEqualTo(ErrorCode.INVALID_INPUT);
@@ -137,7 +144,8 @@ class ChatServiceTest {
             given(matchHistoryPort.isMember(17L, 1L)).willReturn(true);
             String tooLong = "가".repeat(501);
 
-            assertThatThrownBy(() -> chatService.send(17L, 1L, new ChatSendRequest("TEXT", tooLong)))
+            assertThatThrownBy(
+                            () -> chatService.send(17L, 1L, new ChatSendRequest("TEXT", tooLong)))
                     .isInstanceOf(BusinessException.class)
                     .extracting(e -> ((BusinessException) e).getErrorCode())
                     .isEqualTo(ErrorCode.INVALID_INPUT);
@@ -164,9 +172,7 @@ class ChatServiceTest {
             given(matchHistoryPort.isMember(17L, 1L)).willReturn(true);
 
             assertThatThrownBy(
-                            () ->
-                                    chatService.send(
-                                            17L, 1L, new ChatSendRequest("QUICK", "안녕하세요")))
+                            () -> chatService.send(17L, 1L, new ChatSendRequest("QUICK", "안녕하세요")))
                     .isInstanceOf(BusinessException.class)
                     .extracting(e -> ((BusinessException) e).getErrorCode())
                     .isEqualTo(ErrorCode.INVALID_INPUT);
@@ -197,8 +203,7 @@ class ChatServiceTest {
 
             List<ChatMessageResponse> result = chatService.recentMessages(17L, 1L, null, null);
 
-            assertThat(result).extracting(ChatMessageResponse::content)
-                    .containsExactly("먼저", "나중");
+            assertThat(result).extracting(ChatMessageResponse::content).containsExactly("먼저", "나중");
         }
 
         @Test

@@ -1,9 +1,16 @@
+import { useEffect } from 'react';
 import { useToastStore } from '../stores/toastStore';
 import { Button } from './Button';
 
-/** 오류를 읽기 전에 사라지지 않도록 사용자가 직접 닫는다. 앱에 한 번 배치한다. */
+/** 새 알림마다 3초를 센다. 교체·언마운트 시 이전 타이머를 정리한다. */
 export function Toast() {
   const { messages, dismiss } = useToastStore();
+  const activeId = messages[0]?.id;
+  useEffect(() => {
+    if (activeId === undefined) return;
+    const timer = window.setTimeout(() => dismiss(activeId), 3000);
+    return () => window.clearTimeout(timer);
+  }, [activeId, dismiss]);
   return (
     <div
       aria-label="알림"

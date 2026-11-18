@@ -3,9 +3,10 @@ package com.gachiga.realtime;
 import com.gachiga.common.exception.BusinessException;
 import com.gachiga.common.exception.ErrorCode;
 import com.gachiga.contract.matching.MatchHistoryPort;
-import java.util.StringTokenizer;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.simp.stomp.StompCommand;
@@ -14,11 +15,13 @@ import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.stereotype.Component;
 
+import java.util.StringTokenizer;
+
 /**
  * {@code /topic/chat/{groupId}} 구독 인가 (T1-9, FR-20 전제).
  *
- * <p>그룹 구성원만 그 방을 구독할 수 있다. {@link MatchHistoryPort#isMember} 로 확인하고, 아니면
- * {@code GROUP_NOT_MEMBER} 로 거부한다 — 남의 채팅을 엿볼 수 없게 하는 마지막 방어선이다.
+ * <p>그룹 구성원만 그 방을 구독할 수 있다. {@link MatchHistoryPort#isMember} 로 확인하고, 아니면 {@code GROUP_NOT_MEMBER}
+ * 로 거부한다 — 남의 채팅을 엿볼 수 없게 하는 마지막 방어선이다.
  *
  * <p>채팅이 아닌 구독({@code /user/queue/status} 등)은 그냥 통과시킨다.
  */
@@ -28,6 +31,7 @@ import org.springframework.stereotype.Component;
 public class ChatSubscriptionInterceptor implements ChannelInterceptor {
 
     private final MatchHistoryPort matchHistoryPort;
+    private final com.gachiga.realtime.chat.ChatAccess chatAccess;
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -47,6 +51,7 @@ public class ChatSubscriptionInterceptor implements ChannelInterceptor {
             log.warn("채팅 구독 거부 groupId={} userId={}", groupId, userId);
             throw new BusinessException(ErrorCode.GROUP_NOT_MEMBER);
         }
+        chatAccess.requireOpen(groupId);
         return message;
     }
 

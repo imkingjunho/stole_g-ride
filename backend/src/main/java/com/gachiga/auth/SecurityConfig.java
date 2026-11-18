@@ -3,9 +3,11 @@ package com.gachiga.auth;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gachiga.common.exception.ErrorCode;
 import com.gachiga.common.response.ApiResponse;
+
 import jakarta.servlet.http.HttpServletResponse;
-import java.io.IOException;
+
 import lombok.RequiredArgsConstructor;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
@@ -18,18 +20,20 @@ import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+import java.io.IOException;
+
 /**
  * 실제 인증 설정 (FR-02, T1-5). {@code DevSecurityConfig}(Phase 0 스텁)를 대체한다.
  *
- * <p>{@code /api/auth/signup}·{@code verify}·{@code login}·{@code refresh} 4개만 공개다(api-spec
- * {@code security: []}). 그 밖의 모든 REST 는 {@code Authorization: Bearer} 를 요구한다.
+ * <p>{@code /api/auth/signup}·{@code verify}·{@code login}·{@code refresh} 와 비밀번호 재설정 2개 경로가 공개다(api-spec {@code
+ * security: []}). 그 밖의 모든 REST 는 {@code Authorization: Bearer} 를 요구한다.
  *
- * <p>{@code /ws} 는 HTTP 핸드셰이크 단계에서는 permitAll 이다 — STOMP 프로토콜 자체의 인증은
- * {@code realtime/JwtStompUserInterceptor}(CONNECT 프레임)가 {@code contract.auth.AccessTokenVerifier}
- * (이 모듈의 {@link JwtTokenProvider} 구현)로 따로 맡는다.
+ * <p>{@code /ws} 는 HTTP 핸드셰이크 단계에서는 permitAll 이다 — STOMP 프로토콜 자체의 인증은 {@code
+ * realtime/JwtStompUserInterceptor}(CONNECT 프레임)가 {@code contract.auth.AccessTokenVerifier} (이 모듈의
+ * {@link JwtTokenProvider} 구현)로 따로 맡는다.
  *
- * <p>인증 실패는 {@code common} 의 {@link ErrorCode} 를 쓴 {@link ApiResponse} 형태로 나간다
- * (CLAUDE.md §5) — Spring Security 기본 401 은 빈 본문이라 프론트의 공통 에러 처리와 안 맞는다.
+ * <p>인증 실패는 {@code common} 의 {@link ErrorCode} 를 쓴 {@link ApiResponse} 형태로 나간다 (CLAUDE.md §5) —
+ * Spring Security 기본 401 은 빈 본문이라 프론트의 공통 에러 처리와 안 맞는다.
  */
 @Configuration
 @EnableWebSecurity
@@ -37,7 +41,12 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private static final String[] PUBLIC_AUTH_ENDPOINTS = {
-        "/api/auth/signup", "/api/auth/verify", "/api/auth/login", "/api/auth/refresh"
+        "/api/auth/signup",
+        "/api/auth/verify",
+        "/api/auth/login",
+        "/api/auth/refresh",
+        "/api/auth/password-reset/request",
+        "/api/auth/password-reset/confirm"
     };
 
     private final JwtTokenProvider jwtTokenProvider;
@@ -74,7 +83,8 @@ public class SecurityConfig {
                                         .anyRequest()
                                         .authenticated())
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(unauthorizedEntryPoint()))
-                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(
+                        jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }
 

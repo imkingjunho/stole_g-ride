@@ -17,6 +17,15 @@ const tokens = (): S['TokenResponse'] => ({
 const protectedRequest = (request: Request) =>
   request.headers.get('Authorization')?.startsWith('Bearer mock-access-');
 export const handlers = [
+  http.post(`${BASE}/api/auth/password-reset/request`, () =>
+    fail(
+      'INVALID_INPUT',
+      '체험 모드에서는 이메일을 보내지 않아요. 실제 서비스에서 비밀번호를 재설정해 주세요.',
+    ),
+  ),
+  http.post(`${BASE}/api/auth/password-reset/confirm`, () =>
+    fail('INVALID_INPUT', '실제 서비스에서 비밀번호를 재설정해 주세요.'),
+  ),
   http.post(`${BASE}/api/auth/signup`, async ({ request }) => {
     const body = (await request.json()) as S['SignupRequest'];
     const email = body.email?.trim().toLowerCase();
@@ -169,7 +178,22 @@ export const handlers = [
   }),
   http.post(`${BASE}/api/groups/:groupId/complete`, () => {
     mockState.group.status = 'COMPLETED';
-    mockState.messages = [];
+    const group = mockState.group;
+    const me = group.members.find((m) => m.isMe);
+    if (me && !me.completed) {
+      mockState.history = mockState.history.filter((item) => item.groupId !== group.groupId);
+      me.completed = true;
+      mockState.history.unshift({
+        groupId: group.groupId,
+        ridedAt: new Date().toISOString(),
+        hubName: group.hub.name,
+        destName: me.destName,
+        memberCount: group.members.length,
+        shareAmount: me.shareAmount,
+        soloFare: me.soloFare,
+        savingAmount: me.savingAmount,
+      });
+    }
     notifyMatch('COMPLETED', '탑승을 완료했어요.');
     return ok(null);
   }),

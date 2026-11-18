@@ -52,6 +52,7 @@ CREATE TABLE `match_members` (
   `accepted` bit(1) NOT NULL,
   `boarding_order` int NOT NULL,
   `completed` bit(1) DEFAULT NULL,
+  `completed_at` datetime(6) DEFAULT NULL,
   `dest_lat` double DEFAULT NULL,
   `dest_lng` double DEFAULT NULL,
   `dest_name` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
