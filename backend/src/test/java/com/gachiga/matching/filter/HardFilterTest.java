@@ -281,7 +281,7 @@ class HardFilterTest {
     }
 
     @Test
-    @DisplayName("목적지 거리 3km 이내 → true")
+    @DisplayName("목적지 거리 약 2.2km → true")
     void test_destination_within_range() {
         LocalDateTime now = LocalDateTime.now();
         Coordinate dest1 = new Coordinate(37.4979, 127.0276);
@@ -323,11 +323,11 @@ class HardFilterTest {
     }
 
     @Test
-    @DisplayName("목적지 거리 3km 초과 → false")
+    @DisplayName("목적지 거리 15km 초과 → false")
     void test_destination_out_of_range() {
         LocalDateTime now = LocalDateTime.now();
         Coordinate dest1 = new Coordinate(37.4979, 127.0276);
-        Coordinate dest2 = new Coordinate(37.5379, 127.0276);
+        Coordinate dest2 = new Coordinate(37.6479, 127.0276);
 
         WaitingRequest req1 =
                 new WaitingRequest(
@@ -362,6 +362,23 @@ class HardFilterTest {
                         0);
 
         assertFalse(HardFilter.compatible(req1, req2, userPort));
+    }
+
+    @Test
+    @DisplayName("목적지 거리 약 4.4km (기존 3km 초과) → 이제 true. 방향·우회는 다음 단계에서 판단")
+    void test_destination_relaxed_range() {
+        LocalDateTime now = LocalDateTime.now();
+        WaitingRequest req1 =
+                new WaitingRequest(
+                        1L, 1L, 100L, new Coordinate(37.4979, 127.0276), "강남역", now,
+                        now.plusMinutes(30), now, false, BigDecimal.valueOf(0.30), 3000, 3000, 0);
+        WaitingRequest req2 =
+                new WaitingRequest(
+                        2L, 2L, 100L, new Coordinate(37.5379, 127.0276), "같은 방향 먼 곳",
+                        now.plusMinutes(3), now.plusMinutes(33), now.plusMinutes(3), false,
+                        BigDecimal.valueOf(0.30), 7000, 9000, 0);
+
+        assertTrue(HardFilter.compatible(req1, req2, userPort));
     }
 
     private WaitingRequest request(

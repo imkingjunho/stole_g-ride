@@ -120,7 +120,8 @@ class MatchingLifecycleTest {
                         false,
                         new BigDecimal("0.30"),
                         distance,
-                        6000,
+                        // 최소 절감 기준(단독 1만 원 미만은 30% 이상, 1,500원 이상)을 넘는 단독요금
+                        9000,
                         true,
                         NOW));
     }

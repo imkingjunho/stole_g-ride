@@ -1,9 +1,7 @@
 # 매칭·정산 설정 — 서준. 거리 비율 정책은 PRD §5.2.
+# 조합 우선순위(인원수 → 최소 절감률 → 우회 → 대기)와 최소 절감 기준은 CombinationEvaluator 상수로 둔다.
 gachiga:
   matching:
     tick-millis: 30000
-    max-evaluations-per-tick: 30
-    weights:
-      w1: 1.0
-      w2: 0.5
-      w3: 0.3
+    # 직선 우회 사전 추정을 통과한 조합만, 인원 많은 순·추정 우회 작은 순으로 카카오 경로를 조회한다.
+    max-evaluations-per-tick: 60

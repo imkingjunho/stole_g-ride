@@ -9,7 +9,12 @@ import java.time.LocalDateTime;
 public class HardFilter {
 
     private static final int TIME_WINDOW_MINUTES = 5;
-    private static final int MAX_DESTINATION_DISTANCE_METERS = 3000;
+    /**
+     * 목적지 간 절대 상한. 방향·우회 판단은 {@code Clustering}(출발 방위각)과
+     * {@code CombinationEvaluator}(직선 우회 사전 추정 → 카카오 실경로 검사)가 맡는다.
+     * 같은 방향 장거리(예: 유스퀘어 + 광주송정역, 약 8.5km)를 살리기 위해 3km 에서 완화했다.
+     */
+    private static final int MAX_DESTINATION_DISTANCE_METERS = 15_000;
 
     public static boolean compatible(WaitingRequest a, WaitingRequest b, UserPort userPort) {
         if (a.userId().equals(b.userId()) || !a.hubId().equals(b.hubId())) {

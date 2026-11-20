@@ -11,7 +11,6 @@ import com.gachiga.matching.filter.HardFilter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
@@ -29,14 +28,17 @@ public class CombinationEvaluator {
     private final UserPort userPort;
     private final Clock clock;
 
-    @Value("${gachiga.matching.weights.w1:1.0}")
-    private double w1 = 1.0;
-
-    @Value("${gachiga.matching.weights.w2:0.5}")
-    private double w2 = 0.5;
-
-    @Value("${gachiga.matching.weights.w3:0.3}")
-    private double w3 = 0.3;
+    /** 직선 우회 사전 추정에 주는 여유분. 도로가 직선보다 돌아가는 경우를 위해 한도 + 10%p 까지 카카오 조회를 허용한다 */
+    static final double STRAIGHT_LINE_MARGIN = 0.10;
+    /** 카카오 실패로 추정 경로를 쓸 때는 우회 한도를 보수적으로 적용한다 (직선 470m · 도로 2.4km 같은 캠퍼스 구간 대비) */
+    static final double ESTIMATED_ROUTE_LIMIT_FACTOR = 0.7;
+    /** 최소 절감 금액(원). 기본요금 구간에서 30%여도 1,440원이라 "천 원 아끼려고 앱을 켜지 않는다"는 하한 */
+    static final int MIN_SAVING_WON = 1_500;
+    /** 단독요금 경계(원). 미만은 30%, 이상(장거리)은 대기 전반 35% → 후반 20% */
+    static final int LONG_TRIP_FARE = 10_000;
+    static final double SHORT_TRIP_MIN_RATE = 0.30;
+    static final double LONG_TRIP_EARLY_MIN_RATE = 0.35;
+    static final double LONG_TRIP_LATE_MIN_RATE = 0.20;
 
     public MatchCandidate evaluate(List<WaitingRequest> combination) {
         if (combination.size() < 2 || combination.size() > 4) return null;
@@ -72,6 +74,8 @@ public class CombinationEvaluator {
             }
             orders.put(request.userId(), stops.size());
         }
+        // 카카오 경로 조회 전, 직선거리로 각자 우회를 추정해 한도 + 여유분을 넘으면 버린다.
+        if (straightLineWorstExcess(origin, combination) > 0) return null;
         RouteResult route =
                 routeProvider.findRoute(
                         origin, stops.subList(0, stops.size() - 1), stops.get(stops.size() - 1));
@@ -87,7 +91,10 @@ public class CombinationEvaluator {
             double detour =
                     Math.max(
                             0, (shared - (double) request.soloDistance()) / request.soloDistance());
-            if (detour > request.maxDetourRatio().doubleValue()) return null;
+            double limit =
+                    request.maxDetourRatio().doubleValue()
+                            * (route.estimated() ? ESTIMATED_ROUTE_LIMIT_FACTOR : 1.0);
+            if (detour > limit) return null;
             sharedDistances.put(request.userId(), shared);
             detourSum += detour;
         }
@@ -101,6 +108,12 @@ public class CombinationEvaluator {
         try {
             var shares = FareCalculator.calculate(route, riders);
             var savings = FareCalculator.calculateSavings(shares, riders);
+            double minSavingRate = 1.0;
+            for (WaitingRequest r : ordered) {
+                int saving = savings.get(r.userId());
+                if (saving < requiredSaving(r, now)) return null;
+                if (r.soloFare() > 0) minSavingRate = Math.min(minSavingRate, (double) saving / r.soloFare());
+            }
             double averageDetour = detourSum / ordered.size();
             long waitedSeconds =
                     ordered.stream()
@@ -112,10 +125,12 @@ public class CombinationEvaluator {
                                                             .getSeconds()))
                             .max()
                             .orElse(0);
+            // 인원수 → 가장 적게 아끼는 사람의 절감률 → 우회 → 대기 순으로 우선한다.
             double score =
-                    w1 * savings.values().stream().mapToLong(Integer::longValue).sum()
-                            + w2 * (1 - averageDetour)
-                            + w3 * Math.min(waitedSeconds / 300.0, 1.0);
+                    1000.0 * ordered.size()
+                            + 1000.0 * minSavingRate
+                            + 100.0 * (1 - averageDetour)
+                            + 10.0 * Math.min(waitedSeconds / 300.0, 1.0);
             return new MatchCandidate(
                     ordered,
                     hub,
@@ -130,6 +145,49 @@ public class CombinationEvaluator {
             log.debug("수용할 수 없는 정산 조합: {}", e.getMessage());
             return null;
         }
+    }
+
+    /**
+     * 각자 최소로 아껴야 하는 금액(원).
+     * 단독요금 1만 원 미만은 30%, 이상은 대기 시간 전반 35% · 후반 20%. 어느 쪽이든 최소 1,500원.
+     */
+    static int requiredSaving(WaitingRequest r, LocalDateTime now) {
+        double rate;
+        if (r.soloFare() < LONG_TRIP_FARE) {
+            rate = SHORT_TRIP_MIN_RATE;
+        } else {
+            Duration total = Duration.between(r.createdAt(), r.expiresAt());
+            boolean lateHalf = !now.isBefore(r.createdAt().plus(total.dividedBy(2)));
+            rate = lateHalf ? LONG_TRIP_LATE_MIN_RATE : LONG_TRIP_EARLY_MIN_RATE;
+        }
+        return Math.max((int) Math.ceil(r.soloFare() * rate), MIN_SAVING_WON);
+    }
+
+    /**
+     * 직선거리로 추정한 각자의 우회율이 (본인 한도 + 여유분)을 얼마나 넘는지 중 최댓값. 0 이하면 카카오 조회 대상이다.
+     * 하차 순서와 100m 정차 병합은 {@link #evaluate} 와 같다.
+     */
+    public static double straightLineWorstExcess(Coordinate origin, List<WaitingRequest> combination) {
+        List<WaitingRequest> ordered =
+                combination.stream()
+                        .sorted(
+                                Comparator.<WaitingRequest>comparingDouble(
+                                                r -> distance(origin, r.destination()))
+                                        .thenComparing(WaitingRequest::requestId))
+                        .toList();
+        double worst = Double.NEGATIVE_INFINITY;
+        double travelled = 0;
+        Coordinate last = origin;
+        for (WaitingRequest r : ordered) {
+            travelled += distance(last, r.destination());
+            last = r.destination();
+            double solo = distance(origin, r.destination());
+            double estimate = solo <= 0 ? 0 : Math.max(0, travelled / solo - 1);
+            double excess =
+                    estimate - (r.maxDetourRatio().doubleValue() + STRAIGHT_LINE_MARGIN);
+            worst = Math.max(worst, excess);
+        }
+        return worst;
     }
 
     private static double distance(Coordinate a, Coordinate b) {
