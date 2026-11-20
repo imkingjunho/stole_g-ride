@@ -1,3 +1,4 @@
+import { pickupName } from '@/shared/pickupName';
 import { useMemo } from 'react';
 import type { components } from '@/generated/api';
 import { RouteMap, type Stop } from '@/features/map/RouteMap';
@@ -17,7 +18,12 @@ export function GroupRouteMap({ group }: { group: Group }) {
     }));
     const stops: Stop[] = [];
     if (validPosition(group.hub.lat, group.hub.lng))
-      stops.push({ order: 1, kind: 'PICKUP', position: group.hub, label: group.hub.name });
+      stops.push({
+        order: 1,
+        kind: 'PICKUP',
+        position: group.hub,
+        label: pickupName(group.hub.name),
+      });
     let missing = 0;
     for (const member of [...group.members].sort((a, b) => a.dropoffOrder - b.dropoffOrder)) {
       if (!validPosition(member.destLat, member.destLng)) {

@@ -75,6 +75,7 @@ const backend = createServer(async (req, res) => {
     });
   }
   if (!token || req.headers.authorization !== `Bearer ${token}`) return fail(401);
+  if (req.url === '/api/admin/access') return success(false);
   if (req.url === '/api/users/me') {
     if (holdNextProfile) {
       holdNextProfile = false;
@@ -193,7 +194,7 @@ try {
   };
   // 공개 진입점으로 로그인하고 실제 REST 갱신 경로를 거친다.
   await page.goto(`${origin}/login`);
-  await page.getByLabel('학교 이메일').fill(user.email);
+  await page.getByLabel('이메일').fill(user.email);
   await page.getByLabel('비밀번호').fill('test-password');
   await page.getByRole('button', { name: '로그인', exact: true }).click();
   await page.waitForURL('**/request');
@@ -356,7 +357,7 @@ try {
     'disconnected',
   );
   console.log('PASS 로그아웃 뒤 늦은 사전 인증 응답으로 소켓 복구 방지');
-  await page.getByLabel('학교 이메일').fill(user.email);
+  await page.getByLabel('이메일').fill(user.email);
   await page.getByLabel('비밀번호').fill('test-password');
   await page.getByRole('button', { name: '로그인', exact: true }).click();
   await page.waitForURL('**/request');

@@ -1,3 +1,4 @@
+import { pickupName } from '@/shared/pickupName';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, Button } from '@/shared/ui';
@@ -68,7 +69,7 @@ export function HistoryPage() {
               {koreanDate(item.ridedAt)} · {item.memberCount}명 동승
             </p>
             <h2 className="mt-2 font-bold">
-              {item.hubName} → {item.destName}
+              {pickupName(item.hubName)} → {item.destName}
             </h2>
             <div className="mt-4 flex justify-between gap-3">
               <strong>{won(item.shareAmount)}</strong>

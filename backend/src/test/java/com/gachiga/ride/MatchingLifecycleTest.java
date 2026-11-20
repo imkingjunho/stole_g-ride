@@ -135,7 +135,7 @@ class MatchingLifecycleTest {
     void repeatedTicksCreateOneGroupAndPersistCompleteResponse() {
         add(1, 126.91, 1000);
         add(2, 126.92, 2000);
-        var engine = new MatchingEngine(ride, evaluator, service);
+        var engine = new MatchingEngine(ride, evaluator, service, Clock.offset(CLOCK, Duration.ofMinutes(1)));
         engine.executeTick();
         engine.executeTick();
         assertThat(groups.count()).isEqualTo(1);

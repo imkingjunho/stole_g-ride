@@ -8,14 +8,18 @@ const ok = <T>(data: T) => HttpResponse.json({ success: true, data, error: null 
 const fail = (code: string, message: string, status = 400) =>
   HttpResponse.json({ success: false, data: null, error: { code, message } }, { status });
 let tokenNumber = 0;
-const tokens = (): S['TokenResponse'] => ({
-  accessToken: `mock-access-${++tokenNumber}`,
-  refreshToken: `mock-refresh-${tokenNumber}`,
+const tokens = (admin = false): S['TokenResponse'] => ({
+  accessToken: `mock-access-${admin ? 'admin-' : ''}${++tokenNumber}`,
+  refreshToken: `mock-refresh-${admin ? 'admin-' : ''}${tokenNumber}`,
   accessTokenExpiresIn: 1800,
-  user: mockState.user,
+  user: admin
+    ? { ...mockState.user, email: 'admin@gachiga.invalid', nickname: '가치가운영팀' }
+    : mockState.user,
 });
 const protectedRequest = (request: Request) =>
   request.headers.get('Authorization')?.startsWith('Bearer mock-access-');
+const mockAdmin = (request: Request) =>
+  request.headers.get('Authorization')?.startsWith('Bearer mock-access-admin-') === true;
 export const handlers = [
   http.post(`${BASE}/api/auth/password-reset/request`, () =>
     fail(
@@ -75,13 +79,13 @@ export const handlers = [
     const b = (await request.json()) as S['LoginRequest'];
     if (!b.email || !b.password || b.password === 'wrong')
       return fail('UNAUTHORIZED', '이메일 또는 비밀번호를 확인해 주세요.', 401);
-    return ok(tokens());
+    return ok(tokens(b.email === 'admin@gachiga.invalid'));
   }),
   http.post(`${BASE}/api/auth/refresh`, async ({ request }) => {
     await delay(100);
     const b = (await request.json()) as S['RefreshRequest'];
     return b.refreshToken.startsWith('mock-refresh-')
-      ? ok(tokens())
+      ? ok(tokens(b.refreshToken.startsWith('mock-refresh-admin-')))
       : fail('UNAUTHORIZED', '로그인이 만료됐어요.', 401);
   }),
   http.post(`${BASE}/api/auth/logout`, () => ok(null)),
@@ -221,8 +225,9 @@ export const handlers = [
     } satisfies S['MyStats']),
   ),
   // 체험 모드의 관리자 화면은 예시 데이터만 보여 준다.
-  http.get(`${BASE}/api/admin/access`, () => ok(true)),
-  http.get(`${BASE}/api/admin/dashboard`, () => {
+  http.get(`${BASE}/api/admin/access`, ({ request }) => ok(mockAdmin(request))),
+  http.get(`${BASE}/api/admin/dashboard`, ({ request }) => {
+    if (!mockAdmin(request)) return fail('FORBIDDEN', '관리자 권한이 필요해요.', 403);
     const now = Date.now();
     const kstDate = (time: number) => new Date(time + 9 * 3600000).toISOString().slice(0, 10);
     return ok({

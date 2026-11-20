@@ -1,3 +1,4 @@
+import { pickupName } from '@/shared/pickupName';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
@@ -151,7 +152,7 @@ export function AdminPage() {
                   >
                     <div>
                       <p className="font-semibold">{person.nickname}</p>
-                      <p className="text-sm text-muted">{person.hubName}</p>
+                      <p className="text-sm text-muted">{pickupName(person.hubName)}</p>
                     </div>
                     <Badge>{minutesWaiting(person.requestedAt, asOf)}분 대기</Badge>
                   </li>
@@ -171,7 +172,7 @@ export function AdminPage() {
                 <div>
                   <p className="font-semibold">{person.nickname}</p>
                   <p className="text-sm text-muted">
-                    {person.hubName} · 그룹 {person.groupId}
+                    {pickupName(person.hubName)} · 그룹 {person.groupId}
                   </p>
                 </div>
                 <Badge variant={person.confirmed ? 'success' : 'estimated'}>

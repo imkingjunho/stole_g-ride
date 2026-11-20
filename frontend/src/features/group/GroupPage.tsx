@@ -1,10 +1,11 @@
+import { pickupName } from '@/shared/pickupName';
 import { PickupGuide } from '@/shared/ui/PickupGuide';
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, unwrap, showError, ApiError } from '@/shared/api/client';
 import { won, koreaTime } from '@/shared/api/format';
-import { Button, Badge, Card, Modal } from '@/shared/ui';
+import { Button, Badge, Card } from '@/shared/ui';
 import { QueryState } from '@/shared/ui/QueryState';
 import { useCountdown } from '@/shared/ui/useCountdown';
 import { isMatchNotification, stompClient } from '@/shared/ws/stompClient';
@@ -12,7 +13,7 @@ import { useGroup } from './useGroup';
 import { ReportButton } from './ReportButton';
 import { GroupRouteMap } from './GroupRouteMap';
 import { readGroupDetail } from './groupResponse';
-import { useToastStore } from '@/shared/stores/toastStore';
+import { CompleteRideButton } from './CompleteRideButton';
 import { useAuthStore } from '@/shared/stores/authStore';
 export function GroupPage() {
   const query = useGroup();
@@ -22,7 +23,6 @@ export function GroupPage() {
   const expiryCheck = useRef<string | null>(null);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const [completeOpen, setCompleteOpen] = useState(false);
   const [previousFare, setPreviousFare] = useState<number | null>(null);
   const fareRef = useRef<number | null>(null);
   const me = group?.members.find((m) => m.isMe);
@@ -53,23 +53,18 @@ export function GroupPage() {
   }, [group?.status, group?.acceptDeadline, remaining, query.id, queryClient]);
   useEffect(() => {
     setPreviousFare(null);
-    setCompleteOpen(false);
   }, [query.id]);
   const action = useMutation({
     mutationFn: async ({
       kind,
       groupId,
     }: {
-      kind: 'accept' | 'reject' | 'complete';
+      kind: 'accept' | 'reject';
       groupId: number;
       sessionVersion: number;
     }) => {
       const path =
-        kind === 'accept'
-          ? '/api/groups/{groupId}/accept'
-          : kind === 'reject'
-            ? '/api/groups/{groupId}/reject'
-            : '/api/groups/{groupId}/complete';
+        kind === 'accept' ? '/api/groups/{groupId}/accept' : '/api/groups/{groupId}/reject';
       const r = await api.POST(path, { params: { path: { groupId } } });
       const data = unwrap<unknown>(r.data, r.error);
       return kind === 'accept'
@@ -85,14 +80,6 @@ export function GroupPage() {
       if (currentGroup.current !== groupId) return;
       if (kind === 'accept') setPreviousFare(null);
       if (kind === 'reject') navigate('/waiting', { replace: true });
-      if (kind === 'complete') {
-        setCompleteOpen(false);
-        void queryClient.invalidateQueries({ queryKey: ['history'] });
-        void queryClient.invalidateQueries({ queryKey: ['stats'] });
-        useToastStore
-          .getState()
-          .notify('탑승 완료했어요. 함께한 이동에 저장됐고 채팅은 계속할 수 있어요.', 'success');
-      }
     },
     onError: (error, { groupId, sessionVersion }) => {
       if (
@@ -108,7 +95,7 @@ export function GroupPage() {
       showError(error);
     },
   });
-  function act(kind: 'accept' | 'reject' | 'complete') {
+  function act(kind: 'accept' | 'reject') {
     action.mutate({
       kind,
       groupId: query.id,
@@ -145,7 +132,7 @@ export function GroupPage() {
               : '동승이 성사됐어요!'}
         </h1>
         <p className="mt-2 text-sm text-slate-600">
-          {group.hub.name}에서 {group.members.length}명이 함께 출발해요.
+          {pickupName(group.hub.name)}에서 {group.members.length}명이 함께 출발해요.
         </p>
       </header>
       <PickupGuide hub={group.hub} />
@@ -214,7 +201,7 @@ export function GroupPage() {
       </Card>
       <Card>
         <h2 className="font-bold">탑승 · 하차 순서</h2>
-        <p className="my-3 text-sm">탑승 1 · {group.hub.name}에서 함께 탑승</p>
+        <p className="my-3 text-sm">탑승 1 · {pickupName(group.hub.name)}에서 함께 탑승</p>
         <ol className="space-y-4">
           {[...group.members]
             .sort((a, b) => a.dropoffOrder - b.dropoffOrder)
@@ -238,32 +225,13 @@ export function GroupPage() {
           <Link className="link w-full bg-brand text-white" to={`/groups/${group.groupId}/chat`}>
             동승자와 채팅하기
           </Link>
-          {group.status === 'CONFIRMED' && (
-            <Button
-              fullWidth
-              variant="secondary"
-              disabled={me?.completed}
-              onClick={() => setCompleteOpen(true)}
-            >
-              {me?.completed ? '탑승 완료했어요' : '탑승 완료'}
-            </Button>
-          )}
+          <CompleteRideButton key={group.groupId} group={group} label="탑승 완료" />
           <Link className="link w-full" to="/history">
             함께한 이동 보기
           </Link>
         </div>
       )}
       <ReportButton group={group} />
-      <Modal
-        open={completeOpen}
-        onClose={() => setCompleteOpen(false)}
-        title="탑승을 완료할까요?"
-        description="내 동승 내역에 저장돼요. 채팅은 매칭 확정 후 3시간까지 계속할 수 있어요."
-      >
-        <Button fullWidth loading={action.isPending} onClick={() => act('complete')}>
-          탑승 완료 확인
-        </Button>
-      </Modal>
     </section>
   );
 }

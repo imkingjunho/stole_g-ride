@@ -23,8 +23,24 @@ export function FarePage() {
       </header>
       <Card>
         {g.estimated && <Badge variant="estimated" />}
-        <p className="text-sm text-slate-600">내 최종 분담액</p>
+        <p className="text-sm text-slate-600">내 예상 분담액</p>
         <p className="mt-2 text-3xl font-bold">{me ? won(me.shareAmount) : '확인 중'}</p>
+      </Card>
+      <Card>
+        <h2 className="font-bold">동승자별 분담액</h2>
+        <ul className="mt-4 space-y-3">
+          {g.members.map((m) => (
+            <li key={m.userId} className="flex justify-between gap-3 text-sm">
+              <span>
+                {m.nickname} {m.isMe && '· 나'}
+              </span>
+              <strong>{won(m.shareAmount)}</strong>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-4 border-t border-line pt-4 font-semibold">
+          총 예상 요금 {won(g.totalFare)}
+        </p>
       </Card>
       {me && (
         <Card className="space-y-4">
@@ -61,25 +77,17 @@ export function FarePage() {
           </p>
         </Card>
       )}
-      <Card>
-        <h2 className="font-bold">동승자별 분담액</h2>
-        <ul className="mt-4 space-y-3">
-          {g.members.map((m) => (
-            <li key={m.userId} className="flex justify-between gap-3 text-sm">
-              <span>
-                {m.nickname} {m.isMe && '· 나'}
-              </span>
-              <strong>{won(m.shareAmount)}</strong>
-            </li>
-          ))}
-        </ul>
-        <p className="mt-4 border-t border-line pt-4 font-semibold">
-          총 예상 요금 {won(g.totalFare)}
-        </p>
-      </Card>
       <p className="text-sm text-slate-600">
         실제 요금은 교통 상황에 따라 달라질 수 있어요. 이 화면은 요금 분담 계산 안내예요.
       </p>
+      {['CONFIRMED', 'COMPLETED'].includes(g.status) && (
+        <Link className="link w-full" to={`/groups/${g.groupId}/chat`}>
+          동승 채팅으로 이동
+        </Link>
+      )}
+      <Link className="link w-full" to="/history">
+        함께한 이동 보기
+      </Link>
     </section>
   );
 }

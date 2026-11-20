@@ -50,7 +50,7 @@ await context.route('https://dapi.kakao.com/**', (route) =>
     body: `
     (() => { window.__mapOverlays = [];
     class LatLng { constructor(lat,lng){this.lat=lat;this.lng=lng} getLat(){return this.lat} getLng(){return this.lng} }
-    class Map { setCenter(){} setBounds(b){this.bounds=b;window.__lastBounds=b.points.map(p=>({lat:p.getLat(),lng:p.getLng()}))} setZoomable(){} }
+    class Map { setLevel(){} setCenter(){} setBounds(b){this.bounds=b;window.__lastBounds=b.points.map(p=>({lat:p.getLat(),lng:p.getLng()}))} setZoomable(){} }
     class Bounds { constructor(){this.points=[]} extend(p){this.points.push(p)} }
     class Overlay { constructor(options){Object.assign(this,options);window.__mapOverlays.push(this)} setMap(map){this.map=map} }
     window.kakao={maps:{LatLng,Map,LatLngBounds:Bounds,Polyline:Overlay,CustomOverlay:Overlay,Marker:Overlay,event:{addListener(){},removeListener(){}},load(cb){cb()}}}; })();
@@ -95,6 +95,25 @@ async function demo(pending = false) {
 try {
   await check('비로그인 접근 차단', async () => {
     await page.goto(`${base}/history`);
+    await page.waitForURL('**/login');
+  });
+  await check('관리자 로그인 후 운영 화면·일반 계정 접근 제한', async () => {
+    await page.goto(base + '/admin');
+    await page.getByRole('heading', { name: '관리자 로그인' }).waitFor();
+    await page.getByLabel('이메일').fill('admin@gachiga.invalid');
+    await page.getByLabel('비밀번호').fill('mock-preview');
+    await page.getByRole('button', { name: '로그인', exact: true }).click();
+    await page.waitForURL('**/admin');
+    await page.getByRole('heading', { name: '매칭 운영 현황' }).waitFor();
+    await navigate('/me');
+    await page.getByRole('button', { name: '로그아웃', exact: true }).click();
+    await page.waitForURL('**/login');
+    await page.getByRole('button', { name: '목 데이터로 둘러보기' }).click();
+    await page.waitForURL('**/request');
+    await navigate('/admin');
+    await page.getByRole('heading', { name: '관리자 권한이 필요해요' }).waitFor();
+    await navigate('/me');
+    await page.getByRole('button', { name: '로그아웃', exact: true }).click();
     await page.waitForURL('**/login');
   });
   await check('회원가입: 코드 오류 복귀·재입력·프로필 등록', async () => {
@@ -157,10 +176,14 @@ try {
     await navigate('/dev/demo');
     await page.getByRole('button', { name: '새 요청 작성', exact: true }).click();
     await page.getByRole('heading', { name: '어디로 갈까요?' }).waitFor();
-    await page.getByRole('button', { name: '전남대 후문', exact: true }).click();
+    await page.getByRole('button', { name: '전남대 후문 스타벅스', exact: true }).click();
     await page.getByRole('button', { name: '5분', exact: true }).click();
     await page.getByLabel('목적지 검색').fill('송정');
     await page.getByRole('list', { name: '장소 검색 결과' }).getByRole('button').first().click();
+    await page.waitForFunction(() => {
+      const labels = window.__mapOverlays.filter((overlay) => overlay.map).map((overlay) => overlay.content?.textContent);
+      return labels.includes('출발') && labels.includes('도착') && window.__lastBounds.length === 2;
+    });
     await page.getByRole('button', { name: '동승 매칭 시작', exact: true }).click();
     await page.waitForURL('**/waiting');
     await page.getByRole('heading', { name: '함께 갈 사람을 찾고 있어요' }).waitFor();
@@ -441,6 +464,9 @@ try {
     await navigate('/groups/17');
     await page.getByRole('button', { name: '탑승 완료', exact: true }).click();
     await page.getByRole('button', { name: '탑승 완료 확인' }).click();
+    await page.waitForURL('**/groups/17/fare');
+    await page.getByRole('heading', { name: '동승자별 분담액' }).waitFor();
+    await page.getByRole('link', { name: '함께한 이동 보기' }).click();
     await page.waitForURL('**/history');
   });
   await check('그룹 응답 계약 오류·내 정보 위조 방지·복구', async () => {
@@ -548,21 +574,18 @@ try {
       });
     }
   });
-  await check('완료 알림 뒤 채팅 내역·입력 제거', async () => {
+  await check('채팅에서 탑승 완료·분담액 확인·대화 복귀', async () => {
     await demo();
     await page.getByRole('link', { name: '동승자와 채팅하기' }).click();
-    await page.getByLabel('메시지', { exact: true }).fill('완료 후에는 숨겨질 대화');
+    await page.getByLabel('메시지', { exact: true }).fill('정산 보고 다시 올게요');
     await page.getByRole('button', { name: '보내기', exact: true }).click();
-    await page.getByText('완료 후에는 숨겨질 대화', { exact: true }).waitFor();
-    await page.evaluate(async () => {
-      const { mockState, notifyMatch } = await import('/src/shared/mocks/state.ts');
-      mockState.group.status = 'COMPLETED';
-      mockState.messages = [];
-      notifyMatch('COMPLETED', '탑승을 완료했어요.');
-    });
-    await page.getByText('대화가 종료되어 채팅 내역을 표시하지 않아요.', { exact: true }).waitFor();
-    assert.equal(await page.getByText('완료 후에는 숨겨질 대화', { exact: true }).count(), 0);
-    assert.equal(await page.getByLabel('메시지', { exact: true }).count(), 0);
+    await page.getByRole('button', { name: '탑승했어요', exact: true }).click();
+    await page.getByRole('button', { name: '탑승 완료 확인', exact: true }).click();
+    await page.waitForURL('**/groups/17/fare');
+    await page.getByRole('heading', { name: '동승자별 분담액' }).waitFor();
+    await page.getByRole('link', { name: '동승 채팅으로 이동' }).click();
+    await page.getByRole('log').getByText('정산 보고 다시 올게요', { exact: true }).waitFor();
+    await page.getByRole('link', { name: '탑승 완료 · 정산 금액 보기' }).waitFor();
   });
   await check('정산 재조회 실패 시 과거 금액 숨김·재시도', async () => {
     await demo();
@@ -722,7 +745,7 @@ try {
     await run('탑승 완료');
     await page.getByRole('button', { name: '탑승 완료', exact: true }).click();
     await page.getByRole('button', { name: '탑승 완료 확인', exact: true }).click();
-    await page.waitForURL('**/history');
+    await page.waitForURL('**/groups/17/fare');
     await page.getByRole('link', { name: '시연 체크리스트로 돌아가기' }).click();
     await page.getByRole('status').filter({ hasText: '확인한 시연 항목 0/11' }).waitFor();
   });
@@ -738,7 +761,7 @@ try {
     await run('재계산·재동의');
     await page.getByRole('heading', { name: '동승 제안이 도착했어요' }).waitFor();
     await page.getByRole('button', { name: '목 재계산 알림 보내기' }).click();
-    await page.getByText('9,700원 → 9,600원', { exact: true }).waitFor();
+    await page.getByText('7,895원 → 9,600원', { exact: true }).waitFor();
     assert.ok(
       await page.evaluate(async () => {
         const { mockState } = await import('/src/shared/mocks/state.ts');

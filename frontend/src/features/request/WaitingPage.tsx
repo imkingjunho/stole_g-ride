@@ -1,3 +1,4 @@
+import { pickupName } from '@/shared/pickupName';
 import { PickupGuide } from '@/shared/ui/PickupGuide';
 import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -77,7 +78,7 @@ export function WaitingPage() {
           {expired ? '대기 시간이 끝났어요' : '함께 갈 사람을 찾고 있어요'}
         </h1>
         <p className="mt-2 text-sm text-slate-600">
-          {request.hub.name} → {request.destName}
+          {pickupName(request.hub.name)} → {request.destName}
         </p>
       </header>
 
@@ -100,8 +101,8 @@ export function WaitingPage() {
               <strong className="text-ink">{request.candidateCount}명</strong>
             </p>
             <p className="text-xs text-slate-600">
-              새 요청이 들어오면 바로 매칭 조건을 확인해요. 목적지·출발 시간·우회 조건이 맞는
-              동승자가 필요해요.
+              조건이 맞는 두 명이 모이면 1분 동안 한 명을 더 기다려요. 그 안에 세 명이 모이면 바로
+              매칭하고, 두 명이면 1분 뒤 함께 출발해요.
             </p>
             {request.estimated && (
               <p className="text-xs text-slate-600">혼자 이동 요금은 추정치예요.</p>

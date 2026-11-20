@@ -1,3 +1,4 @@
+import { useAdminAccess } from '@/features/admin/useAdminAccess';
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
@@ -12,16 +13,7 @@ export function MyPage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const stats = useStats();
-  const sessionVersion = useAuthStore((s) => s.sessionVersion);
-  const id = useAuthStore((s) => s.user?.id);
-  const admin = useQuery({
-    queryKey: ['admin-access', id, sessionVersion],
-    queryFn: async ({ signal }) => {
-      const result = await api.GET('/api/admin/access', { signal });
-      return unwrap(result.data, result.error);
-    },
-    retry: false,
-  });
+  const admin = useAdminAccess();
   const [edit, setEdit] = useState(false);
   const [nickname, setNickname] = useState('');
   const [department, setDepartment] = useState('');

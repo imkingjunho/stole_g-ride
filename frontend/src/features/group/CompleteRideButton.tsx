@@ -1,13 +1,21 @@
+import { Link, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { components } from '@/generated/api';
-import { api, unwrap, showError } from '@/shared/api/client';
+import { api, ApiError, unwrap, showError } from '@/shared/api/client';
 import { useAuthStore } from '@/shared/stores/authStore';
 import { useToastStore } from '@/shared/stores/toastStore';
 import { Button, Modal } from '@/shared/ui';
-/** 채팅을 떠나지 않고 내 탑승을 완료한다. 다른 동승자의 완료 여부와 별개다. */
-export function CompleteRideButton({ group }: { group: components['schemas']['GroupDetail'] }) {
+/** 내 탑승을 완료하고 분담액을 확인한다. 다른 동승자의 완료 여부와 별개다. */
+export function CompleteRideButton({
+  group,
+  label = '탑승했어요',
+}: {
+  group: components['schemas']['GroupDetail'];
+  label?: string;
+}) {
   const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const me = group.members.find((m) => m.isMe);
   const complete = useMutation({
@@ -24,15 +32,21 @@ export function CompleteRideButton({ group }: { group: components['schemas']['Gr
       setOpen(false);
       useToastStore.getState().notify('탑승 완료했어요. 채팅은 계속 이용할 수 있어요.', 'success');
     },
-    onError: (error, { session }) => {
-      if (session === useAuthStore.getState().sessionVersion) showError(error);
+    onError: (error, { groupId, session }) => {
+      if (session !== useAuthStore.getState().sessionVersion) return;
+      if (
+        error instanceof ApiError &&
+        ['MATCH_EXPIRED', 'GROUP_NOT_FOUND', 'GROUP_NOT_MEMBER'].includes(error.code)
+      )
+        void qc.invalidateQueries({ queryKey: ['group', groupId] });
+      showError(error);
     },
   });
-  if (group.status === 'COMPLETED')
+  if (group.status === 'COMPLETED' || me?.completed)
     return (
-      <p role="status" className="rounded-control bg-brand-soft p-3 text-sm text-brand">
-        탑승 완료 · 함께한 이동에 기록했어요.
-      </p>
+      <Link className="link w-full" to={`/groups/${group.groupId}/fare`}>
+        탑승 완료 · 정산 금액 보기
+      </Link>
     );
   if (group.status !== 'CONFIRMED') return null;
   return (
@@ -40,10 +54,10 @@ export function CompleteRideButton({ group }: { group: components['schemas']['Gr
       <Button
         fullWidth
         variant="secondary"
-        disabled={me?.completed || complete.isPending}
+        disabled={complete.isPending}
         onClick={() => setOpen(true)}
       >
-        {me?.completed ? '탑승 완료했어요' : '탑승했어요'}
+        {label}
       </Button>
       <Modal
         open={open}
@@ -55,10 +69,18 @@ export function CompleteRideButton({ group }: { group: components['schemas']['Gr
           fullWidth
           loading={complete.isPending}
           onClick={() =>
-            complete.mutate({
-              groupId: group.groupId,
-              session: useAuthStore.getState().sessionVersion,
-            })
+            complete.mutate(
+              { groupId: group.groupId, session: useAuthStore.getState().sessionVersion },
+              {
+                onSuccess: (_, { groupId, session }) => {
+                  if (
+                    session === useAuthStore.getState().sessionVersion &&
+                    groupId === group.groupId
+                  )
+                    navigate(`/groups/${groupId}/fare`, { replace: true });
+                },
+              },
+            )
           }
         >
           탑승 완료 확인

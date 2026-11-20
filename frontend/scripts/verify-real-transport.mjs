@@ -61,6 +61,7 @@ const backend = createServer(async (req, res) => {
     );
     return;
   }
+  if (req.url === '/api/admin/access') return success(false);
   if (req.url === '/api/users/me') return success(user);
   if (req.url === '/api/stats/me')
     return success({
@@ -98,7 +99,7 @@ try {
   await page.goto('http://127.0.0.1:5187/login');
   await page.getByRole('button', { name: '로그인', exact: true }).waitFor();
   assert.equal(await page.getByRole('button', { name: '목 데이터로 둘러보기' }).count(), 0);
-  await page.getByLabel('학교 이메일').fill('transport@jnu.ac.kr');
+  await page.getByLabel('이메일').fill('transport@jnu.ac.kr');
   await page.getByLabel('비밀번호').fill('test-password');
   await page.getByRole('button', { name: '로그인', exact: true }).click();
   await page.waitForURL('**/request');

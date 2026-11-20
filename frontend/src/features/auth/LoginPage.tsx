@@ -1,6 +1,6 @@
 import { useState, useEffect, type FormEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { api, unwrap, showError } from '@/shared/api/client';
 import { useAuthStore } from '@/shared/stores/authStore';
 import { Button, Input } from '@/shared/ui';
@@ -13,7 +13,7 @@ export function LoginPage() {
   }, []);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const navigate = useNavigate();
+  const adminEntry = useLocation().state?.from === '/admin';
   const login = useMutation({
     mutationFn: async (body: { email: string; password: string }) => {
       const r = await api.POST('/api/auth/login', { body });
@@ -22,7 +22,6 @@ export function LoginPage() {
     onSuccess: (data) => {
       if (!data) return;
       useAuthStore.getState().setTokens(data.accessToken, data.refreshToken, data.user);
-      navigate('/request', { replace: true });
     },
     onError: showError,
   });
@@ -32,12 +31,16 @@ export function LoginPage() {
   }
   return (
     <AuthLayout
-      title="함께 가면, 더 가벼운 길"
-      description="전남대 학생들과 함께 이동하고 교통비를 아껴 보세요."
+      title={adminEntry ? '관리자 로그인' : '함께 가면, 더 가벼운 길'}
+      description={
+        adminEntry
+          ? '운영 계정으로 로그인해 매칭 현황을 확인하세요.'
+          : '전남대 학생들과 함께 이동하고 교통비를 아껴 보세요.'
+      }
     >
       <form onSubmit={submit} className="space-y-5">
         <Input
-          label="학교 이메일"
+          label="이메일"
           type="email"
           autoComplete="username"
           required

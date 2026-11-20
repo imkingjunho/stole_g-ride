@@ -1,3 +1,4 @@
+import { pickupName } from '@/shared/pickupName';
 import { PickupGuide } from '@/shared/ui/PickupGuide';
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -227,13 +228,17 @@ export function RequestPage() {
                 onClick={() => setHubId(hub.id)}
                 className={`min-h-touch rounded-control border px-3 py-3 text-sm font-semibold ${hub.id === hubId ? 'border-brand bg-brand-soft text-brand' : 'border-line bg-white'}`}
               >
-                {hub.name}
+                {pickupName(hub.name)}
               </button>
             ))}
           </div>
         </fieldset>
 
-        <DestinationPicker value={destination} onChange={handleDestinationChange} />
+        <DestinationPicker
+          origin={selectedHub}
+          value={destination}
+          onChange={handleDestinationChange}
+        />
         {recentDestinations.length > 0 && (
           <section aria-label="최근 목적지">
             <h2 className="mb-2 text-sm font-semibold">최근 목적지</h2>
