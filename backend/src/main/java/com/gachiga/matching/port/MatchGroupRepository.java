@@ -14,6 +14,15 @@ import java.util.List;
 
 public interface MatchGroupRepository extends JpaRepository<MatchGroup, Long>, MatchOperationsPort {
 
+    @Query("""
+            select distinct g.pairOfferKey from MatchGroup g join MatchMember m on m.groupId=g.id
+            where g.pairOfferKey is not null and m.requestId in :requestIds
+            """)
+    java.util.Set<String> offeredPairs(@Param("requestIds") List<Long> requestIds);
+
+    @Query("select g.id from MatchGroup g where g.status = com.gachiga.matching.domain.GroupStatus.PENDING and g.acceptDeadline <= :now")
+    List<Long> expiredOffers(@Param("now") LocalDateTime now);
+
     @Override
     @Query("""
             select new com.gachiga.contract.matching.MatchOperationsPort$Member(

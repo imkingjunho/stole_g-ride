@@ -1,5 +1,6 @@
 package com.gachiga.ride;
 
+import com.gachiga.ride.dto.RequestPreview;
 import com.gachiga.common.exception.BusinessException;
 import com.gachiga.common.exception.ErrorCode;
 import com.gachiga.common.util.GeoUtils;
@@ -160,6 +161,7 @@ public class RideRequestService {
                                     soloRoute.totalFare(),
                                     soloRoute.estimated(),
                                     now);
+                    request.chooseGroupSize(command.preferredSize());
                     RideRequest persisted;
                     try {
                         persisted = rideRequestRepository.saveAndFlush(request);
@@ -343,6 +345,11 @@ public class RideRequestService {
                             + rideProperties.minDistanceMeters()
                             + "m 이상인 곳을 선택해 주세요.");
         }
+    }
+
+    public RequestPreview preview(Long hubId, double lat, double lng) {
+        var result = soloRoute(findHub(hubId), lat, lng);
+        return new RequestPreview(List.of(2, 3), result.sections(), result.estimated());
     }
 
     /** 혼자 갈 때의 거리·요금. 경유지 없이 거점 → 목적지 직행 */

@@ -1,5 +1,7 @@
 package com.gachiga.ride.dto;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
@@ -35,4 +37,11 @@ public record CreateRideRequestRequest(
         @NotNull(message = "최대 우회율을 선택해 주세요")
                 @DecimalMin(value = "0.0", inclusive = false)
                 @DecimalMax(value = "1.0")
-                BigDecimal maxDetourRatio) {}
+                BigDecimal maxDetourRatio,
+        @Min(2) @Max(3)
+                Integer preferredSize) {
+    public CreateRideRequestRequest(Long hubId, String destName, Double destLat, Double destLng,
+            LocalDateTime departAt, Integer maxWaitMin, Boolean sameGenderOnly, BigDecimal maxDetourRatio) {
+        this(hubId, destName, destLat, destLng, departAt, maxWaitMin, sameGenderOnly, maxDetourRatio, null);
+    }
+}

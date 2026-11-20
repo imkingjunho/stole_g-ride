@@ -64,6 +64,10 @@ public class MatchMember {
 
     private java.time.LocalDateTime completedAt;
 
+    public void accept() {
+        this.accepted = true;
+    }
+
     public void complete() {
         if (Boolean.TRUE.equals(completed)) return;
         this.completed = true;

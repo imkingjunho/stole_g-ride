@@ -96,7 +96,7 @@ class RideRequestControllerTest {
                 2,
                 true,
                 null,
-                LocalDateTime.of(2026, 10, 20, 8, 30));
+                LocalDateTime.of(2026, 10, 20, 8, 30), null);
     }
 
     @Test

@@ -50,7 +50,7 @@ await context.route('https://dapi.kakao.com/**', (route) =>
     body: `
     (() => { window.__mapOverlays = [];
     class LatLng { constructor(lat,lng){this.lat=lat;this.lng=lng} getLat(){return this.lat} getLng(){return this.lng} }
-    class Map { setLevel(){} setCenter(){} setBounds(b){this.bounds=b;window.__lastBounds=b.points.map(p=>({lat:p.getLat(),lng:p.getLng()}))} setZoomable(){} }
+    class Map { setLevel(level){this.level=level} setCenter(center){this.center=center} setBounds(b){this.bounds=b;window.__lastBounds=b.points.map(p=>({lat:p.getLat(),lng:p.getLng()}))} setZoomable(){} }
     class Bounds { constructor(){this.points=[]} extend(p){this.points.push(p)} }
     class Overlay { constructor(options){Object.assign(this,options);window.__mapOverlays.push(this)} setMap(map){this.map=map} }
     window.kakao={maps:{LatLng,Map,LatLngBounds:Bounds,Polyline:Overlay,CustomOverlay:Overlay,Marker:Overlay,event:{addListener(map,name,fn){if(name==='click')window.__tapMap=fn},removeListener(map,name,fn){if(window.__tapMap===fn)delete window.__tapMap}},load(cb){cb()}}}; })();
@@ -236,6 +236,33 @@ try {
     );
     await page.setViewportSize({ width: 360, height: 800 });
   });
+  await check('여섯 승차 지점의 지도 핀이 선택한 장소와 일치', async () => {
+    await navigate('/request');
+    for (const [name, lat, lng] of [
+      ['전남대 정문 이디야 커피', 35.172306, 126.905304],
+      ['전남대 후문 스타벅스', 35.177217, 126.912457],
+      ['전대 예대점 CU', 35.180726, 126.904215],
+      ['경신여고 새약손 한방병원', 35.17305, 126.887698],
+      ['유스퀘어 택시정류장', 35.161046, 126.87851],
+      ['광주송정역 택시정류장', 35.136335, 126.7903],
+    ]) {
+      await page.getByRole('button', { name, exact: true }).click();
+      await page.waitForFunction(
+        ([y, x]) =>
+          window.__mapOverlays.some(
+            (o) =>
+              o.map?.level === 3 &&
+              Math.abs(o.map.center.getLat() - y) < 0.000001 &&
+              Math.abs(o.map.center.getLng() - x) < 0.000001 &&
+              o.content?.textContent === '출발' &&
+              Math.abs(o.position.getLat() - y) < 0.000001 &&
+              Math.abs(o.position.getLng() - x) < 0.000001,
+          ),
+        [lat, lng],
+      );
+      await page.getByRole('button', { name: '이전 단계' }).click();
+    }
+  });
   await check('요청 생성·중복 방지·취소·빈 대기 화면', async () => {
     await navigate('/dev/demo');
     await page.getByRole('button', { name: '새 요청 작성', exact: true }).click();
@@ -254,10 +281,23 @@ try {
     );
     await page.getByRole('heading', { name: '광주송정역 인근' }).waitFor();
     await page.getByRole('button', { name: '여기로 도착' }).click();
+    await page.getByRole('radio', { name: '3명', exact: true }).check();
     await page.getByRole('radio', { name: '5분', exact: true }).check();
     assert.ok(await page.getByRole('radio', { name: '성별 무관' }).isChecked());
     assert.ok(await page.getByRole('radio', { name: '20%', exact: true }).isChecked());
     await page.getByRole('button', { name: '요청 확인', exact: true }).click();
+    await page.waitForFunction(() =>
+      window.__mapOverlays.some(
+        (o) =>
+          o.map &&
+          o.strokeStyle === 'dash' &&
+          o.path?.length === 2 &&
+          Math.abs(o.path[0].getLat() - 35.177217) < 0.000001 &&
+          Math.abs(o.path[0].getLng() - 126.912457) < 0.000001 &&
+          o.path[1].getLat() === 35.1379 &&
+          o.path[1].getLng() === 126.7903,
+      ),
+    );
     await page.getByRole('button', { name: /대기 시간.*5분/ }).click();
     assert.ok(await page.getByRole('radio', { name: '5분', exact: true }).isChecked());
     await page.getByRole('button', { name: '요청 확인', exact: true }).click();
@@ -267,6 +307,7 @@ try {
     const request = await page.evaluate(
       async () => (await import('/src/shared/mocks/state.ts')).mockState.request,
     );
+    assert.equal(request.preferredSize, 3);
     assert.equal(request.hub.id, 2);
     assert.equal(request.maxWaitMin, 5);
     assert.equal(request.destName, '광주송정역 인근');

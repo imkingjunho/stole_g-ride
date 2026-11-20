@@ -125,13 +125,17 @@ export function GroupPage() {
         <p className="text-sm text-brand">함께 가는 즐거움</p>
         <h1 className="mt-2 text-2xl font-bold">
           {group.status === 'PENDING'
-            ? '동승 제안이 도착했어요'
+            ? group.members.length === 2
+              ? '두 분이서 먼저 타시겠어요?'
+              : '동승 제안이 도착했어요'
             : group.status === 'COMPLETED'
               ? '함께한 이동이 끝났어요'
               : '동승이 성사됐어요!'}
         </h1>
         <p className="mt-2 text-sm text-slate-600">
-          {pickupName(group.hub.name)}에서 {group.members.length}명이 함께 출발해요.
+          {group.status === 'PENDING' && group.members.length === 2
+            ? '5분 동안 세 번째 동승자를 찾지 못했어요. 두 분이 모두 수락하면 출발이 확정돼요.'
+            : pickupName(group.hub.name) + '에서 ' + group.members.length + '명이 함께 출발해요.'}
         </p>
       </header>
 
@@ -185,7 +189,7 @@ export function GroupPage() {
                 disabled={action.isPending || remaining === 0}
                 onClick={() => act('reject')}
               >
-                거절
+                {group.members.length === 2 ? '3명 계속 기다리기' : '거절'}
               </Button>
             </div>
           )}

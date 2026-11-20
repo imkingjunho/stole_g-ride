@@ -99,8 +99,11 @@ export function WaitingPage() {
               <strong className="text-ink">{request.candidateCount}명</strong>
             </p>
             <p className="text-xs text-slate-600">
-              조건이 맞는 두 명이 모이면 1분 동안 한 명을 더 기다려요. 그 안에 세 명이 모이면 바로
-              매칭하고, 두 명이면 1분 뒤 함께 출발해요.
+              {request.preferredSize === 2
+                ? '나 포함 2명 · 조건이 맞는 한 명을 찾으면 바로 매칭해요.'
+                : request.preferredSize === 3
+                  ? '나 포함 3명 · 두 명이 모이고 5분이 지나면, 남은 대기 시간 안에 둘이 탈지 물어봐요.'
+                  : '조건이 맞는 두 명이 모이면 1분 동안 한 명을 더 기다려요.'}
             </p>
             {request.estimated && (
               <p className="text-xs text-slate-600">혼자 이동 요금은 추정치예요.</p>

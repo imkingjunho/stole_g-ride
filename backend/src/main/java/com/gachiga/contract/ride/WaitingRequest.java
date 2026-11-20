@@ -37,4 +37,12 @@ public record WaitingRequest(
         BigDecimal maxDetourRatio,
         int soloDistance,
         int soloFare,
-        int version) {}
+        int version,
+        Integer preferredSize) {
+    public WaitingRequest(Long requestId, Long userId, Long hubId, Coordinate destination,
+            String destName, LocalDateTime departAt, LocalDateTime expiresAt, LocalDateTime createdAt,
+            boolean sameGenderOnly, BigDecimal maxDetourRatio, int soloDistance, int soloFare, int version) {
+        this(requestId, userId, hubId, destination, destName, departAt, expiresAt, createdAt,
+                sameGenderOnly, maxDetourRatio, soloDistance, soloFare, version, null);
+    }
+}

@@ -35,7 +35,7 @@ public record RideRequestResponse(
         int candidateCount,
         boolean estimated,
         Long groupId,
-        LocalDateTime createdAt) {
+        LocalDateTime createdAt, Integer preferredSize) {
 
     /**
      * 엔티티를 응답으로 옮긴다.
@@ -64,6 +64,6 @@ public record RideRequestResponse(
                 candidateCount,
                 request.isEstimated(),
                 request.getGroupId(),
-                request.getCreatedAt());
+                request.getCreatedAt(), request.getPreferredSize());
     }
 }

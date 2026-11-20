@@ -20,6 +20,17 @@ public class GroupController {
         return ApiResponse.ok(groupService.detail(groupId, userId));
     }
 
+    @PostMapping("/{groupId}/accept")
+    public ApiResponse<GroupResponse> accept(@PathVariable Long groupId, @CurrentUser Long userId) {
+        return ApiResponse.ok(groupService.accept(groupId, userId));
+    }
+
+    @PostMapping("/{groupId}/reject")
+    public ApiResponse<Void> reject(@PathVariable Long groupId, @CurrentUser Long userId) {
+        groupService.rejectOffer(groupId, userId);
+        return ApiResponse.ok();
+    }
+
     @PostMapping("/{groupId}/complete")
     public ApiResponse<Void> completeGroup(@PathVariable Long groupId, @CurrentUser Long userId) {
         groupService.complete(groupId, userId);

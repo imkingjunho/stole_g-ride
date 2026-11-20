@@ -31,6 +31,10 @@ class PairWindowTest {
     }
 
     private WaitingRequest request(long id, int offset) {
+        return request(id, offset, null);
+    }
+
+    private WaitingRequest request(long id, int offset, Integer size) {
         LocalDateTime created =
                 LocalDateTime.ofInstant(SECOND_ARRIVAL.plusSeconds(offset), ZoneOffset.UTC);
         return new WaitingRequest(
@@ -46,7 +50,7 @@ class PairWindowTest {
                 BigDecimal.ONE,
                 2000,
                 5000,
-                0);
+                0, size);
     }
 
     private void allowMatches() {
@@ -109,5 +113,43 @@ class PairWindowTest {
         when(queue.findWaiting()).thenReturn(List.of(first));
         engine.checkPairDeadline();
         verifyNoInteractions(evaluator, groups);
+    }
+
+    @Test
+    void twoMatchesImmediatelyButNeverIncludesAThreeSeatRequest() {
+        setTime(0);
+        var a = request(1, -1, 2);
+        var b = request(2, 0, 2);
+        when(queue.findWaiting()).thenReturn(List.of(a, b, request(3, 0, 3)));
+        allowMatches();
+        engine.executeTick();
+        verify(groups).create(argThat(c -> c.requestIds().equals(List.of(1L, 2L))));
+        verify(evaluator, times(1)).evaluate(anyList());
+    }
+
+    @Test
+    void fallbackBecomesEligibleOnlyFiveMinutesAfterBothArrive() {
+        setTime(299);
+        var pair = List.of(request(1, -40, 3), request(2, 0, 3));
+        when(queue.findWaiting()).thenReturn(pair);
+        allowMatches();
+        engine.executeTick();
+        verifyNoInteractions(groups);
+        setTime(300);
+        engine.checkPairDeadline();
+        verify(groups).create(argThat(c -> c.riders().equals(pair)));
+        clearInvocations(groups);
+        when(groups.offeredPairs(anyList())).thenReturn(java.util.Set.of("1:2"));
+        engine.executeTick();
+        verify(groups, never()).create(any());
+    }
+
+    @Test
+    void threeWhoCanRideTogetherHavePriorityOverAnUnansweredFallbackCandidate() {
+        setTime(301);
+        when(queue.findWaiting()).thenReturn(List.of(request(1, -10, 3), request(2, 0, 3), request(3, 301, 3)));
+        allowMatches();
+        engine.executeTick();
+        verify(groups).create(argThat(c -> c.size() == 3));
     }
 }

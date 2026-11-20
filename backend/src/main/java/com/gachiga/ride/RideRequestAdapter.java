@@ -261,6 +261,6 @@ public class RideRequestAdapter implements RideRequestPort, QueueStatusPort, Wai
                 request.getMaxDetourRatio(),
                 request.getSoloDistance(),
                 request.getSoloFare(),
-                request.getVersion());
+                request.getVersion(), request.getPreferredSize());
     }
 }

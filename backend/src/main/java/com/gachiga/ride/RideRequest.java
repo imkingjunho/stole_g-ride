@@ -86,6 +86,17 @@ public class RideRequest {
     @Column(name = "max_detour_ratio", nullable = false, precision = 3, scale = 2)
     private BigDecimal maxDetourRatio;
 
+    /** 이전 클라이언트의 요청은 null로 보존한다. */
+    @Column(name = "preferred_size")
+    private Integer preferredSize;
+
+    public void chooseGroupSize(Integer size) {
+        if (size != null && size != 2 && size != 3) {
+            throw new BusinessException(ErrorCode.INVALID_INPUT, "탑승 인원은 2명 또는 3명이어야 합니다.");
+        }
+        this.preferredSize = size;
+    }
+
     /** 혼자 갈 때의 거리(m). 생성 시점에 계산해 고정한다 */
     @Column(name = "solo_distance", nullable = false)
     private int soloDistance;

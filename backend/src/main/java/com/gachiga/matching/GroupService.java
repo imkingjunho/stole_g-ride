@@ -1,5 +1,9 @@
 package com.gachiga.matching;
 
+import com.gachiga.contract.event.GroupDissolved;
+import java.time.LocalDateTime;
+import java.util.Set;
+import java.time.Clock;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gachiga.common.exception.BusinessException;
@@ -38,7 +42,12 @@ public class GroupService {
     private final MatchMemberRepository members;
     private final ApplicationEventPublisher events;
     private final ObjectMapper objectMapper;
+    private final Clock clock;
     private final PlatformTransactionManager transactionManager;
+
+    public Set<String> offeredPairs(List<Long> requests) {
+        return groups.offeredPairs(requests);
+    }
 
     @org.springframework.beans.factory.annotation.Value("${gachiga.chat.retention-hours:3}")
     private int chatRetentionHours = 3;
@@ -68,9 +77,21 @@ public class GroupService {
                     }
                     HubInfo hub = candidate.hub();
                     RouteResult route = candidate.route();
+                    String offer = MatchCandidate.pairOfferKey(candidate.riders());
+                    var now = LocalDateTime.now(clock);
+                    var earliestExpiry = candidate.riders().stream().map(WaitingRequest::expiresAt)
+                            .min(Comparator.naturalOrder()).orElseThrow();
+                    if (!earliestExpiry.isAfter(now)) {
+                        status.setRollbackOnly();
+                        return null;
+                    }
+                    var deadline = now.plusSeconds(60);
+                    if (earliestExpiry.isBefore(deadline)) deadline = earliestExpiry;
                     MatchGroup group =
                             groups.save(
                                     MatchGroup.builder()
+                                            .pairOfferKey(offer)
+                                            .acceptDeadline(offer == null ? null : deadline)
                                             .hubId(hub.id())
                                             .hubName(hub.name())
                                             .hubLat(hub.lat())
@@ -109,15 +130,17 @@ public class GroupService {
                                         .detourRatio(detour)
                                         .shareAmount(candidate.shares().get(r.userId()))
                                         .savingAmount(candidate.savings().get(r.userId()))
-                                        .accepted(true)
+                                        .accepted(offer == null)
                                         .build());
                     }
-                    group.confirm();
                     List<Long> userIds =
                             candidate.riders().stream().map(WaitingRequest::userId).toList();
-                    // P0 자동 성사. 커밋 이후 ride가 groupId/CONFIRMED를, realtime이 알림·채팅을 처리한다.
+                    // 3인 희망자의 2인 제안은 두 사람이 수락할 때 확정 이벤트를 발행한다.
                     events.publishEvent(new GroupProposed(group.getId(), userIds));
-                    events.publishEvent(new GroupConfirmed(group.getId(), userIds));
+                    if (offer == null) {
+                        group.confirm();
+                        events.publishEvent(new GroupConfirmed(group.getId(), userIds));
+                    }
                     return group.getId();
                 });
     }
@@ -183,12 +206,62 @@ public class GroupService {
                 group.getTotalDuration(),
                 new GroupResponse.Route(route.sections()),
                 detailMembers,
-                null,
+                group.getStatus() == GroupStatus.PENDING ? group.getAcceptDeadline() : null,
                 group.getCreatedAt(),
                 "DISTANCE_RATIO",
                 group.getConfirmedAt() == null
                         ? null
                         : group.getConfirmedAt().plusHours(chatRetentionHours));
+    }
+
+    @Transactional
+    public GroupResponse accept(Long groupId, Long userId) {
+        MatchGroup group = lockedGroup(groupId);
+        var roster = members.findByGroupId(groupId);
+        var member = requireMember(roster, userId);
+        if (group.getStatus() == GroupStatus.CONFIRMED && Boolean.TRUE.equals(member.getAccepted())) return detail(groupId, userId);
+        if (group.getStatus() != GroupStatus.PENDING || group.getAcceptDeadline() == null
+                || !LocalDateTime.now(clock).isBefore(group.getAcceptDeadline())) {
+            throw new BusinessException(ErrorCode.MATCH_EXPIRED);
+        }
+        member.accept();
+        if (roster.stream().allMatch(MatchMember::getAccepted)) {
+            group.confirm();
+            events.publishEvent(new GroupConfirmed(groupId, roster.stream().map(MatchMember::getUserId).toList()));
+        }
+        return detail(groupId, userId);
+    }
+
+    @Transactional
+    public void rejectOffer(Long groupId, Long userId) {
+        var group = lockedGroup(groupId);
+        var roster = members.findByGroupId(groupId);
+        requireMember(roster, userId);
+        if (group.getStatus() == GroupStatus.DISSOLVED) return;
+        if (group.getStatus() != GroupStatus.PENDING || group.getPairOfferKey() == null)
+            throw new BusinessException(ErrorCode.INVALID_INPUT);
+        dissolveOffer(group, roster, "PAIR_DECLINED");
+    }
+
+    @Transactional
+    public void expireOffer(Long id) {
+        var group = lockedGroup(id);
+        if (group.getStatus() == GroupStatus.PENDING && group.getAcceptDeadline() != null
+                && !LocalDateTime.now(clock).isBefore(group.getAcceptDeadline())) {
+            dissolveOffer(group, members.findByGroupId(id), "PAIR_EXPIRED");
+        }
+    }
+
+    private MatchGroup lockedGroup(Long id) {
+        return groups.findLockedById(id).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+    }
+
+    private void dissolveOffer(MatchGroup group, List<MatchMember> roster, String reason) {
+        roster.stream().map(MatchMember::getRequestId).sorted().forEach(rideRequestPort::markWaiting);
+        group.setStatus(GroupStatus.DISSOLVED);
+        group.setClosedAt(LocalDateTime.now(clock));
+        events.publishEvent(new GroupDissolved(group.getId(),
+                roster.stream().map(MatchMember::getUserId).toList(), reason));
     }
 
     /** 각 멤버가 완료를 눌러야 전체 완료된다. 행 잠금으로 동시 완료·중복 이벤트를 막는다. */

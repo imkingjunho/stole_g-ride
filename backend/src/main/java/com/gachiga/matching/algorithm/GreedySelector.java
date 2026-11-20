@@ -54,6 +54,7 @@ public class GreedySelector {
 
     /** 기한 안에 모인 다인 그룹, 기한이 된 두 명, 기한 뒤에 합류한 그룹 순이다. */
     private static int priority(MatchCandidate candidate, Map<Long, LocalDateTime> pairDeadlines) {
+        if (MatchCandidate.pairOfferKey(candidate.riders()) != null) return 3;
         if (pairDeadlines.isEmpty()) return 0;
         if (candidate.size() == 2) return 1;
         LocalDateTime lastArrival =

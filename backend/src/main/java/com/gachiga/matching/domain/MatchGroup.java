@@ -7,7 +7,9 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "match_groups")
+@Table(name = "match_groups",
+        uniqueConstraints = @UniqueConstraint(name = "uk_group_pair_offer", columnNames = "pair_offer_key"),
+        indexes = @Index(name = "idx_group_offer_expiry", columnList = "status,accept_deadline"))
 @Getter
 @Setter
 @Builder
@@ -29,6 +31,9 @@ public class MatchGroup {
     private LocalDateTime createdAt;
     private LocalDateTime confirmedAt;
     private LocalDateTime closedAt;
+    private LocalDateTime acceptDeadline;
+    @Column(name = "pair_offer_key", length = 48)
+    private String pairOfferKey;
     private boolean estimated;
 
     // 평가 당시의 허브·경로를 보관한다. 조회할 때 다시 계산하면 정산과 경로가 어긋난다.

@@ -34,6 +34,8 @@ chat_messages|PRIMARY|id
 chat_messages|INDEX|group_id,created_at
 hubs|PRIMARY|id
 match_groups|PRIMARY|id
+match_groups|UNIQUE|pair_offer_key
+match_groups|INDEX|status,accept_deadline
 match_members|PRIMARY|id
 match_members|UNIQUE|group_id,user_id
 refresh_tokens|PRIMARY|id

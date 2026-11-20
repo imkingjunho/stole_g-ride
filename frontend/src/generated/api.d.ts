@@ -258,6 +258,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/requests/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 동승 요청 전 선택 가능한 인원과 단독 이동 경로 */
+        get: operations["getRequestPreview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/requests/me": {
         parameters: {
             query?: never;
@@ -334,8 +351,8 @@ export interface paths {
         put?: never;
         /**
          * [P1] 매칭 수락
-         * @description 확정 후 60초 안에 전원이 수락해야 성사된다 (FR-13).
-         *     P0 에서는 이 단계를 생략하고 그룹 확정이 곧 성사다 (PRD §3.2).
+         * @description 3인 희망자에게 제안한 2인 출발은 두 사람 모두 수락해야 확정한다.
+         *     응답 기한은 제안 후 60초와 멤버 요청의 최초 만료 시각 중 빠른 시각이다.
          *     시간이 지났으면 `MATCH_EXPIRED` 가 나온다.
          */
         post: operations["postGroupsByGroupIdAccept"];
@@ -356,7 +373,8 @@ export interface paths {
         put?: never;
         /**
          * [P1] 매칭 거절 / 그룹 이탈
-         * @description 한 명이라도 거절하면 그룹이 해체되고 나머지는 재대기열로 돌아간다 (FR-13).
+         * @description 2인 출발 제안을 거절하면 두 사람 모두 원래 기한까지 3인 매칭을 계속 기다린다.
+         *     일반 그룹에서 한 명이라도 거절하면 그룹이 해체되고 나머지는 재대기열로 돌아간다 (FR-13).
          *     남은 인원이 2명 이상이면 경로·요금을 다시 계산해 재동의를 받는다 (E-01).
          */
         post: operations["postGroupsByGroupIdReject"];
@@ -731,6 +749,11 @@ export interface components {
              */
             departAt: string;
             /**
+             * @description 본인을 포함한 희망 인원. 생략한 이전 요청은 기존 매칭 정책을 따른다.
+             * @enum {integer}
+             */
+            preferredSize?: 2 | 3;
+            /**
              * @description 최대 대기시간(분). 이 시간이 지나면 자동 만료된다 (FR-07)
              * @example 10
              * @enum {integer}
@@ -762,6 +785,11 @@ export interface components {
             departAt: string;
             /** Format: date-time */
             expiresAt: string;
+            /**
+             * @description 본인을 포함한 희망 인원. 생략한 이전 요청은 기존 매칭 정책을 따른다.
+             * @enum {integer|null}
+             */
+            preferredSize?: 2 | 3 | null;
             maxWaitMin: number;
             sameGenderOnly: boolean;
             /** Format: double */
@@ -1632,6 +1660,38 @@ export interface operations {
                 };
             };
             500: components["responses"]["InternalError"];
+        };
+    };
+    getRequestPreview: {
+        parameters: {
+            query: {
+                hubId: number;
+                destLat: number;
+                destLng: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 출발 거점에서 선택한 하차 위치까지의 도로 경로. 추정 경로는 점선으로 표시한다. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiResponse"] & {
+                        data: {
+                            groupSizes: (2 | 3)[];
+                            sections: components["schemas"]["RouteSection"][];
+                            estimated: boolean;
+                        };
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     getRequestsMe: {

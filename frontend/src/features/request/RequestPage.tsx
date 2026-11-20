@@ -1,5 +1,5 @@
 import './request.css';
-import { pickupName } from '@/shared/pickupName';
+import { pickupName, resolvePickup } from '@/shared/pickupName';
 import { RouteMap } from '@/features/map/RouteMap';
 import { MatchConditions } from './MatchConditions';
 import { useEffect, useState } from 'react';
@@ -49,12 +49,31 @@ export function RequestPage() {
   const [sameGenderOnly, setSameGenderOnly] = useState(false);
   const [maxDetourRatio, setMaxDetourRatio] = useState<CreateRideRequest['maxDetourRatio']>(0.2);
 
+  const [preferredSize, setPreferredSize] = useState<2 | 3>(2);
+  const preview = useQuery({
+    queryKey: ['requestPreview', hubId, destination?.lat, destination?.lng],
+    enabled: !!hubId && !!destination && (step === 'conditions' || step === 'review'),
+    staleTime: 60_000,
+    retry: false,
+    queryFn: async ({ signal }) => {
+      if (!hubId || !destination) throw new Error('출발지와 도착지를 선택해 주세요.');
+      const r = await api.GET('/api/requests/preview', {
+        params: { query: { hubId, destLat: destination.lat, destLng: destination.lng } },
+        signal,
+      });
+      if (r.response.status === 404 || r.response.status === 405) return null;
+      return unwrap(r.data, r.error);
+    },
+  });
+  const sizeOptions = preview.data?.groupSizes;
+  const hasRoad = preview.data?.sections.some((section) => section.path.length >= 2);
+
   const hubsQuery = useQuery({
     queryKey: ['hubs'],
     retry: false,
     queryFn: async () => {
       const response = await api.GET('/api/hubs');
-      return unwrap(response.data, response.error) ?? [];
+      return (unwrap(response.data, response.error) ?? []).map(resolvePickup);
     },
   });
   const currentRequestQuery = useQuery({
@@ -153,6 +172,7 @@ export function RequestPage() {
       if (!destination) throw new Error('목적지를 선택해 주세요.');
       const body = {
         hubId: hub.id,
+        ...(sizeOptions?.includes(preferredSize) && { preferredSize }),
         destName: destination.name,
         destLat: destination.lat,
         destLng: destination.lng,
@@ -321,7 +341,17 @@ export function RequestPage() {
           <>
             <h1>어떤 조건으로 동승할까요?</h1>
             <p className="trip-hint">원하는 조건만 바꾸고 다음으로 넘어가세요.</p>
+            {preview.isLoading && <p role="status">선택 가능한 인원을 확인하고 있어요.</p>}
+            {preview.data === null && (
+              <p className="trip-hint">현재 서버에서는 인원 지정 없이 매칭해요.</p>
+            )}
+            {preview.error && (
+              <QueryState error={preview.error} retry={() => void preview.refetch()} />
+            )}
             <MatchConditions
+              sizes={sizeOptions ?? []}
+              size={preferredSize}
+              onSize={setPreferredSize}
               wait={maxWaitMin}
               sameGender={sameGenderOnly}
               detour={maxDetourRatio}
@@ -332,6 +362,7 @@ export function RequestPage() {
             {route}
             <Button
               fullWidth
+              disabled={preview.isPending || !!preview.error}
               onClick={() => {
                 setEditing(false);
                 setStep('review');
@@ -346,7 +377,8 @@ export function RequestPage() {
             <h1>이대로 동승을 요청할까요?</h1>
             <p className="trip-hint">경로와 조건을 눌러 다시 선택할 수 있어요.</p>
             <RouteMap
-              sections={[]}
+              sections={hasRoad ? preview.data!.sections : [{ path: [selectedHub, destination] }]}
+              estimated={!hasRoad || preview.data?.estimated}
               stops={[
                 {
                   order: 1,
@@ -357,11 +389,24 @@ export function RequestPage() {
                 { order: 2, kind: 'DROPOFF', position: destination, label: destination.name },
               ]}
             />
+            {(!hasRoad || preview.data?.estimated) && (
+              <p className="trip-hint">
+                점선은 두 지점을 이은 추정 경로예요. 실제 도로와 다를 수 있어요.
+              </p>
+            )}
+            {preview.error && (
+              <QueryState error={preview.error} retry={() => void preview.refetch()} />
+            )}
             <div className="trip-review">
               {(
                 [
                   ['출발 거점', pickupName(selectedHub.name), 'origin'],
                   ['목적지', destination.name, 'destination'],
+                  [
+                    '탑승 인원',
+                    sizeOptions ? '나 포함 ' + preferredSize + '명' : '자동 매칭',
+                    'conditions',
+                  ],
                   ['대기 시간', maxWaitMin + '분', 'conditions'],
                   ['동승 조건', sameGenderOnly ? '동성만 매칭' : '성별 무관', 'conditions'],
                   ['허용 우회율', Math.round(maxDetourRatio * 100) + '%', 'conditions'],
@@ -376,6 +421,7 @@ export function RequestPage() {
             </div>
             <Button
               fullWidth
+              disabled={preview.isPending || !!preview.error}
               loading={createRequest.isPending}
               onClick={() => createRequest.mutate(selectedHub)}
             >

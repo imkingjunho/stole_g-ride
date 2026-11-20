@@ -43,6 +43,12 @@ public class Hub {
         this.type = type;
     }
 
+    void updatePickup(String name, double lat, double lng) {
+        this.name = name;
+        this.lat = lat;
+        this.lng = lng;
+    }
+
     public enum HubType {
         CAMPUS,
         STATION,

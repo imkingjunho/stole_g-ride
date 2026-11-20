@@ -249,6 +249,6 @@ class DemoSimulatorTest {
                 0,
                 true,
                 null,
-                now);
+                now, null);
     }
 }

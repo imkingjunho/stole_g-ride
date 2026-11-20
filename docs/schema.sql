@@ -31,6 +31,8 @@ CREATE TABLE `hubs` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE `match_groups` (
   `id` bigint NOT NULL AUTO_INCREMENT,
+  `accept_deadline` datetime(6) DEFAULT NULL,
+  `pair_offer_key` varchar(48) DEFAULT NULL,
   `closed_at` datetime(6) DEFAULT NULL,
   `confirmed_at` datetime(6) DEFAULT NULL,
   `created_at` datetime(6) DEFAULT NULL,
@@ -45,6 +47,8 @@ CREATE TABLE `match_groups` (
   `total_distance` int NOT NULL,
   `total_duration` int NOT NULL,
   `total_fare` int NOT NULL,
+  UNIQUE KEY `uk_group_pair_offer` (`pair_offer_key`),
+  KEY `idx_group_offer_expiry` (`status`,`accept_deadline`),
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE `match_members` (
@@ -104,6 +108,7 @@ CREATE TABLE `ride_requests` (
   `hub_id` bigint NOT NULL,
   `max_detour_ratio` decimal(3,2) NOT NULL,
   `max_wait_min` int NOT NULL,
+  `preferred_size` int DEFAULT NULL,
   `same_gender_only` bit(1) NOT NULL,
   `solo_distance` int NOT NULL,
   `solo_fare` int NOT NULL,

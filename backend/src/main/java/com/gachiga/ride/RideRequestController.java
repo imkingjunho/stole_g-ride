@@ -1,5 +1,10 @@
 package com.gachiga.ride;
 
+import com.gachiga.ride.dto.RequestPreview;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.validation.annotation.Validated;
 import com.gachiga.common.response.ApiResponse;
 import com.gachiga.contract.auth.CurrentUser;
 import com.gachiga.ride.dto.CreateRideRequestRequest;
@@ -26,6 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @Tag(name = "requests", description = "매칭 요청·대기열 (이승민)")
 @RestController
+@Validated
 @RequestMapping("/api/requests")
 @RequiredArgsConstructor
 public class RideRequestController {
@@ -43,6 +49,15 @@ public class RideRequestController {
     public ApiResponse<RideRequestResponse> create(
             @CurrentUser Long userId, @Valid @RequestBody CreateRideRequestRequest request) {
         return ApiResponse.ok(rideRequestService.create(userId, request));
+    }
+
+    @Operation(operationId = "getRequestPreview", summary = "출발 거점에서 목적지까지의 경로 미리보기")
+    @GetMapping("/preview")
+    public ApiResponse<RequestPreview> preview(
+            @RequestParam Long hubId,
+            @RequestParam @DecimalMin("-90") @DecimalMax("90") double destLat,
+            @RequestParam @DecimalMin("-180") @DecimalMax("180") double destLng) {
+        return ApiResponse.ok(rideRequestService.preview(hubId, destLat, destLng));
     }
 
     @Operation(

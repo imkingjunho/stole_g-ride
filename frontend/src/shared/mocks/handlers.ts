@@ -1,5 +1,6 @@
 import { HttpResponse, http, delay } from 'msw';
 import type { components } from '@/generated/api';
+import { resolvePickup } from '@/shared/pickupName';
 import { apiBaseUrl as BASE } from '@/shared/api/config';
 import { mockGroup, mockHubs, mockPlaces } from './data';
 import { mockState, notifyMatch, readMockRequest, createMockRequest } from './state';
@@ -118,6 +119,17 @@ export const handlers = [
   http.get(`${BASE}/api/places/search`, ({ request }) => {
     const q = new URL(request.url).searchParams.get('q') ?? '';
     return ok(mockPlaces.filter((p) => p.name.includes(q)));
+  }),
+  http.get(`${BASE}/api/requests/preview`, ({ request }) => {
+    const p = new URL(request.url).searchParams;
+    const origin = mockHubs.find((h) => h.id === Number(p.get('hubId')));
+    if (!origin) return fail('NOT_FOUND', '출발 거점을 찾을 수 없어요.', 404);
+    const dest = { lat: Number(p.get('destLat')), lng: Number(p.get('destLng')) };
+    return ok({
+      groupSizes: [2, 3],
+      sections: [{ distance: 0, duration: 0, path: [resolvePickup(origin), dest] }],
+      estimated: true,
+    });
   }),
   http.post(`${BASE}/api/requests`, async ({ request }) => {
     const current = readMockRequest();

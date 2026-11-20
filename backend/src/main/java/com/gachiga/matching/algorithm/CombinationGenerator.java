@@ -9,12 +9,16 @@ public class CombinationGenerator {
     private static final int MAX_COMBINATION_SIZE = 4;
 
     public static List<List<WaitingRequest>> generateCombinations(List<List<WaitingRequest>> clusters) {
+        return generateCombinations(clusters, MAX_COMBINATION_SIZE);
+    }
+
+    public static List<List<WaitingRequest>> generateCombinations(List<List<WaitingRequest>> clusters, int maxSize) {
         List<List<WaitingRequest>> allCombinations = new ArrayList<>();
 
         for (List<WaitingRequest> cluster : clusters) {
-            for (int size = MIN_COMBINATION_SIZE; size <= MAX_COMBINATION_SIZE; size++) {
+            for (int size = MIN_COMBINATION_SIZE; size <= maxSize; size++) {
                 if (cluster.size() >= size) {
-                    List<List<WaitingRequest>> combinations = generateCombinations(cluster, size);
+                    List<List<WaitingRequest>> combinations = chooseRiders(cluster, size);
                     allCombinations.addAll(combinations);
                 }
             }
@@ -23,7 +27,7 @@ public class CombinationGenerator {
         return allCombinations;
     }
 
-    private static List<List<WaitingRequest>> generateCombinations(List<WaitingRequest> items, int size) {
+    private static List<List<WaitingRequest>> chooseRiders(List<WaitingRequest> items, int size) {
         List<List<WaitingRequest>> result = new ArrayList<>();
         generateHelper(items, size, 0, new ArrayList<>(), result);
         return result;

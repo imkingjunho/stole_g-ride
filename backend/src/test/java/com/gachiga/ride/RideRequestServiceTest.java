@@ -139,6 +139,25 @@ class RideRequestServiceTest {
                 .willReturn(new RouteResult(fare, distance, 1_200, List.of(), estimated, null));
     }
 
+    @Test
+    @DisplayName("경로 미리보기는 선택한 거점에서 하차 핀까지의 도로 좌표를 그대로 반환한다")
+    void previewUsesSelectedHubAndReturnsRoadWithoutEnqueueing() {
+        givenHubExists();
+        var origin = new Coordinate(HUB.lat(), HUB.lng());
+        var dest = new Coordinate(35.1379, 126.7903);
+        var road = new RouteResult.Section(12000, 1100,
+                List.of(origin, new Coordinate(35.16, 126.88), dest));
+        given(routeProvider.findRoute(origin, List.of(), dest))
+                .willReturn(new RouteResult(14000, 12000, 1100, List.of(road), false, null));
+
+        var result = service.preview(HUB_ID, dest.lat(), dest.lng());
+
+        assertThat(result.sections()).containsExactly(road);
+        assertThat(result.estimated()).isFalse();
+        assertThat(result.groupSizes()).containsExactly(2, 3);
+        org.mockito.Mockito.verifyNoInteractions(rideRequestRepository, eventPublisher);
+    }
+
     private void givenSaveEchoesBack() {
         given(rideRequestRepository.saveAndFlush(any(RideRequest.class)))
                 .willAnswer(invocation -> invocation.getArgument(0));

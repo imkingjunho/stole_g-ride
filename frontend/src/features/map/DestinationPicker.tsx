@@ -46,10 +46,10 @@ export function DestinationPicker({ origin, value, recent, onConfirm }: Props) {
     debounce('');
   }
   useEffect(() => {
-    if (!map || !sdk || !anchor) return;
+    if (!map || !sdk) return;
     map.setLevel(3);
-    map.setCenter(new sdk.LatLng(anchor.lat, anchor.lng));
-  }, [anchor, map, sdk]);
+    map.setCenter(new sdk.LatLng(anchor?.lat ?? origin.lat, anchor?.lng ?? origin.lng));
+  }, [anchor, origin.lat, origin.lng, map, sdk]);
   useEffect(() => {
     if (!map || !sdk) return;
     const pick = ({ latLng }: { latLng: KakaoLatLng }) => {
@@ -82,6 +82,11 @@ export function DestinationPicker({ origin, value, recent, onConfirm }: Props) {
         const badge = document.createElement('span');
         badge.className = 'trip-pin ' + (point.tag === '도착' ? 'arrival' : '');
         badge.textContent = point.tag;
+        badge.setAttribute('role', 'img');
+        badge.setAttribute(
+          'aria-label',
+          point.tag + ' · ' + (point.tag === '출발' ? pickupName(origin.name) : point.name),
+        );
         return new sdk.CustomOverlay({
           map,
           position: new sdk.LatLng(point.lat, point.lng),
