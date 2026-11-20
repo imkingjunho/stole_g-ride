@@ -1,0 +1,118 @@
+.destination {
+  margin-inline: -20px;
+}
+.dest-surface {
+  position: relative;
+  isolation: isolate;
+}
+.dest-map {
+  height: clamp(230px, 44dvh, 410px);
+  background: #edf1f5;
+}
+.dest-search {
+  position: absolute;
+  z-index: 3;
+  inset: 12px 14px auto;
+}
+.dest-input {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  min-height: 48px;
+  background: white;
+  box-shadow: 0 2px 10px #18233726;
+  border: 1px solid #dbe2ea;
+  border-radius: 24px;
+  color: #1769d4;
+}
+.dest-input input {
+  flex: 1;
+  min-width: 0;
+  font-size: 16px;
+  height: 44px;
+  color: #19212b;
+  background: transparent;
+}
+.dest-input button {
+  width: 44px;
+  height: 44px;
+  font-size: 21px;
+}
+.dest-results {
+  max-height: min(26dvh, 225px);
+  overflow: auto;
+  margin-top: 6px;
+  background: white;
+  border: 1px solid #dbe2ea;
+  border-radius: 14px;
+  box-shadow: 0 3px 10px #18233716;
+}
+.dest-results button {
+  width: 100%;
+  display: block;
+  text-align: left;
+  min-height: 44px;
+  padding: 9px 14px;
+}
+.dest-results button + button {
+  border-top: 1px solid #edf0f4;
+}
+.dest-results button:hover {
+  background: #edf5ff;
+}
+.dest-results h3,
+.dest-results p {
+  padding: 11px 14px;
+  font-size: 13px;
+  color: #526174;
+}
+.dest-results small {
+  display: block;
+  color: #546274;
+}
+.dest-map-state {
+  position: absolute;
+  top: 62%;
+  width: 100%;
+  padding: 0 20px;
+  text-align: center;
+  font-size: 13px;
+  color: #445368;
+}
+.dest-confirm {
+  position: relative;
+  margin-top: -6px;
+  padding: 16px 20px 0;
+  background: white;
+  border-radius: 18px 18px 0 0;
+  z-index: 1;
+}
+.dest-confirm h2 {
+  margin: 6px 0;
+  font-size: 21px;
+  letter-spacing: -0.03em;
+  font-weight: 730;
+}
+.dest-confirm p {
+  font-size: 13px;
+  color: #536174;
+}
+.dest-confirm button {
+  margin-top: 12px;
+}
+.trip-pin {
+  display: block;
+  border-radius: 14px 14px 14px 0;
+  border: 2px solid white;
+  padding: 4px 10px;
+  background: #42546b;
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 2px 5px #19385438;
+  pointer-events: none;
+}
+.trip-pin.arrival {
+  background: #1769d4;
+}

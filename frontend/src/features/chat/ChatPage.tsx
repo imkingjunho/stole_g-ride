@@ -1,14 +1,15 @@
-import { PickupGuide } from '@/shared/ui/PickupGuide';
+import './chat.css';
+import { pickupName } from '@/shared/pickupName';
+import { LegalNotice } from '@/shared/ui/LegalNotice';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import type { components } from '@/generated/api';
 import { api, unwrap, showError } from '@/shared/api/client';
 import { koreaTime } from '@/shared/api/format';
 import { useAuthStore } from '@/shared/stores/authStore';
 import { stompClient, isChatMessage } from '@/shared/ws/stompClient';
 import { useConnectionStore } from '@/shared/ws/connectionStore';
-import { Button, Card } from '@/shared/ui';
 import { QueryState } from '@/shared/ui/QueryState';
 import { useGroup } from '@/features/group/useGroup';
 import { CompleteRideButton } from '@/features/group/CompleteRideButton';
@@ -22,6 +23,11 @@ function mergeMessages(a: Message[], b: Message[]) {
 }
 export function ChatPage() {
   const group = useGroup();
+  const { state } = useLocation();
+  const historyUrl = {
+    pathname: '/history',
+    search: typeof state?.historySearch === 'string' ? state.historySearch : '',
+  };
   const id = group.id;
   const userId = useAuthStore((s) => s.user?.id);
   const status = useConnectionStore((s) => s.status);
@@ -88,34 +94,41 @@ export function ChatPage() {
       />
     );
   return (
-    <section className="page">
-      <header>
-        <Link className="link px-0" to={`/groups/${id}`}>
-          ← 동승 정보
+    <section className="ride-chat">
+      <header className="room-head">
+        <Link
+          className="room-back"
+          aria-label={state?.fromHistory ? '이력으로 돌아가기' : '동승 정보로 돌아가기'}
+          to={state?.fromHistory ? historyUrl : '/groups/' + id}
+        >
+          ‹
         </Link>
-        <h1 className="text-2xl font-bold">동승 채팅</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          탑승 완료 후에도 매칭 확정 시점부터 3시간까지 대화할 수 있어요.
-        </p>
+        <div>
+          <h1>
+            동승 채팅 <small>{group.data.members.length}명</small>
+          </h1>
+          <p>{pickupName(group.data.hub.name)}</p>
+        </div>
+        <details className="room-menu">
+          <summary aria-label="채팅 메뉴">···</summary>
+          <div>
+            <Link to={'/groups/' + id}>동승 정보</Link>
+            <Link to={historyUrl}>함께한 이동</Link>
+            <ReportButton group={group.data} />
+            <LegalNotice />
+          </div>
+        </details>
       </header>
-      <PickupGuide hub={group.data.hub} />
-      {canChat && status !== 'connected' && (
-        <p role="status" className="rounded-control bg-amber-100 p-3 text-sm text-amber-900">
-          연결이 끊겼어요. 다시 연결하고 있어요.
-        </p>
-      )}
-      {!canChat ? (
-        <Card>
-          <p role="status">대화가 종료되어 채팅 내역을 표시하지 않아요.</p>
-        </Card>
-      ) : (
-        <Card className="space-y-4">
-          <div
-            role="log"
-            aria-label="대화 내역"
-            aria-live="polite"
-            className="max-h-[45dvh] space-y-4 overflow-y-auto"
-          >
+      <div className="room-log" role="log" aria-label="대화 내역" aria-live="polite">
+        {closed ? (
+          <p className="room-status">
+            {group.data.chatExpiresAt && seconds === 0
+              ? '채팅 보관 기간이 끝났어요. 매칭 확정 후 3시간이 지나 대화가 삭제됐어요.'
+              : '종료된 채팅방이에요.'}
+          </p>
+        ) : (
+          <>
+            {status !== 'connected' && <p className="room-status">연결이 끊겼어요. 다시 연결하고 있어요.</p>}
             {messages.isLoading || messages.error ? (
               <QueryState
                 loading={messages.isLoading}
@@ -123,110 +136,93 @@ export function ChatPage() {
                 retry={() => void messages.refetch()}
               />
             ) : messages.data?.length ? (
-              messages.data.map((m) =>
-                m.type === 'SYSTEM' ? (
-                  <p
-                    key={m.id}
-                    className="rounded-control bg-canvas p-3 text-center text-xs text-slate-600"
-                  >
-                    {m.content}
-                  </p>
-                ) : (
-                  <article
-                    key={m.id}
-                    className={m.senderId === userId ? 'ml-6 text-right' : 'mr-6'}
-                  >
-                    <p className="mb-1 text-xs text-slate-600">
-                      {m.senderNickname}
-                      {m.senderId === userId ? ' · 나' : ''}
-                    </p>
-                    <p
-                      className={`inline-block max-w-full whitespace-pre-wrap break-words rounded-control p-3 text-left text-sm ${m.senderId === userId ? 'bg-brand text-white' : 'bg-canvas text-ink'}`}
-                    >
+              messages.data.map((m) => {
+                if (m.type === 'SYSTEM')
+                  return (
+                    <p key={m.id} className="room-status">
                       {m.content}
                     </p>
-                    {m.content.includes('***') && (
-                      <p className="mt-1 text-xs text-slate-600">개인정보가 가려진 메시지</p>
+                  );
+                const mine = m.senderId === userId;
+                return (
+                  <article key={m.id} className={'room-row' + (mine ? ' mine' : '')}>
+                    {!mine && (
+                      <span aria-hidden="true" className="room-avatar">
+                        {m.senderNickname.slice(0, 1)}
+                      </span>
                     )}
-                    <time className="mt-1 block text-xs text-slate-600">
-                      {koreaTime(m.createdAt).toLocaleTimeString('ko-KR', {
-                        timeZone: 'Asia/Seoul',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </time>
+                    <div className="room-message">
+                      {!mine && <strong>{m.senderNickname}</strong>}
+                      <div className="room-bubble-line">
+                        <p>{m.content}</p>
+                        <time dateTime={m.createdAt}>
+                          {koreaTime(m.createdAt).toLocaleTimeString('ko-KR', {
+                            timeZone: 'Asia/Seoul',
+                            hour: 'numeric',
+                            minute: '2-digit',
+                          })}
+                        </time>
+                      </div>
+                      {m.content.includes('***') && <small>개인정보가 가려진 메시지</small>}
+                    </div>
                   </article>
-                ),
-              )
+                );
+              })
             ) : (
-              <p className="text-sm text-slate-600">첫 인사를 나눠 보세요.</p>
+              <p className="room-status">첫 인사를 나눠 보세요.</p>
             )}
-            <div ref={end} />
-          </div>
-        </Card>
-      )}
-      {closed ? (
-        <p role="status" className="text-sm text-slate-600">
-          현재 그룹 상태에서는 대화를 보낼 수 없어요.
-        </p>
-      ) : (
-        <>
-          <div className="flex flex-wrap gap-2">
-            {['도착했어요', '5분 늦어요', '출발합니다'].map((text) => (
-              <Button
-                key={text}
-                variant="secondary"
-                disabled={status !== 'connected'}
-                onClick={() => send(text, 'QUICK')}
-              >
-                {text}
-              </Button>
-            ))}
-          </div>
-          <form
-            className="space-y-2"
-            onSubmit={(e: FormEvent) => {
-              e.preventDefault();
-              send(draft, 'TEXT');
-            }}
-          >
-            <label htmlFor="message" className="sr-only">
-              메시지
-            </label>
-            <textarea
-              id="message"
-              className="field resize-y"
-              rows={2}
-              maxLength={500}
-              placeholder="만날 장소를 이야기해 보세요"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (
-                  e.key === 'Enter' &&
-                  !e.shiftKey &&
-                  !e.nativeEvent.isComposing &&
-                  e.nativeEvent.keyCode !== 229
-                ) {
-                  e.preventDefault();
-                  send(draft, 'TEXT');
-                }
-              }}
-            />
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-slate-600">{draft.length}/500 · Shift+Enter 줄바꿈</p>
-              <Button type="submit" disabled={status !== 'connected' || !draft.trim()}>
-                보내기
-              </Button>
+          </>
+        )}
+        <div ref={end} />
+      </div>
+      <footer className="room-compose">
+        <CompleteRideButton key={id} group={group.data} />
+        {!closed && (
+          <>
+            <div className="room-quick">
+              {['도착했어요', '5분 늦어요', '출발합니다'].map((t) => (
+                <button key={t} disabled={status !== 'connected'} onClick={() => send(t, 'QUICK')}>
+                  {t}
+                </button>
+              ))}
             </div>
-          </form>
-        </>
-      )}
-      <CompleteRideButton key={id} group={group.data} />
-      <Link className="link" to="/history">
-        함께한 이동 보기
-      </Link>
-      <ReportButton group={group.data} />
+            <form
+              onSubmit={(e: FormEvent) => {
+                e.preventDefault();
+                send(draft, 'TEXT');
+              }}
+            >
+              <textarea
+                aria-label="메시지"
+                rows={1}
+                maxLength={500}
+                placeholder="메시지 입력"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (
+                    e.key === 'Enter' &&
+                    !e.shiftKey &&
+                    !e.nativeEvent.isComposing &&
+                    e.nativeEvent.keyCode !== 229
+                  ) {
+                    e.preventDefault();
+                    if (status === 'connected') send(draft, 'TEXT');
+                  }
+                }}
+              />
+              <button aria-label="보내기" disabled={status !== 'connected' || !draft.trim()}>
+                ↑
+              </button>
+            </form>
+          </>
+        )}
+        {closed && (
+          <Link className="link w-full" to={historyUrl}>
+            함께한 이동 보기
+          </Link>
+        )}
+      </footer>
     </section>
   );
 }

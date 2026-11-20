@@ -1,0 +1,175 @@
+.trip-page {
+  padding: 16px 20px 20px;
+  background: white;
+}
+.trip-progress {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  color: #1769d4;
+  font-weight: 700;
+  font-size: 14px;
+}
+.trip-progress button {
+  min-width: 44px;
+  height: 44px;
+  margin-left: -12px;
+  font-size: 28px;
+  line-height: 1;
+}
+.trip-progress small {
+  margin-left: auto;
+  color: #536174;
+  font-size: 13px;
+}
+.trip-track {
+  display: flex;
+  gap: 4px;
+  margin: 3px 0 22px;
+}
+.trip-track i {
+  flex: 1;
+  height: 4px;
+  border-radius: 4px;
+  background: #e6ebef;
+}
+.trip-track .filled {
+  background: #1769d4;
+}
+.trip-page h1 {
+  font-size: clamp(22px, 6vw, 28px);
+  font-weight: 750;
+  letter-spacing: -0.045em;
+  line-height: 1.3;
+}
+.trip-hint {
+  margin: 6px 0 20px;
+  font-size: 14px;
+  color: #536174;
+}
+.hub-menu {
+  margin: 16px 0 6px;
+}
+.hub-menu summary {
+  cursor: pointer;
+  border: 1px solid #1769d4;
+  border-radius: 12px;
+  padding: 13px 14px;
+  color: #184c8f;
+  font-weight: 650;
+}
+.hub-menu > div {
+  margin-top: 8px;
+  border: 1px solid #dbe3eb;
+  border-radius: 12px;
+  overflow: hidden;
+}
+.hub-menu button,
+.trip-review button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  width: 100%;
+  min-height: 46px;
+  text-align: left;
+  font-size: 15px;
+}
+.hub-menu button:hover,
+.trip-review button:hover {
+  background: #edf5ff;
+}
+.hub-menu button + button,
+.trip-review button + button {
+  border-top: 1px solid #e5e8eb;
+}
+.hub-menu button span,
+.trip-review i {
+  font-size: 20px;
+  color: #687889;
+  font-style: normal;
+}
+.trip-conditions {
+  display: grid;
+  gap: 20px;
+}
+.trip-conditions > p {
+  margin-top: -12px;
+}
+.trip-choices legend {
+  margin-bottom: 8px;
+  font-weight: 700;
+}
+.trip-choices > div {
+  display: flex;
+  gap: 6px;
+}
+.trip-choices label {
+  position: relative;
+  flex: 1;
+}
+.trip-choices input {
+  position: absolute;
+  opacity: 0;
+}
+.trip-choices label span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 45px;
+  border: 1px solid #d4dde6;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #445163;
+  cursor: pointer;
+}
+.trip-choices input:checked + span {
+  background: #edf5ff;
+  color: #135ab7;
+  border-color: #1769d4;
+}
+.trip-choices input:checked + span::before {
+  content: '';
+  width: 8px;
+  height: 4px;
+  border: solid currentColor;
+  border-width: 0 0 2px 2px;
+  transform: translateY(-1px) rotate(-45deg);
+}
+.trip-choices input:focus-visible + span {
+  outline: 3px solid #1769d4;
+  outline-offset: 2px;
+}
+.trip-endpoints {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 22px 0 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e8eb;
+  font-size: 13px;
+  font-weight: 600;
+}
+.trip-endpoints small {
+  display: block;
+  color: #536174;
+  font-weight: 400;
+}
+.trip-endpoints b {
+  color: #718093;
+}
+.trip-review {
+  margin: 12px 0 20px;
+}
+.trip-review button {
+  padding-inline: 0;
+  font-size: 14px;
+}
+.trip-review strong {
+  margin-left: auto;
+  text-align: right;
+}

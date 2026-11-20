@@ -1,5 +1,4 @@
 import { pickupName } from '@/shared/pickupName';
-import { PickupGuide } from '@/shared/ui/PickupGuide';
 import { useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
@@ -82,7 +81,6 @@ export function WaitingPage() {
         </p>
       </header>
 
-      <PickupGuide hub={request.hub} />
       <Card className="space-y-5 text-center">
         {expired ? (
           <p className="text-sm text-slate-600">

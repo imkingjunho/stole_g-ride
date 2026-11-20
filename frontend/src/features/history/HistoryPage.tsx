@@ -1,13 +1,20 @@
 import { pickupName } from '@/shared/pickupName';
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Card, Button } from '@/shared/ui';
 import { QueryState } from '@/shared/ui/QueryState';
 import { won, koreanDate } from '@/shared/api/format';
 import { useStats, useHistory } from './useHistory';
 export function HistoryPage() {
-  const [month, setMonth] = useState('');
-  const [page, setPage] = useState(0);
+  const [params, setParams] = useSearchParams();
+  const month = params.get('month') ?? '';
+  const n = Number(params.get('page'));
+  const page = Number.isSafeInteger(n) && n >= 0 ? n : 0;
+  function filter(nextMonth: string, nextPage: number) {
+    setParams({
+      ...(nextMonth ? { month: nextMonth } : {}),
+      ...(nextPage ? { page: String(nextPage) } : {}),
+    });
+  }
   const history = useHistory(page, month);
   const stats = useStats();
   return (
@@ -28,6 +35,9 @@ export function HistoryPage() {
           </p>
         )}
       </Card>
+      <p className="text-sm text-slate-600">
+        동승 채팅은 매칭 확정 후 3시간까지 다시 볼 수 있어요.
+      </p>
       <label className="block text-sm font-semibold">
         조회 월
         <input
@@ -36,8 +46,7 @@ export function HistoryPage() {
           className="field mt-2"
           value={month}
           onChange={(e) => {
-            setMonth(e.target.value);
-            setPage(0);
+            filter(e.target.value, 0);
           }}
         />
       </label>
@@ -45,8 +54,7 @@ export function HistoryPage() {
         <Button
           variant="ghost"
           onClick={() => {
-            setMonth('');
-            setPage(0);
+            filter('', 0);
           }}
         >
           전체 기간 보기
@@ -77,9 +85,22 @@ export function HistoryPage() {
                 {won(item.savingAmount)} 절약
               </span>
             </div>
-            <Link className="link mt-2 px-0" to={`/groups/${item.groupId}/fare`}>
-              정산 상세
-            </Link>
+            <div className="history-actions">
+              <Link
+                className="link"
+                to={`/groups/${item.groupId}/fare`}
+                state={{ fromHistory: true }}
+              >
+                정산 상세
+              </Link>
+              <Link
+                className="link"
+                to={`/groups/${item.groupId}/chat`}
+                state={{ fromHistory: true, historySearch: params.toString() }}
+              >
+                채팅 다시 보기
+              </Link>
+            </div>
           </Card>
         ))
       )}
@@ -87,7 +108,7 @@ export function HistoryPage() {
         <Button
           variant="secondary"
           disabled={page === 0 || history.isFetching}
-          onClick={() => setPage((p) => Math.max(0, p - 1))}
+          onClick={() => filter(month, page - 1)}
         >
           이전
         </Button>
@@ -95,7 +116,7 @@ export function HistoryPage() {
         <Button
           variant="secondary"
           disabled={!history.data || history.data.last || history.isFetching}
-          onClick={() => setPage((p) => p + 1)}
+          onClick={() => filter(month, page + 1)}
         >
           다음
         </Button>

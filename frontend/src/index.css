@@ -46,3 +46,57 @@ button:not(:disabled) {
     @apply inline-flex min-h-touch items-center justify-center rounded-control px-3 text-sm font-semibold text-brand;
   }
 }
+
+.app-frame {
+  --tabs-space: calc(80px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: var(--tabs-space);
+}
+.chat-frame {
+  height: 100dvh;
+  min-height: 0;
+}
+.floating-tabs {
+  position: fixed;
+  z-index: 20;
+  inset-inline: 0;
+  bottom: calc(7px + env(safe-area-inset-bottom, 0px));
+  margin-inline: auto;
+  width: min(calc(100% - 24px), 416px);
+  display: flex;
+  gap: 2px;
+  padding: 5px;
+  border: 1px solid #e6eaee;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 4px 18px #19233017;
+}
+.floating-tab {
+  flex: 1;
+  min-width: 0;
+  min-height: 54px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 580;
+  color: #383e46;
+}
+.floating-tab svg {
+  width: 23px;
+  height: 23px;
+}
+.floating-tab[aria-current='page'] {
+  background: #eceef1;
+  color: #191f28;
+  font-weight: 750;
+}
+.history-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 12px -10px 0;
+  border-top: 1px solid #e9edf2;
+}

@@ -1,11 +1,13 @@
+import './request.css';
 import { pickupName } from '@/shared/pickupName';
-import { PickupGuide } from '@/shared/ui/PickupGuide';
+import { RouteMap } from '@/features/map/RouteMap';
+import { MatchConditions } from './MatchConditions';
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import type { components } from '@/generated/api';
 import { api, isMockMode, showError, unwrap } from '@/shared/api/client';
-import { Button, Card } from '@/shared/ui';
+import { Button } from '@/shared/ui';
 import { QueryState } from '@/shared/ui/QueryState';
 import { DestinationPicker } from '@/features/map/DestinationPicker';
 import {
@@ -18,8 +20,13 @@ import {
 
 type Hub = components['schemas']['Hub'];
 type CreateRideRequest = components['schemas']['CreateRideRequest'];
-const WAIT_OPTIONS: CreateRideRequest['maxWaitMin'][] = [5, 10, 15, 20];
-const DETOUR_OPTIONS: CreateRideRequest['maxDetourRatio'][] = [0.1, 0.2, 0.3];
+type Step = 'origin' | 'destination' | 'conditions' | 'review';
+const stepLabels = {
+  origin: '출발 거점',
+  destination: '목적지',
+  conditions: '매칭 조건',
+  review: '요청 확인',
+};
 
 function localDateTime(): string {
   const now = new Date();
@@ -29,6 +36,8 @@ function localDateTime(): string {
 export function RequestPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [step, setStep] = useState<Step>('origin');
+  const [editing, setEditing] = useState(false);
   const [hubId, setHubId] = useState<number | null>(null);
   const [destination, setDestination] = useState<Destination | null>(null);
   const [recentDestinations, setRecentDestinations] = useState<Destination[]>([]);
@@ -37,7 +46,7 @@ export function RequestPage() {
   const [isLocating, setIsLocating] = useState(false);
   const [locationMessage, setLocationMessage] = useState<string | null>(null);
   const [maxWaitMin, setMaxWaitMin] = useState<CreateRideRequest['maxWaitMin']>(10);
-  const [sameGenderOnly, setSameGenderOnly] = useState(true);
+  const [sameGenderOnly, setSameGenderOnly] = useState(false);
   const [maxDetourRatio, setMaxDetourRatio] = useState<CreateRideRequest['maxDetourRatio']>(0.2);
 
   const hubsQuery = useQuery({
@@ -59,8 +68,8 @@ export function RequestPage() {
   });
 
   useEffect(() => {
-    if (hubId === null && hubsQuery.data?.length) setHubId(hubsQuery.data[0].id);
-  }, [hubId, hubsQuery.data]);
+    window.scrollTo(0, 0);
+  }, [step]);
 
   useEffect(() => {
     let stored: string | null;
@@ -93,6 +102,8 @@ export function RequestPage() {
 
   function handleDestinationChange(next: Destination) {
     setDestination(next);
+    setStep(editing ? 'review' : 'conditions');
+    setEditing(false);
     const nextRecentDestinations = [
       next,
       ...recentDestinations.filter((recent) => recent.lat !== next.lat || recent.lng !== next.lng),
@@ -185,21 +196,77 @@ export function RequestPage() {
     return <QueryState empty="선택할 수 있는 출발 거점이 없어요." />;
   }
 
+  const index = step === 'origin' ? 1 : step === 'destination' ? 2 : 3;
+  function edit(target: Step) {
+    setEditing(true);
+    setStep(target);
+  }
+  function back() {
+    if (editing) {
+      setEditing(false);
+      setStep('review');
+      return;
+    }
+    setStep(step === 'review' ? 'conditions' : step === 'conditions' ? 'destination' : 'origin');
+  }
+  const route =
+    selectedHub && destination ? (
+      <div className="trip-endpoints" aria-label="선택한 경로">
+        <span>
+          <small>출발</small>
+          {pickupName(selectedHub.name)}
+        </span>
+        <b aria-hidden="true">→</b>
+        <span>
+          <small>도착</small>
+          {destination.name}
+        </span>
+      </div>
+    ) : null;
   return (
-    <section className="page">
-      <header>
-        <p className="text-sm font-semibold text-brand">가치가 · 함께 타고, 공정하게 나눠요</p>
-        <h1 className="mt-2 text-title font-bold">어디로 갈까요?</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          출발 거점과 목적지를 선택해 동승을 요청하세요.
-        </p>
-      </header>
-
-      <Card className="space-y-4">
-        <fieldset>
-          <legend className="mb-3 text-sm font-semibold">출발 거점</legend>
-          <div className="mb-3 flex flex-wrap gap-2">
-            <Button variant="secondary" loading={isLocating} onClick={requestCurrentLocation}>
+    <section className="trip-page">
+      <div className="trip-progress">
+        {step !== 'origin' && (
+          <button aria-label="이전 단계" onClick={back} disabled={createRequest.isPending}>
+            ‹
+          </button>
+        )}
+        <span>{stepLabels[step]}</span>
+        <small>{index} / 3</small>
+      </div>
+      <div className="trip-track" aria-hidden="true">
+        {[1, 2, 3].map((n) => (
+          <i key={n} className={n <= index ? 'filled' : ''} />
+        ))}
+      </div>
+      {step === 'origin' && (
+        <>
+          <h1>어디에서 출발할까요?</h1>
+          <p className="trip-hint">함께 택시를 탈 장소를 골라 주세요.</p>
+          <details className="hub-menu" open>
+            <summary>출발 거점 선택</summary>
+            <div>
+              {sortedHubs.map((hub) => (
+                <button
+                  type="button"
+                  key={hub.id}
+                  onClick={() => {
+                    setHubId(hub.id);
+                    if (destination && destination.lat === hub.lat && destination.lng === hub.lng) {
+                      setDestination(null);
+                      setStep('destination');
+                    } else setStep(editing ? 'review' : 'destination');
+                    setEditing(false);
+                  }}
+                >
+                  {pickupName(hub.name)}
+                  <span aria-hidden="true">›</span>
+                </button>
+              ))}
+            </div>
+          </details>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="ghost" loading={isLocating} onClick={requestCurrentLocation}>
               현재 위치에서 가까운 순
             </Button>
             {currentLocation && (
@@ -207,7 +274,7 @@ export function RequestPage() {
                 variant="ghost"
                 onClick={() => {
                   setCurrentLocation(null);
-                  setLocationMessage('기본 거점 순서로 표시하고 있어요.');
+                  setLocationMessage('기본 순서로 표시해요.');
                 }}
               >
                 기본 순서
@@ -215,107 +282,94 @@ export function RequestPage() {
             )}
           </div>
           {locationMessage && (
-            <p className="mb-3 text-sm text-slate-600" role="status">
+            <p role="status" className="text-sm text-slate-600">
               {locationMessage}
             </p>
           )}
-          <div className="grid grid-cols-2 gap-2">
-            {sortedHubs.map((hub) => (
-              <button
-                type="button"
-                key={hub.id}
-                aria-pressed={hub.id === hubId}
-                onClick={() => setHubId(hub.id)}
-                className={`min-h-touch rounded-control border px-3 py-3 text-sm font-semibold ${hub.id === hubId ? 'border-brand bg-brand-soft text-brand' : 'border-line bg-white'}`}
-              >
-                {pickupName(hub.name)}
-              </button>
-            ))}
-          </div>
-        </fieldset>
-
-        <DestinationPicker
-          origin={selectedHub}
-          value={destination}
-          onChange={handleDestinationChange}
-        />
-        {recentDestinations.length > 0 && (
-          <section aria-label="최근 목적지">
-            <h2 className="mb-2 text-sm font-semibold">최근 목적지</h2>
-            <ul className="flex flex-wrap gap-2">
-              {recentDestinations.map((recent) => (
-                <li key={`${recent.lat}-${recent.lng}`}>
-                  <Button variant="secondary" onClick={() => handleDestinationChange(recent)}>
-                    {recent.name}
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-        {recentDestinationsError && (
-          <p className="text-sm text-danger" role="alert">
-            {recentDestinationsError}
-          </p>
-        )}
-
-        <fieldset>
-          <legend className="mb-3 text-sm font-semibold">최대 대기시간</legend>
-          <div className="grid grid-cols-4 gap-2">
-            {WAIT_OPTIONS.map((minutes) => (
-              <button
-                type="button"
-                key={minutes}
-                aria-pressed={minutes === maxWaitMin}
-                onClick={() => setMaxWaitMin(minutes)}
-                className={`min-h-touch rounded-control border text-sm font-semibold ${minutes === maxWaitMin ? 'border-brand bg-brand-soft text-brand' : 'border-line bg-white'}`}
-              >
-                {minutes}분
-              </button>
-            ))}
-          </div>
-        </fieldset>
-
-        <label className="flex min-h-touch items-center justify-between gap-4">
-          <span>
-            <span className="block text-sm font-semibold">동성끼리 매칭</span>
-            <span className="mt-1 block text-xs text-slate-600">원할 때만 켜 두세요.</span>
-          </span>
-          <input
-            type="checkbox"
-            className="h-6 w-6 accent-brand"
-            checked={sameGenderOnly}
-            onChange={(event) => setSameGenderOnly(event.target.checked)}
+        </>
+      )}
+      {step === 'destination' && selectedHub && (
+        <>
+          <h1 className="sr-only">어디까지 갈까요?</h1>
+          <DestinationPicker
+            origin={selectedHub}
+            value={destination}
+            recent={recentDestinations}
+            onConfirm={handleDestinationChange}
           />
-        </label>
-
-        <fieldset>
-          <legend className="mb-3 text-sm font-semibold">최대 허용 우회율</legend>
-          <div className="grid grid-cols-3 gap-2">
-            {DETOUR_OPTIONS.map((ratio) => (
-              <button
-                type="button"
-                key={ratio}
-                aria-pressed={ratio === maxDetourRatio}
-                onClick={() => setMaxDetourRatio(ratio)}
-                className={`min-h-touch rounded-control border text-sm font-semibold ${ratio === maxDetourRatio ? 'border-brand bg-brand-soft text-brand' : 'border-line bg-white'}`}
-              >
-                {Math.round(ratio * 100)}%
+        </>
+      )}
+      {recentDestinationsError && (
+        <p role="status" className="text-sm text-danger">
+          {recentDestinationsError}
+        </p>
+      )}
+      {step === 'conditions' && (
+        <>
+          <h1>어떤 조건으로 동승할까요?</h1>
+          <p className="trip-hint">원하는 조건만 바꾸고 다음으로 넘어가세요.</p>
+          <MatchConditions
+            wait={maxWaitMin}
+            sameGender={sameGenderOnly}
+            detour={maxDetourRatio}
+            onWait={setMaxWaitMin}
+            onGender={setSameGenderOnly}
+            onDetour={setMaxDetourRatio}
+          />
+          {route}
+          <Button
+            fullWidth
+            onClick={() => {
+              setEditing(false);
+              setStep('review');
+            }}
+          >
+            요청 확인
+          </Button>
+        </>
+      )}
+      {step === 'review' && selectedHub && destination && (
+        <>
+          <h1>이대로 동승을 요청할까요?</h1>
+          <p className="trip-hint">경로와 조건을 눌러 다시 선택할 수 있어요.</p>
+          <RouteMap
+            sections={[]}
+            stops={[
+              {
+                order: 1,
+                kind: 'PICKUP',
+                position: selectedHub,
+                label: pickupName(selectedHub.name),
+              },
+              { order: 2, kind: 'DROPOFF', position: destination, label: destination.name },
+            ]}
+          />
+          <div className="trip-review">
+            {(
+              [
+                ['출발 거점', pickupName(selectedHub.name), 'origin'],
+                ['목적지', destination.name, 'destination'],
+                ['대기 시간', maxWaitMin + '분', 'conditions'],
+                ['동승 조건', sameGenderOnly ? '동성만 매칭' : '성별 무관', 'conditions'],
+                ['허용 우회율', Math.round(maxDetourRatio * 100) + '%', 'conditions'],
+              ] as const
+            ).map(([label, value, target]) => (
+              <button key={label} disabled={createRequest.isPending} onClick={() => edit(target)}>
+                <span>{label}</span>
+                <strong>{value}</strong>
+                <i aria-hidden="true">›</i>
               </button>
             ))}
           </div>
-        </fieldset>
-      </Card>
-
-      {selectedHub && <PickupGuide hub={selectedHub} />}
-      <Button
-        fullWidth
-        loading={createRequest.isPending}
-        disabled={!selectedHub || !destination}
-        onClick={() => selectedHub && createRequest.mutate(selectedHub)}
-      >
-        동승 매칭 시작
-      </Button>
+          <Button
+            fullWidth
+            loading={createRequest.isPending}
+            onClick={() => createRequest.mutate(selectedHub)}
+          >
+            동승 요청하기
+          </Button>
+        </>
+      )}
     </section>
   );
 }

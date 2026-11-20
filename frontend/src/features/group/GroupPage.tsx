@@ -1,5 +1,4 @@
 import { pickupName } from '@/shared/pickupName';
-import { PickupGuide } from '@/shared/ui/PickupGuide';
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
@@ -135,7 +134,7 @@ export function GroupPage() {
           {pickupName(group.hub.name)}에서 {group.members.length}명이 함께 출발해요.
         </p>
       </header>
-      <PickupGuide hub={group.hub} />
+
       <Card>
         {group.estimated && <Badge variant="estimated" />}
         {me ? (

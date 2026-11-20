@@ -53,7 +53,7 @@ await context.route('https://dapi.kakao.com/**', (route) =>
     class Map { setLevel(){} setCenter(){} setBounds(b){this.bounds=b;window.__lastBounds=b.points.map(p=>({lat:p.getLat(),lng:p.getLng()}))} setZoomable(){} }
     class Bounds { constructor(){this.points=[]} extend(p){this.points.push(p)} }
     class Overlay { constructor(options){Object.assign(this,options);window.__mapOverlays.push(this)} setMap(map){this.map=map} }
-    window.kakao={maps:{LatLng,Map,LatLngBounds:Bounds,Polyline:Overlay,CustomOverlay:Overlay,Marker:Overlay,event:{addListener(){},removeListener(){}},load(cb){cb()}}}; })();
+    window.kakao={maps:{LatLng,Map,LatLngBounds:Bounds,Polyline:Overlay,CustomOverlay:Overlay,Marker:Overlay,event:{addListener(map,name,fn){if(name==='click')window.__tapMap=fn},removeListener(map,name,fn){if(window.__tapMap===fn)delete window.__tapMap}},load(cb){cb()}}}; })();
   `,
   }),
 );
@@ -175,16 +175,29 @@ try {
   await check('요청 생성·중복 방지·취소·빈 대기 화면', async () => {
     await navigate('/dev/demo');
     await page.getByRole('button', { name: '새 요청 작성', exact: true }).click();
-    await page.getByRole('heading', { name: '어디로 갈까요?' }).waitFor();
+    await page.getByRole('heading', { name: '어디에서 출발할까요?' }).waitFor();
     await page.getByRole('button', { name: '전남대 후문 스타벅스', exact: true }).click();
-    await page.getByRole('button', { name: '5분', exact: true }).click();
     await page.getByLabel('목적지 검색').fill('송정');
-    await page.getByRole('list', { name: '장소 검색 결과' }).getByRole('button').first().click();
+    await page.getByRole('region', { name: '장소 검색 결과' }).getByRole('button').first().click();
     await page.waitForFunction(() => {
-      const labels = window.__mapOverlays.filter((overlay) => overlay.map).map((overlay) => overlay.content?.textContent);
-      return labels.includes('출발') && labels.includes('도착') && window.__lastBounds.length === 2;
+      const labels = window.__mapOverlays
+        .filter((overlay) => overlay.map)
+        .map((overlay) => overlay.content?.textContent);
+      return labels.includes('출발') && labels.includes('도착');
     });
-    await page.getByRole('button', { name: '동승 매칭 시작', exact: true }).click();
+    await page.evaluate(() =>
+      window.__tapMap({ latLng: new window.kakao.maps.LatLng(35.1379, 126.7903) }),
+    );
+    await page.getByRole('heading', { name: '광주송정역 인근' }).waitFor();
+    await page.getByRole('button', { name: '여기로 도착' }).click();
+    await page.getByRole('radio', { name: '5분', exact: true }).check();
+    assert.ok(await page.getByRole('radio', { name: '성별 무관' }).isChecked());
+    assert.ok(await page.getByRole('radio', { name: '20%', exact: true }).isChecked());
+    await page.getByRole('button', { name: '요청 확인', exact: true }).click();
+    await page.getByRole('button', { name: /대기 시간.*5분/ }).click();
+    assert.ok(await page.getByRole('radio', { name: '5분', exact: true }).isChecked());
+    await page.getByRole('button', { name: '요청 확인', exact: true }).click();
+    await page.getByRole('button', { name: '동승 요청하기' }).click();
     await page.waitForURL('**/waiting');
     await page.getByRole('heading', { name: '함께 갈 사람을 찾고 있어요' }).waitFor();
     const request = await page.evaluate(
@@ -192,7 +205,9 @@ try {
     );
     assert.equal(request.hub.id, 2);
     assert.equal(request.maxWaitMin, 5);
-    assert.equal(request.destName, '광주송정역');
+    assert.equal(request.destName, '광주송정역 인근');
+    assert.equal(request.destLat, 35.1379);
+    assert.equal(request.destLng, 126.7903);
     assert.ok(request.remainingSeconds > 290 && request.remainingSeconds <= 300);
     const duplicate = await page.evaluate(async () => {
       const { api } = await import('/src/shared/api/client.ts');
@@ -222,11 +237,14 @@ try {
     await page.getByRole('heading', { name: '대기 시간이 끝났어요' }).waitFor();
     await page.getByRole('button', { name: '다시 매칭 요청하기' }).click();
     await page.waitForURL('**/request');
+    await page.getByRole('button', { name: '전남대 후문 스타벅스', exact: true }).click();
     await page.getByLabel('목적지 검색').fill('없는목적지');
     await page.getByText('검색 결과가 없어요.', { exact: true }).waitFor();
     await page.getByLabel('목적지 검색').fill('유스');
-    await page.getByRole('list', { name: '장소 검색 결과' }).getByRole('button').first().click();
-    await page.getByRole('button', { name: '동승 매칭 시작', exact: true }).click();
+    await page.getByRole('region', { name: '장소 검색 결과' }).getByRole('button').first().click();
+    await page.getByRole('button', { name: '여기로 도착' }).click();
+    await page.getByRole('button', { name: '요청 확인', exact: true }).click();
+    await page.getByRole('button', { name: '동승 요청하기' }).click();
     await page.waitForURL('**/waiting');
     await page.getByRole('heading', { name: '함께 갈 사람을 찾고 있어요' }).waitFor();
     await page.getByRole('button', { name: '요청 취소', exact: true }).click();
@@ -445,6 +463,7 @@ try {
     );
     await page.getByLabel('메시지', { exact: true }).fill('   ');
     assert.ok(await page.getByRole('button', { name: '보내기', exact: true }).isDisabled());
+    await page.getByLabel('채팅 메뉴').click();
     await page.getByRole('button', { name: '동승자 신고' }).click();
     await page.getByLabel('신고할 동승자', { exact: true }).selectOption('2');
     await page.getByRole('button', { name: '신고 제출' }).click();
@@ -586,6 +605,30 @@ try {
     await page.getByRole('link', { name: '동승 채팅으로 이동' }).click();
     await page.getByRole('log').getByText('정산 보고 다시 올게요', { exact: true }).waitFor();
     await page.getByRole('link', { name: '탑승 완료 · 정산 금액 보기' }).waitFor();
+    await page
+      .getByRole('navigation', { name: '주요 메뉴' })
+      .getByRole('link', { name: '이력', exact: true })
+      .click();
+    await page.getByRole('link', { name: '채팅 다시 보기' }).click();
+    await page.getByRole('log').getByText('정산 보고 다시 올게요', { exact: true }).waitFor();
+    await page.getByRole('link', { name: '이력으로 돌아가기' }).click();
+    await page.getByRole('heading', { name: '함께한 이동' }).waitFor();
+    const tabs = page.getByRole('navigation', { name: '주요 메뉴' }).getByRole('link');
+    assert.deepEqual(await tabs.allTextContents(), ['요청', '대기', '이력', '내 정보']);
+    await page.evaluate(async () => {
+      const { mockState } = await import('/src/shared/mocks/state.ts');
+      mockState.group.chatExpiresAt = new Date(Date.now() - 1000).toISOString();
+    });
+    await page.getByRole('link', { name: '채팅 다시 보기' }).click();
+    await page
+      .getByRole('log')
+      .getByText(/채팅 보관 기간이 끝났어요/)
+      .waitFor();
+    assert.equal(await page.getByLabel('메시지', { exact: true }).count(), 0);
+    assert.equal(
+      await page.getByRole('log').getByText('정산 보고 다시 올게요', { exact: true }).count(),
+      0,
+    );
   });
   await check('정산 재조회 실패 시 과거 금액 숨김·재시도', async () => {
     await demo();
