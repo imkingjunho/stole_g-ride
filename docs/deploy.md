@@ -199,8 +199,15 @@ VITE_API_BASE_URL=https://시작할-때-출력된-주소.trycloudflare.com
 
 ## 매칭 운영 현황 (/admin)
 
-전용 계정은 MySQL이 실행 중인 백엔드 호스트에서 한 번 발급한다. Mac 공개 서버는 저장소 루트에서 `node deploy/scripts/create-admin.mjs mac`, 운영 Compose는 `node deploy/scripts/create-admin.mjs prod`를 실행한다(Node.js 24와 Apache `htpasswd` 필요). 이메일은 `admin@gachiga.invalid`이고 서버마다 무작위 비밀번호를 생성한다. 실행 결과가 가리키는 비공개 파일의 `password`를 사용한다. 같은 서버에서 재실행하면 같은 계정을 확인한다.
+전용 계정은 MySQL이 실행 중인 백엔드 호스트에서 한 번 발급한다. 기본 `docker-compose.yml`로 MySQL을 띄우는 서버(팀원 Mac 포함)는 저장소 루트에서 `node deploy/scripts/create-admin.mjs mac`, 운영 Compose는 `node deploy/scripts/create-admin.mjs prod`를 실행한다(Node.js 24와 Apache `htpasswd` 필요). 이메일은 `admin@gachiga.invalid`이고 서버마다 무작위 비밀번호를 생성한다. 실행 결과가 가리키는 비공개 파일의 `password`를 사용한다. 같은 서버에서 재실행하면 같은 계정을 확인한다.
 
-발급 도구는 `GACHIGA_ADMIN_USER_IDS`에 새 회원 ID를 추가한다. Mac은 `.env.mac.local`을 읽는 백엔드를 재시작하고, 운영 Compose는 `docker compose -f docker-compose.prod.yml up -d --build backend`로 반영한다. 일반 `bootRun`은 이 환경변수를 프로세스에 직접 전달해야 한다. 운영자는 기존 회원 ID도 등록할 수 있다.
+발급 도구는 `GACHIGA_ADMIN_USER_IDS`에 새 회원 ID를 추가한다. Mac은 `.env.mac.local`을 읽는 백엔드를 재시작하고, 운영 Compose는 `docker compose -f docker-compose.prod.yml up -d --build backend`로 반영한다. 터널과 백엔드를 따로 실행하는 서버는 기존 터널을 유지하고 백엔드만 갱신한다. 기본 Compose와 별도 `bootRun`/JAR 조합에서는 기존 실행 환경에서 다음 명령으로 발급된 목록을 적용한 뒤 평소 명령으로 백엔드를 시작한다.
+
+```sh
+# 저장소 루트
+export GACHIGA_ADMIN_USER_IDS="$(node -p "require('node:util').parseEnv(require('node:fs').readFileSync('.env.mac.local','utf8')).GACHIGA_ADMIN_USER_IDS")"
+```
+
+팀원에게는 운영 로그인 링크와 운영 서버에서 발급한 이메일·비밀번호를 비공개로 전달한다. 운영자는 기존 회원 ID도 등록할 수 있다.
 
 최신 프론트에서 로그인하면 서버의 권한 확인 후 관리자는 **매칭 운영 현황**(`/admin`), 일반 회원은 **동승 요청**으로 이동한다. 운영 대시보드 API는 요청마다 별도로 관리자 권한을 검사한다. 관리자 계정은 대기자의 닉네임·거점·대기 시간과 매칭 참여자의 그룹·수락 상태를 볼 수 있다. 대기 기한이 지난 요청과 본인이 탑승 완료한 매칭은 현재 인원에서 빠진다. 날짜별 그래프는 한국 시각으로 최근 7일간 전원이 수락한 그룹을 확정일에 한 번 집계한다. 목 모드에서는 관리자 이메일로 예시 현황을 확인할 수 있다.

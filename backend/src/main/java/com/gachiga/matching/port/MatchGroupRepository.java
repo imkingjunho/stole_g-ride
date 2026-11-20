@@ -2,7 +2,9 @@ package com.gachiga.matching.port;
 
 import com.gachiga.matching.domain.MatchGroup;
 import com.gachiga.contract.matching.MatchOperationsPort;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.TreeMap;
 import org.springframework.data.repository.query.Param;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -25,15 +27,24 @@ public interface MatchGroupRepository extends JpaRepository<MatchGroup, Long>, M
             """)
     List<MatchOperationsPort.Member> currentMembers();
 
-    @Override
     @Query("""
-            select new com.gachiga.contract.matching.MatchOperationsPort$Day(
-                cast(g.confirmedAt as LocalDate), count(g))
-            from MatchGroup g where g.confirmedAt >= :from and g.confirmedAt < :until
-            group by cast(g.confirmedAt as LocalDate)
+            select g.confirmedAt from MatchGroup g
+            where g.confirmedAt >= :from and g.confirmedAt < :until
             """)
-    List<MatchOperationsPort.Day> confirmedBetween(
+    List<LocalDateTime> confirmationTimes(
             @Param("from") LocalDateTime from, @Param("until") LocalDateTime until);
+
+    @Override
+    default List<MatchOperationsPort.Day> confirmedBetween(LocalDateTime from, LocalDateTime until) {
+        // 날짜로 자르기 전에 엔티티 조회와 같은 JDBC 시간대 변환을 거친다.
+        var days = new TreeMap<LocalDate, Long>();
+        for (var confirmedAt : confirmationTimes(from, until)) {
+            days.merge(confirmedAt.toLocalDate(), 1L, Long::sum);
+        }
+        return days.entrySet().stream()
+                .map(day -> new MatchOperationsPort.Day(day.getKey(), day.getValue()))
+                .toList();
+    }
 
     @org.springframework.data.jpa.repository.Lock(
             jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
