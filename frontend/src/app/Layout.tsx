@@ -2,6 +2,7 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 import { isMockMode } from '@/shared/api/config';
 import { RehearsalStatus } from './rehearsal/RehearsalPanel';
 import { SessionEffects } from './SessionEffects';
+import { useTabBarScroll } from './useTabBarScroll';
 import { useConnectionStore } from '@/shared/ws/connectionStore';
 import { Badge } from '@/shared/ui';
 import { LegalNotice } from '@/shared/ui/LegalNotice';
@@ -32,8 +33,11 @@ export function Layout() {
       : '/waiting'
     : pathname;
   const connection = useConnectionStore((s) => s.status);
+  const tabIndex = tabs.findIndex((tab) => tab.to === activeTab);
+  const tabsHidden = useTabBarScroll(pathname);
   return (
     <div
+      data-tabs-hidden={tabsHidden}
       className={
         'app-frame mx-auto flex max-w-app flex-col bg-canvas ' +
         (inChat ? 'chat-frame' : 'min-h-dvh')
@@ -67,32 +71,43 @@ export function Layout() {
         </p>
       )}
       <RehearsalStatus />
-      <main id="main-content" className="min-h-0 flex-1">
+      <main id="main-content" key={activeTab} className="tab-content min-h-0 flex-1">
         <Outlet />
       </main>
       {!inChat && <LegalNotice />}
       <nav aria-label="주요 메뉴" className="floating-tabs">
-        {tabs.map((t) => (
-          <Link
-            key={t.to}
-            to={t.to}
-            aria-current={activeTab === t.to ? 'page' : undefined}
-            className="floating-tab"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
+        <div className="floating-tabs-track">
+          <span
+            className="floating-tab-pill"
+            aria-hidden="true"
+            style={{
+              width: `${100 / tabs.length}%`,
+              transform: `translateX(${Math.max(0, tabIndex) * 100}%)`,
+              opacity: tabIndex < 0 ? 0 : 1,
+            }}
+          />
+          {tabs.map((t) => (
+            <Link
+              key={t.to}
+              to={t.to}
+              aria-current={activeTab === t.to ? 'page' : undefined}
+              className="floating-tab"
             >
-              <path d={t.path} />
-            </svg>
-            <span>{t.label}</span>
-          </Link>
-        ))}
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d={t.path} />
+              </svg>
+              <span>{t.label}</span>
+            </Link>
+          ))}
+        </div>
       </nav>
     </div>
   );

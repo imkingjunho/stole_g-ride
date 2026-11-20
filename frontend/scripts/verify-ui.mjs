@@ -172,6 +172,70 @@ try {
     }
     await page.setViewportSize({ width: 360, height: 800 });
   });
+  await check('하단 탭 이동·스크롤 숨김과 복귀·요청 단계 모션', async () => {
+    await page.setViewportSize({ width: 360, height: 420 });
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await navigate('/dev/demo');
+    await page.getByRole('button', { name: '새 요청 작성', exact: true }).click();
+    const origin = page.getByRole('button', { name: '전남대 후문 스타벅스', exact: true });
+    await origin.waitFor();
+    const nav = page.getByRole('navigation', { name: '주요 메뉴' });
+    const pill = nav.locator('.floating-tab-pill');
+    const pillX = () => pill.evaluate((e) => e.getBoundingClientRect().x);
+    const requestX = await nav
+      .getByRole('link', { name: '요청', exact: true })
+      .evaluate((e) => e.getBoundingClientRect().x);
+    await page.evaluate(() => window.scrollTo(0, 110));
+    await page.waitForFunction(
+      () => document.querySelector('.floating-tabs').getBoundingClientRect().top >= innerHeight,
+    );
+    await page.evaluate(() => window.scrollBy(0, -35));
+    await page.waitForFunction(
+      () => document.querySelector('.floating-tabs').getBoundingClientRect().bottom <= innerHeight,
+    );
+    const waiting = nav.getByRole('link', { name: '대기', exact: true });
+    await waiting.click();
+    await page.waitForURL('**/waiting');
+    await page.waitForFunction(() => {
+      const pill = document.querySelector('.floating-tab-pill').getBoundingClientRect();
+      const tab = document.querySelector('.floating-tab[href="/waiting"][aria-current="page"]');
+      return tab && Math.abs(pill.x - tab.getBoundingClientRect().x) < 1;
+    });
+    assert.ok((await pillX()) > requestX + 40);
+    await nav.getByRole('link', { name: '요청', exact: true }).click();
+    const progress = page.getByRole('progressbar', { name: '동승 요청 단계' });
+    assert.equal(await progress.getAttribute('aria-valuenow'), '1');
+    const second = progress.locator('span').nth(1);
+    assert.ok(
+      await second.evaluate(
+        (e) => parseFloat(getComputedStyle(e, '::before').transitionDuration) > 0.1,
+      ),
+    );
+    await origin.click();
+    assert.equal(await progress.getAttribute('aria-valuenow'), '2');
+    await page.waitForFunction(
+      () =>
+        new DOMMatrixReadOnly(
+          getComputedStyle(document.querySelector('.trip-track > span:nth-child(2)'), '::before')
+            .transform,
+        ).a > 0.99,
+    );
+    await page.getByRole('button', { name: '이전 단계' }).click();
+    await page.waitForFunction(
+      () =>
+        new DOMMatrixReadOnly(
+          getComputedStyle(document.querySelector('.trip-track > span:nth-child(2)'), '::before')
+            .transform,
+        ).a < 0.01,
+    );
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    assert.ok(
+      await second.evaluate(
+        (e) => parseFloat(getComputedStyle(e, '::before').transitionDuration) < 0.001,
+      ),
+    );
+    await page.setViewportSize({ width: 360, height: 800 });
+  });
   await check('요청 생성·중복 방지·취소·빈 대기 화면', async () => {
     await navigate('/dev/demo');
     await page.getByRole('button', { name: '새 요청 작성', exact: true }).click();

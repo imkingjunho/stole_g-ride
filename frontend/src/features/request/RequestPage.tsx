@@ -234,142 +234,156 @@ export function RequestPage() {
         <span>{stepLabels[step]}</span>
         <small>{index} / 3</small>
       </div>
-      <div className="trip-track" aria-hidden="true">
+      <div
+        className="trip-track"
+        role="progressbar"
+        aria-label="동승 요청 단계"
+        aria-valuemin={0}
+        aria-valuemax={3}
+        aria-valuenow={index}
+        aria-valuetext={stepLabels[step]}
+      >
         {[1, 2, 3].map((n) => (
-          <i key={n} className={n <= index ? 'filled' : ''} />
+          <span key={n} className={n <= index ? 'filled' : ''} />
         ))}
       </div>
-      {step === 'origin' && (
-        <>
-          <h1>어디에서 출발할까요?</h1>
-          <p className="trip-hint">함께 택시를 탈 장소를 골라 주세요.</p>
-          <details className="hub-menu" open>
-            <summary>출발 거점 선택</summary>
-            <div>
-              {sortedHubs.map((hub) => (
-                <button
-                  type="button"
-                  key={hub.id}
+      <div className="trip-step" key={step}>
+        {step === 'origin' && (
+          <>
+            <h1>어디에서 출발할까요?</h1>
+            <p className="trip-hint">함께 택시를 탈 장소를 골라 주세요.</p>
+            <details className="hub-menu" open>
+              <summary>출발 거점 선택</summary>
+              <div>
+                {sortedHubs.map((hub) => (
+                  <button
+                    type="button"
+                    key={hub.id}
+                    onClick={() => {
+                      setHubId(hub.id);
+                      if (
+                        destination &&
+                        destination.lat === hub.lat &&
+                        destination.lng === hub.lng
+                      ) {
+                        setDestination(null);
+                        setStep('destination');
+                      } else setStep(editing ? 'review' : 'destination');
+                      setEditing(false);
+                    }}
+                  >
+                    {pickupName(hub.name)}
+                    <span aria-hidden="true">›</span>
+                  </button>
+                ))}
+              </div>
+            </details>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="ghost" loading={isLocating} onClick={requestCurrentLocation}>
+                현재 위치에서 가까운 순
+              </Button>
+              {currentLocation && (
+                <Button
+                  variant="ghost"
                   onClick={() => {
-                    setHubId(hub.id);
-                    if (destination && destination.lat === hub.lat && destination.lng === hub.lng) {
-                      setDestination(null);
-                      setStep('destination');
-                    } else setStep(editing ? 'review' : 'destination');
-                    setEditing(false);
+                    setCurrentLocation(null);
+                    setLocationMessage('기본 순서로 표시해요.');
                   }}
                 >
-                  {pickupName(hub.name)}
-                  <span aria-hidden="true">›</span>
+                  기본 순서
+                </Button>
+              )}
+            </div>
+            {locationMessage && (
+              <p role="status" className="text-sm text-slate-600">
+                {locationMessage}
+              </p>
+            )}
+          </>
+        )}
+        {step === 'destination' && selectedHub && (
+          <>
+            <h1 className="sr-only">어디까지 갈까요?</h1>
+            <DestinationPicker
+              origin={selectedHub}
+              value={destination}
+              recent={recentDestinations}
+              onConfirm={handleDestinationChange}
+            />
+          </>
+        )}
+        {recentDestinationsError && (
+          <p role="status" className="text-sm text-danger">
+            {recentDestinationsError}
+          </p>
+        )}
+        {step === 'conditions' && (
+          <>
+            <h1>어떤 조건으로 동승할까요?</h1>
+            <p className="trip-hint">원하는 조건만 바꾸고 다음으로 넘어가세요.</p>
+            <MatchConditions
+              wait={maxWaitMin}
+              sameGender={sameGenderOnly}
+              detour={maxDetourRatio}
+              onWait={setMaxWaitMin}
+              onGender={setSameGenderOnly}
+              onDetour={setMaxDetourRatio}
+            />
+            {route}
+            <Button
+              fullWidth
+              onClick={() => {
+                setEditing(false);
+                setStep('review');
+              }}
+            >
+              요청 확인
+            </Button>
+          </>
+        )}
+        {step === 'review' && selectedHub && destination && (
+          <>
+            <h1>이대로 동승을 요청할까요?</h1>
+            <p className="trip-hint">경로와 조건을 눌러 다시 선택할 수 있어요.</p>
+            <RouteMap
+              sections={[]}
+              stops={[
+                {
+                  order: 1,
+                  kind: 'PICKUP',
+                  position: selectedHub,
+                  label: pickupName(selectedHub.name),
+                },
+                { order: 2, kind: 'DROPOFF', position: destination, label: destination.name },
+              ]}
+            />
+            <div className="trip-review">
+              {(
+                [
+                  ['출발 거점', pickupName(selectedHub.name), 'origin'],
+                  ['목적지', destination.name, 'destination'],
+                  ['대기 시간', maxWaitMin + '분', 'conditions'],
+                  ['동승 조건', sameGenderOnly ? '동성만 매칭' : '성별 무관', 'conditions'],
+                  ['허용 우회율', Math.round(maxDetourRatio * 100) + '%', 'conditions'],
+                ] as const
+              ).map(([label, value, target]) => (
+                <button key={label} disabled={createRequest.isPending} onClick={() => edit(target)}>
+                  <span>{label}</span>
+                  <strong>{value}</strong>
+                  <i aria-hidden="true">›</i>
                 </button>
               ))}
             </div>
-          </details>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="ghost" loading={isLocating} onClick={requestCurrentLocation}>
-              현재 위치에서 가까운 순
+            <Button
+              fullWidth
+              loading={createRequest.isPending}
+              onClick={() => createRequest.mutate(selectedHub)}
+            >
+              동승 요청하기
             </Button>
-            {currentLocation && (
-              <Button
-                variant="ghost"
-                onClick={() => {
-                  setCurrentLocation(null);
-                  setLocationMessage('기본 순서로 표시해요.');
-                }}
-              >
-                기본 순서
-              </Button>
-            )}
-          </div>
-          {locationMessage && (
-            <p role="status" className="text-sm text-slate-600">
-              {locationMessage}
-            </p>
-          )}
-        </>
-      )}
-      {step === 'destination' && selectedHub && (
-        <>
-          <h1 className="sr-only">어디까지 갈까요?</h1>
-          <DestinationPicker
-            origin={selectedHub}
-            value={destination}
-            recent={recentDestinations}
-            onConfirm={handleDestinationChange}
-          />
-        </>
-      )}
-      {recentDestinationsError && (
-        <p role="status" className="text-sm text-danger">
-          {recentDestinationsError}
-        </p>
-      )}
-      {step === 'conditions' && (
-        <>
-          <h1>어떤 조건으로 동승할까요?</h1>
-          <p className="trip-hint">원하는 조건만 바꾸고 다음으로 넘어가세요.</p>
-          <MatchConditions
-            wait={maxWaitMin}
-            sameGender={sameGenderOnly}
-            detour={maxDetourRatio}
-            onWait={setMaxWaitMin}
-            onGender={setSameGenderOnly}
-            onDetour={setMaxDetourRatio}
-          />
-          {route}
-          <Button
-            fullWidth
-            onClick={() => {
-              setEditing(false);
-              setStep('review');
-            }}
-          >
-            요청 확인
-          </Button>
-        </>
-      )}
-      {step === 'review' && selectedHub && destination && (
-        <>
-          <h1>이대로 동승을 요청할까요?</h1>
-          <p className="trip-hint">경로와 조건을 눌러 다시 선택할 수 있어요.</p>
-          <RouteMap
-            sections={[]}
-            stops={[
-              {
-                order: 1,
-                kind: 'PICKUP',
-                position: selectedHub,
-                label: pickupName(selectedHub.name),
-              },
-              { order: 2, kind: 'DROPOFF', position: destination, label: destination.name },
-            ]}
-          />
-          <div className="trip-review">
-            {(
-              [
-                ['출발 거점', pickupName(selectedHub.name), 'origin'],
-                ['목적지', destination.name, 'destination'],
-                ['대기 시간', maxWaitMin + '분', 'conditions'],
-                ['동승 조건', sameGenderOnly ? '동성만 매칭' : '성별 무관', 'conditions'],
-                ['허용 우회율', Math.round(maxDetourRatio * 100) + '%', 'conditions'],
-              ] as const
-            ).map(([label, value, target]) => (
-              <button key={label} disabled={createRequest.isPending} onClick={() => edit(target)}>
-                <span>{label}</span>
-                <strong>{value}</strong>
-                <i aria-hidden="true">›</i>
-              </button>
-            ))}
-          </div>
-          <Button
-            fullWidth
-            loading={createRequest.isPending}
-            onClick={() => createRequest.mutate(selectedHub)}
-          >
-            동승 요청하기
-          </Button>
-        </>
-      )}
+          </>
+        )}
+      </div>
     </section>
   );
 }

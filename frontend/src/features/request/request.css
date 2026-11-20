@@ -28,14 +28,38 @@
   gap: 4px;
   margin: 3px 0 22px;
 }
-.trip-track i {
+.trip-track > span {
   flex: 1;
   height: 4px;
   border-radius: 4px;
   background: #e6ebef;
+  overflow: hidden;
 }
-.trip-track .filled {
+.trip-track > span::before {
+  content: '';
+  display: block;
+  height: 100%;
+  border-radius: inherit;
   background: #1769d4;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.trip-track > .filled::before {
+  transform: scaleX(1);
+}
+.trip-step {
+  animation: trip-step-appear 200ms ease-out;
+}
+@keyframes trip-step-appear {
+  from {
+    opacity: 0.6;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .trip-page h1 {
   font-size: clamp(22px, 6vw, 28px);
