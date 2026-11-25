@@ -91,7 +91,7 @@ public class MatchingEngine {
             var readyAt = lastArrival;
             if (riders.size() == 2) {
                 if (size == null) readyAt = lastArrival.plusMinutes(1);
-                else if (size == 3) readyAt = lastArrival.plusMinutes(5);
+                else if (size == 3) readyAt = lastArrival.plusSeconds(90);
             }
             if (!readyAt.isAfter(now)) {
                 ready.add(new ReadyGroup(riders, readyAt, excess));

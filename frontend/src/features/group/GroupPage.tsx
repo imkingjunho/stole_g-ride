@@ -134,7 +134,7 @@ export function GroupPage() {
         </h1>
         <p className="mt-2 text-sm text-slate-600">
           {group.status === 'PENDING' && group.members.length === 2
-            ? '5분 동안 세 번째 동승자를 찾지 못했어요. 두 분이 모두 수락하면 출발이 확정돼요.'
+            ? '1분 30초 동안 세 번째 동승자를 찾지 못했어요. 두 분이 모두 수락하면 출발이 확정돼요.'
             : pickupName(group.hub.name) + '에서 ' + group.members.length + '명이 함께 출발해요.'}
         </p>
       </header>

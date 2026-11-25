@@ -102,7 +102,7 @@ export function WaitingPage() {
               {request.preferredSize === 2
                 ? '나 포함 2명 · 조건이 맞는 한 명을 찾으면 바로 매칭해요.'
                 : request.preferredSize === 3
-                  ? '나 포함 3명 · 두 명이 모이고 5분이 지나면, 남은 대기 시간 안에 둘이 탈지 물어봐요.'
+                  ? '나 포함 3명 · 두 명이 모이고 1분 30초가 지나면, 남은 대기 시간 안에 둘이 탈지 물어봐요.'
                   : '조건이 맞는 두 명이 모이면 1분 동안 한 명을 더 기다려요.'}
             </p>
             {request.estimated && (

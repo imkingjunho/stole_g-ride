@@ -128,14 +128,14 @@ class PairWindowTest {
     }
 
     @Test
-    void fallbackBecomesEligibleOnlyFiveMinutesAfterBothArrive() {
-        setTime(299);
+    void fallbackBecomesEligibleNinetySecondsAfterBothArrive() {
+        setTime(89);
         var pair = List.of(request(1, -40, 3), request(2, 0, 3));
         when(queue.findWaiting()).thenReturn(pair);
         allowMatches();
         engine.executeTick();
         verifyNoInteractions(groups);
-        setTime(300);
+        setTime(90);
         engine.checkPairDeadline();
         verify(groups).create(argThat(c -> c.riders().equals(pair)));
         clearInvocations(groups);
@@ -146,8 +146,8 @@ class PairWindowTest {
 
     @Test
     void threeWhoCanRideTogetherHavePriorityOverAnUnansweredFallbackCandidate() {
-        setTime(301);
-        when(queue.findWaiting()).thenReturn(List.of(request(1, -10, 3), request(2, 0, 3), request(3, 301, 3)));
+        setTime(91);
+        when(queue.findWaiting()).thenReturn(List.of(request(1, -10, 3), request(2, 0, 3), request(3, 91, 3)));
         allowMatches();
         engine.executeTick();
         verify(groups).create(argThat(c -> c.size() == 3));
