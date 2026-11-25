@@ -248,7 +248,23 @@ export const handlers = [
         {
           nickname: '정문다람쥐',
           hubName: '전남대 정문',
-          requestedAt: new Date(now - 180000).toISOString(),
+          requestedAt: new Date(now - 8 * 60000).toISOString(),
+          expiresAt: new Date(now + 2 * 60000).toISOString(),
+          preferredSize: 3,
+        },
+        {
+          nickname: '후문산책가',
+          hubName: '전남대 후문',
+          requestedAt: new Date(now - 3 * 60000).toISOString(),
+          expiresAt: new Date(now + 7 * 60000).toISOString(),
+          preferredSize: 2,
+        },
+        {
+          nickname: '기차여행',
+          hubName: '광주송정역',
+          requestedAt: new Date(now - 4 * 60000).toISOString(),
+          expiresAt: new Date(now + 60000).toISOString(),
+          preferredSize: null,
         },
       ],
       matched: mockGroup.members.map((m) => ({
@@ -257,6 +273,10 @@ export const handlers = [
         groupId: mockGroup.groupId,
         confirmed: true,
       })),
+      endedByHub: [
+        { hubName: '전남대 후문', expired: 4, cancelled: 1 },
+        { hubName: '광주송정역', expired: 1, cancelled: 2 },
+      ],
       daily: [3, 0, 2, 1, 4, 2, 1].map((groups, i) => ({
         date: kstDate(now - (6 - i) * 86400000),
         groups,

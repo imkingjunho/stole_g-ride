@@ -19,11 +19,22 @@ import org.springframework.data.repository.query.Param;
 public interface RideRequestRepository extends JpaRepository<RideRequest, Long> {
 
     @Query("""
-            select new com.gachiga.contract.ride.WaitingRosterPort$Entry(r.userId, r.hubId, r.createdAt)
+            select new com.gachiga.contract.ride.WaitingRosterPort$Entry(r.userId, r.hubId, r.createdAt, r.expiresAt, r.preferredSize)
             from RideRequest r where r.status = com.gachiga.ride.RideRequestStatus.WAITING
               and r.expiresAt > :now order by r.createdAt, r.id
             """)
     List<WaitingRosterPort.Entry> waitingRoster(@Param("now") LocalDateTime now);
+
+    @Query("""
+            select new com.gachiga.contract.ride.WaitingRosterPort$Ended(r.hubId,
+                sum(case when r.status = com.gachiga.ride.RideRequestStatus.EXPIRED then 1 else 0 end),
+                sum(case when r.status = com.gachiga.ride.RideRequestStatus.CANCELLED then 1 else 0 end))
+            from RideRequest r where r.createdAt between :start and :asOf
+              and r.status in (com.gachiga.ride.RideRequestStatus.EXPIRED, com.gachiga.ride.RideRequestStatus.CANCELLED)
+            group by r.hubId
+            """)
+    List<WaitingRosterPort.Ended> endedByHub(
+            @Param("start") LocalDateTime start, @Param("asOf") LocalDateTime asOf);
 
     /**
      * 사용자에게 진행 중인 요청이 있는지. 1인 1건 제한 검사에 쓴다 (FR-08).

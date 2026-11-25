@@ -61,7 +61,7 @@ public class AdminDashboardService {
                                         new AdminDashboard.Waiting(
                                                 names.getOrDefault(row.userId(), "알 수 없는 회원"),
                                                 hubNames.getOrDefault(row.hubId(), "알 수 없는 거점"),
-                                                row.requestedAt()))
+                                                row.requestedAt(), row.expiresAt(), row.preferredSize()))
                         .toList(),
                 matched.stream()
                         .map(
@@ -72,6 +72,11 @@ public class AdminDashboardService {
                                                 row.groupId(),
                                                 row.confirmed()))
                         .toList(),
-                daily);
+                daily,
+                queue.endedByHub(start.atStartOfDay(), now).stream()
+                        .map(row -> new AdminDashboard.Ended(
+                                hubNames.getOrDefault(row.hubId(), "알 수 없는 거점"),
+                                row.expired(), row.cancelled()))
+                        .toList());
     }
 }

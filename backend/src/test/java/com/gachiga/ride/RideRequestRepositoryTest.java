@@ -55,14 +55,36 @@ class RideRequestRepositoryTest {
 
     @Test
     void dashboardIncludesLastSecondsOfWaitButNotMatchedOrExpiredRequests() {
-        repository.save(newRequest(41L, 1L, NOW));
+        var waiting = newRequest(41L, 1L, NOW);
+        waiting.chooseGroupSize(3);
+        repository.save(waiting);
         var assigned = newRequest(42L, 1L, NOW);
         assigned.markMatched();
         repository.saveAndFlush(assigned);
         assertThat(repository.waitingRoster(NOW.plusMinutes(10).minusSeconds(1)))
-                .extracting(com.gachiga.contract.ride.WaitingRosterPort.Entry::userId)
-                .containsExactly(41L);
+                .singleElement().satisfies(row -> {
+                    assertThat(row.userId()).isEqualTo(41L);
+                    assertThat(row.expiresAt()).isEqualTo(NOW.plusMinutes(10));
+                    assertThat(row.preferredSize()).isEqualTo(3);
+                });
         assertThat(repository.waitingRoster(NOW.plusMinutes(10))).isEmpty();
+    }
+
+    @Test
+    void endedCountsRespectCreationWindowAndTerminalStatus() {
+        var expired = newRequest(55L, 1L, NOW);
+        expired.expire();
+        repository.save(expired);
+        var cancelled = newRequest(56L, 1L, NOW);
+        cancelled.cancel();
+        repository.save(cancelled);
+        repository.save(newRequest(57L, 2L, NOW));
+        assertThat(repository.endedByHub(NOW, NOW.plusHours(1))).singleElement().satisfies(row -> {
+            assertThat(row.hubId()).isEqualTo(1L);
+            assertThat(row.expired()).isOne();
+            assertThat(row.cancelled()).isOne();
+        });
+        assertThat(repository.endedByHub(NOW.plusSeconds(1), NOW.plusHours(1))).isEmpty();
     }
 
     @Test

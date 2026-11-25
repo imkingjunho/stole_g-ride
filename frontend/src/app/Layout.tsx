@@ -35,6 +35,18 @@ export function Layout() {
   const connection = useConnectionStore((s) => s.status);
   const tabIndex = tabs.findIndex((tab) => tab.to === activeTab);
   const tabsHidden = useTabBarScroll(pathname);
+  if (pathname.replace(/\/$/, '') === '/admin')
+    return (
+      <>
+        <SessionEffects />
+        <a href="#main-content" className="sr-only focus:not-sr-only focus:p-page">
+          본문으로 이동
+        </a>
+        <main id="main-content">
+          <Outlet />
+        </main>
+      </>
+    );
   return (
     <div
       data-tabs-hidden={tabsHidden}

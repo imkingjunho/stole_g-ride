@@ -1,51 +1,47 @@
+import './admin.css';
 import { pickupName } from '@/shared/pickupName';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { api, ApiError, unwrap } from '@/shared/api/client';
+import { api, ApiError, isMockMode, unwrap } from '@/shared/api/client';
 import { koreaTime } from '@/shared/api/format';
 import { useAuthStore } from '@/shared/stores/authStore';
 import { Badge, Button, Card } from '@/shared/ui';
 import { QueryState } from '@/shared/ui/QueryState';
 import type { components } from '@/generated/api';
+import { EXPIRING_MINUTES, readOperations } from './operations';
+import { ParticipantTable, type ParticipantView } from './ParticipantTable';
 
 type Dashboard = components['schemas']['AdminDashboard'];
-type Roster = 'waiting' | 'matched';
-
-function minutesWaiting(requestedAt: string, asOf: string) {
-  return Math.max(
-    0,
-    Math.floor((koreaTime(asOf).getTime() - koreaTime(requestedAt).getTime()) / 60000),
-  );
-}
 
 function DailyMatches({ daily }: Pick<Dashboard, 'daily'>) {
   const max = Math.max(1, ...daily.map((day) => day.groups));
+  const sum = daily.reduce((total, day) => total + day.groups, 0);
   return (
-    <Card>
-      <h2 className="font-bold">날짜별 매칭 수</h2>
-      <p className="mt-1 text-sm text-muted">최근 7일 · 전원이 수락한 그룹당 1건</p>
-      <ol className="mt-5 flex items-end gap-2">
+    <Card className="ops-panel">
+      <div className="ops-panel-head">
+        <div>
+          <h2>일별 매칭 추이</h2>
+          <p>한국 시간 기준 · 확정된 그룹 수</p>
+        </div>
+        <span className="ops-total">
+          최근 7일 <strong>{sum}건</strong>
+        </span>
+      </div>
+      <ol aria-label="최근 7일 날짜별 확정 그룹" className="ops-chart">
         {daily.map(({ date, groups }, i) => (
-          <li key={date} className="min-w-0 flex-1 text-center">
-            <div className="flex h-24 flex-col justify-end">
-              <span className="text-xs font-semibold tabular-nums">
+          <li key={date} className={i === daily.length - 1 ? 'ops-today' : ''}>
+            <div className="ops-plot">
+              <strong>
                 {groups}
                 <span className="sr-only">건</span>
-              </span>
-              <div
-                aria-hidden
-                className={
-                  i === daily.length - 1
-                    ? 'mx-auto w-4 rounded-t bg-brand'
-                    : 'mx-auto w-4 rounded-t bg-slate-300'
-                }
-                style={{ height: 2 + (68 * groups) / max }}
+              </strong>
+              <span
+                aria-hidden="true"
+                style={{ height: (groups / max) * 94, minHeight: groups ? 4 : 0 }}
               />
             </div>
-            <time dateTime={date} className="mt-2 block text-xs text-slate-600">
-              {date.slice(5).replace('-', '/')}
-            </time>
+            <time dateTime={date}>{date.slice(5).replace('-', '/')}</time>
           </li>
         ))}
       </ol>
@@ -53,15 +49,276 @@ function DailyMatches({ daily }: Pick<Dashboard, 'daily'>) {
   );
 }
 
+function EndedRequests({ rows }: { rows: Dashboard['endedByHub'] }) {
+  const ranked = rows
+    ?.slice()
+    .sort(
+      (a, b) =>
+        b.expired + b.cancelled - (a.expired + a.cancelled) ||
+        a.hubName.localeCompare(b.hubName, 'ko'),
+    );
+  return (
+    <Card className="ops-panel ops-ended">
+      <div className="ops-panel-head">
+        <div>
+          <h2>거점별 만료·취소</h2>
+          <p>최근 7일에 생성된 요청 중 대기 시간이 끝났거나 사용자가 취소한 건수</p>
+        </div>
+      </div>
+      {ranked?.length ? (
+        <table aria-label="거점별 만료 및 취소 요청">
+          <thead>
+            <tr>
+              <th>출발 거점</th>
+              <th>자동 만료</th>
+              <th>직접 취소</th>
+              <th>합계</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ranked.map((row) => (
+              <tr key={row.hubName}>
+                <th scope="row">{pickupName(row.hubName)}</th>
+                <td>{row.expired}건</td>
+                <td>{row.cancelled}건</td>
+                <td>{row.expired + row.cancelled}건</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <p className="ops-empty">
+          {ranked
+            ? '이 기간에 생성된 요청 중 만료되거나 취소된 건이 없어요.'
+            : '현재 서버에서 만료·취소 집계를 제공하지 않아요.'}
+        </p>
+      )}
+    </Card>
+  );
+}
+
+function Workspace({
+  data,
+  refreshing,
+  refresh,
+}: {
+  data: Dashboard;
+  refreshing: boolean;
+  refresh: () => void;
+}) {
+  const [view, setView] = useState<ParticipantView>('waiting');
+  const [hub, setHub] = useState('');
+  const [search, setSearch] = useState('');
+  const [limit, setLimit] = useState(25);
+  const roster = useRef<HTMLHeadingElement>(null);
+  const ops = readOperations(data);
+  const { queue, members, hubs } = ops;
+  const time = koreaTime(data.asOf);
+  const date = time.toLocaleDateString('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    month: 'long',
+    day: 'numeric',
+    weekday: 'long',
+  });
+  const clock = time.toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour12: false });
+  const today = data.daily[data.daily.length - 1];
+  function inspect(nextHub: string, nextView: ParticipantView) {
+    setHub(nextHub);
+    setView(nextView);
+    setSearch('');
+    setLimit(25);
+    roster.current?.focus({ preventScroll: true });
+    roster.current?.scrollIntoView({ block: 'start' });
+  }
+  return (
+    <div className="ops-workspace">
+      <header className="ops-top">
+        <div className="ops-width">
+          <div className="ops-brand">
+            <b>가치가</b>
+            <span>운영센터</span>
+            {isMockMode && <Badge variant="dev">목 데이터</Badge>}
+          </div>
+          <Link className="ops-back" to="/me">
+            내 정보로 이동 <span aria-hidden="true">↗</span>
+          </Link>
+        </div>
+      </header>
+      <div className="ops-width ops-body">
+        <header className="ops-heading">
+          <div>
+            <p>{date}</p>
+            <h1>매칭 운영 현황</h1>
+          </div>
+          <div className="ops-updated">
+            <span>기준 {clock} · 15초마다 갱신</span>
+            <Button variant="secondary" disabled={refreshing} onClick={refresh}>
+              새로고침
+            </Button>
+          </div>
+        </header>
+        <dl className="ops-metrics">
+          <div>
+            <dt>오늘 확정된 매칭</dt>
+            <dd>
+              {today?.groups ?? '—'}
+              <small>건</small>
+            </dd>
+            <p>그룹당 한 건으로 집계</p>
+          </div>
+          <div>
+            <dt>현재 대기자</dt>
+            <dd>
+              {queue.length}
+              <small>명</small>
+            </dd>
+            <p>대기 중인 거점 {hubs.filter((h) => h.waiting > 0).length}곳</p>
+          </div>
+          <div className={ops.expiring ? 'ops-urgent' : ''}>
+            <dt>만료 임박</dt>
+            <dd>
+              {ops.expiresKnown ? ops.expiring : '—'}
+              <small>명</small>
+            </dd>
+            {ops.expiresKnown ? (
+              <button onClick={() => inspect('', 'expiring')}>
+                남은 시간 {EXPIRING_MINUTES}분 이내 <span aria-hidden="true">→</span>
+              </button>
+            ) : (
+              <p>일부 요청의 만료 시각 미제공</p>
+            )}
+          </div>
+          <div>
+            <dt>매칭된 참여자</dt>
+            <dd>
+              {members.length}
+              <small>명</small>
+            </dd>
+            <p>
+              수락 중 {members.length - ops.confirmedMembers}명 · 확정 {ops.confirmedMembers}명
+            </p>
+          </div>
+        </dl>
+        <div className="ops-panels">
+          <DailyMatches daily={data.daily} />
+          <Card className="ops-panel">
+            <div className="ops-panel-head">
+              <div>
+                <h2>거점별 현황</h2>
+                <p>대기가 많은 순 · 거점을 눌러 참여자 확인</p>
+              </div>
+            </div>
+            {hubs.length ? (
+              <div className="ops-hub-list">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>승차 거점</th>
+                      <th>대기</th>
+                      <th>최장 대기</th>
+                      <th>매칭 중¹</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {hubs.map((h) => (
+                      <tr key={h.name}>
+                        <th scope="row">
+                          <button
+                            onClick={() => inspect(h.name, h.waiting ? 'waiting' : 'matched')}
+                          >
+                            {h.name}
+                          </button>
+                        </th>
+                        <td>{h.waiting}명</td>
+                        <td>{h.waiting ? h.longest + '분' : '—'}</td>
+                        <td>{h.matched}명</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="ops-note">¹ 수락 중이거나 확정 후 탑승 완료 전인 참여자</p>
+              </div>
+            ) : (
+              <p className="ops-empty">현재 참여자가 있는 거점이 없어요.</p>
+            )}
+          </Card>
+        </div>
+        <Card className="ops-panel">
+          <div className="ops-panel-head">
+            <div>
+              <h2 ref={roster} tabIndex={-1}>
+                현재 참여자
+              </h2>
+              <p>수락 대기 중인 그룹 {ops.pendingGroups}개</p>
+            </div>
+          </div>
+          <div className="ops-filters">
+            <div className="ops-toggle" role="group" aria-label="참여자 상태">
+              {(['waiting', 'expiring', 'matched'] as const).map((key) => (
+                <button
+                  key={key}
+                  aria-pressed={key === view}
+                  onClick={() => {
+                    setView(key);
+                    setLimit(25);
+                  }}
+                >
+                  {{ waiting: '대기자', expiring: '만료 임박', matched: '매칭된 사람' }[key]}
+                </button>
+              ))}
+            </div>
+            <label>
+              <span className="sr-only">거점 필터</span>
+              <select
+                value={hub}
+                onChange={(e) => {
+                  setHub(e.target.value);
+                  setLimit(25);
+                }}
+              >
+                <option value="">전체 거점</option>
+                {hub && !hubs.some((h) => h.name === hub) && <option>{hub}</option>}
+                {hubs.map((h) => (
+                  <option key={h.name}>{h.name}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span className="sr-only">닉네임 검색</span>
+              <input
+                type="search"
+                placeholder="닉네임 검색"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setLimit(25);
+                }}
+              />
+            </label>
+          </div>
+          <ParticipantTable
+            ops={ops}
+            view={view}
+            hub={hub}
+            search={search}
+            limit={limit}
+            onMore={() => setLimit(limit + 25)}
+          />
+        </Card>
+        <EndedRequests rows={data.endedByHub} />
+      </div>
+    </div>
+  );
+}
+
 export function AdminPage() {
-  const [roster, setRoster] = useState<Roster>('waiting');
   const version = useAuthStore((s) => s.sessionVersion);
   const userId = useAuthStore((s) => s.user?.id);
   const query = useQuery({
     queryKey: ['admin-dashboard', userId, version],
     queryFn: async ({ signal }) => {
-      const result = await api.GET('/api/admin/dashboard', { signal });
-      return unwrap(result.data, result.error);
+      const r = await api.GET('/api/admin/dashboard', { signal });
+      return unwrap(r.data, r.error);
     },
     retry: false,
     refetchInterval: (q) =>
@@ -85,104 +342,11 @@ export function AdminPage() {
         retry={() => void query.refetch()}
       />
     );
-  const { waiting, matched, daily, asOf } = query.data;
-  const confirmed = matched.filter((person) => person.confirmed).length;
-  const asOfTime = koreaTime(asOf).toLocaleTimeString('ko-KR', {
-    hour12: false,
-    timeZone: 'Asia/Seoul',
-  });
   return (
-    <section className="page">
-      <header className="flex items-center justify-between gap-2">
-        <div>
-          <h1 className="text-title font-bold">매칭 운영 현황</h1>
-          <p className="mt-1 text-xs text-muted">{asOfTime} 기준 · 15초마다 갱신</p>
-        </div>
-        <Button
-          variant="secondary"
-          disabled={query.isFetching}
-          onClick={() => void query.refetch()}
-        >
-          새로고침
-        </Button>
-      </header>
-      <Card>
-        <dl className="grid grid-cols-3 divide-x divide-line text-center">
-          {Object.entries({
-            '대기 중': waiting.length,
-            '수락 중': matched.length - confirmed,
-            확정: confirmed,
-          }).map(([label, count]) => (
-            <div key={label}>
-              <dt className="text-sm text-slate-600">{label}</dt>
-              <dd className="mt-2 text-2xl font-bold tabular-nums">
-                {count}
-                <span className="ml-0.5 text-xs font-normal">명</span>
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </Card>
-      <DailyMatches daily={daily} />
-      <Card>
-        <h2 className="font-bold">현재 참여자</h2>
-        <div className="mt-3 flex rounded-control bg-canvas p-1">
-          {(['waiting', 'matched'] as const).map((key) => (
-            <button
-              type="button"
-              key={key}
-              aria-pressed={roster === key}
-              onClick={() => setRoster(key)}
-              className={`min-h-touch flex-1 rounded-control text-sm font-bold ${roster === key ? 'bg-white text-brand shadow-sm' : 'text-slate-600'}`}
-            >
-              {key === 'waiting' ? `대기자 ${waiting.length}` : `매칭된 사람 ${matched.length}`}
-            </button>
-          ))}
-        </div>
-        {roster === 'waiting' ? (
-          <>
-            {waiting.length === 0 ? (
-              <p className="py-5 text-sm text-muted">현재 기다리는 사람이 없어요.</p>
-            ) : (
-              <ul className="divide-y divide-line">
-                {waiting.map((person) => (
-                  <li
-                    key={person.nickname + person.requestedAt}
-                    className="flex items-center justify-between gap-2 py-3"
-                  >
-                    <div>
-                      <p className="font-semibold">{person.nickname}</p>
-                      <p className="text-sm text-muted">{pickupName(person.hubName)}</p>
-                    </div>
-                    <Badge>{minutesWaiting(person.requestedAt, asOf)}분 대기</Badge>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </>
-        ) : matched.length === 0 ? (
-          <p className="py-5 text-sm text-muted">진행 중인 매칭이 없어요.</p>
-        ) : (
-          <ul className="divide-y divide-line">
-            {matched.map((person) => (
-              <li
-                key={person.groupId + ':' + person.nickname}
-                className="flex items-center justify-between gap-2 py-3"
-              >
-                <div>
-                  <p className="font-semibold">{person.nickname}</p>
-                  <p className="text-sm text-muted">
-                    {pickupName(person.hubName)} · 그룹 {person.groupId}
-                  </p>
-                </div>
-                <Badge variant={person.confirmed ? 'success' : 'estimated'}>
-                  {person.confirmed ? '확정' : '수락 중'}
-                </Badge>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
-    </section>
+    <Workspace
+      data={query.data}
+      refreshing={query.isFetching}
+      refresh={() => void query.refetch()}
+    />
   );
 }

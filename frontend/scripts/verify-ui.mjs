@@ -105,6 +105,44 @@ try {
     await page.getByRole('button', { name: '로그인', exact: true }).click();
     await page.waitForURL('**/admin');
     await page.getByRole('heading', { name: '매칭 운영 현황' }).waitFor();
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await page.setViewportSize({ width: 1440, height: 1440 });
+    const width = await page.locator('.ops-body').evaluate((el) => el.clientWidth);
+    assert.ok(width > 1100);
+    assert.equal(await page.getByRole('navigation', { name: '주요 메뉴' }).count(), 0);
+    const ended = page.getByRole('table', { name: '거점별 만료 및 취소 요청' });
+    assert.match(
+      await ended.getByRole('row', { name: /전남대 후문 스타벅스/ }).innerText(),
+      /4건\s+1건\s+5건/,
+    );
+    assert.equal(await page.getByRole('heading', { name: '매칭 운영 현황' }).count(), 1);
+    await page.screenshot({ path: output + '/admin-desktop.png' });
+    await page.getByRole('button', { name: /남은 시간 2분 이내/ }).click();
+    const roster = page.getByRole('table', { name: '현재 참여자 목록' });
+    assert.equal(await roster.locator('tbody tr').count(), 2);
+    await page.getByRole('button', { name: '전남대 정문 이디야 커피', exact: true }).click();
+    assert.equal(await roster.locator('tbody tr').count(), 1);
+    assert.match(await roster.innerText(), /정문다람쥐/);
+    await page.getByLabel('거점 필터').selectOption('');
+    await page.getByRole('button', { name: '매칭된 사람', exact: true }).click();
+    assert.equal(await roster.locator('tbody tr').count(), 3);
+    await page.getByLabel('닉네임 검색').fill('일치하는이름없음');
+    await page.getByText('조건에 맞는 참여자가 없어요.').waitFor();
+    const boundary = await page.evaluate(async () => {
+      const { readOperations } = await import('/src/features/admin/operations.ts');
+      const waiting = ['2026-11-25T15:02:00', '2026-11-25T15:02:01', undefined].map(
+        (expiresAt, i) => ({
+          nickname: String(i),
+          hubName: '전남대 정문',
+          requestedAt: '2026-11-25T14:58:00',
+          expiresAt,
+        }),
+      );
+      const ops = readOperations({ waiting, matched: [], daily: [], asOf: '2026-11-25T15:00:00' });
+      return [ops.expiring, ops.expiresKnown, ops.hubs[0].longest];
+    });
+    assert.deepEqual(boundary, [1, false, 2]);
+    await page.setViewportSize({ width: 360, height: 800 });
     await navigate('/me');
     await page.getByRole('button', { name: '로그아웃', exact: true }).click();
     await page.waitForURL('**/login');

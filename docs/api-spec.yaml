@@ -1839,6 +1839,16 @@ components:
       required: [asOf, waiting, matched, daily]
       properties:
         asOf: {type: string, format: date-time}
+        endedByHub:
+          type: array
+          description: 한국 시각 6일 전 자정부터 기준 시각까지 생성된 요청 중 현재 만료 또는 취소 상태인 요청 수. 두 상태의 합이 0인 거점은 생략.
+          items:
+            type: object
+            required: [hubName, expired, cancelled]
+            properties:
+              hubName: {type: string}
+              expired: {type: integer, format: int64, minimum: 0}
+              cancelled: {type: integer, format: int64, minimum: 0}
         waiting:
           type: array
           items:
@@ -1848,6 +1858,8 @@ components:
               nickname: {type: string}
               hubName: {type: string}
               requestedAt: {type: string, format: date-time}
+              expiresAt: {type: string, format: date-time, description: 대기 만료 시각}
+              preferredSize: {type: integer, nullable: true, enum: [2, 3, null], description: 본인을 포함한 희망 인원. 미지정 시 null}
         matched:
           type: array
           items:

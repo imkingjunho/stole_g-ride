@@ -43,6 +43,11 @@ public class RideRequestAdapter implements RideRequestPort, QueueStatusPort, Wai
         return rideRequestRepository.waitingRoster(now);
     }
 
+    @Override
+    public List<WaitingRosterPort.Ended> endedByHub(LocalDateTime start, LocalDateTime asOf) {
+        return rideRequestRepository.endedByHub(start, asOf);
+    }
+
     /** 진행 중으로 보는 상태. 대기 상태 조회에 쓴다 */
     private static final List<RideRequestStatus> IN_PROGRESS =
             List.of(RideRequestStatus.WAITING, RideRequestStatus.MATCHED, RideRequestStatus.CONFIRMED);

@@ -1,0 +1,347 @@
+.ops-workspace {
+  min-height: 100dvh;
+  background: #f3f6fa;
+  color: #182c46;
+  font-variant-numeric: tabular-nums;
+  word-break: keep-all;
+}
+.ops-width {
+  width: min(100% - 64px, 1300px);
+  margin-inline: auto;
+}
+.ops-top {
+  background: #112b49;
+  color: white;
+}
+.ops-top > div,
+.ops-brand,
+.ops-heading,
+.ops-updated,
+.ops-panel-head,
+.ops-table-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.ops-top > div {
+  min-height: 60px;
+}
+.ops-brand {
+  justify-content: flex-start;
+  gap: 12px;
+  font-size: 14px;
+}
+.ops-brand b {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.07em;
+}
+.ops-brand > span:first-of-type {
+  border-left: 1px solid #587089;
+  padding-left: 12px;
+  color: #e4edf6;
+}
+.ops-back {
+  padding: 12px 0;
+  font-size: 14px;
+}
+.ops-back:hover,
+.ops-hub-list button:hover,
+.ops-metrics button:hover {
+  text-decoration: underline;
+}
+.ops-body {
+  padding-block: 32px 48px;
+}
+.ops-heading {
+  margin-bottom: 22px;
+}
+.ops-heading h1 {
+  font-size: clamp(26px, 3vw, 36px);
+  font-weight: 750;
+  line-height: 1.25;
+  letter-spacing: -0.045em;
+}
+.ops-heading p,
+.ops-updated,
+.ops-panel-head p,
+.ops-note,
+.ops-table-foot {
+  color: #506278;
+  font-size: 13px;
+}
+.ops-heading p {
+  margin-bottom: 5px;
+}
+.ops-updated button {
+  background: white;
+  border-color: #ced8e4;
+}
+.ops-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid #d6e0eb;
+  border-radius: 16px;
+  background: white;
+  overflow: hidden;
+}
+.ops-metrics > div {
+  padding: 18px 23px;
+  min-width: 0;
+}
+.ops-metrics > div + div {
+  border-left: 1px solid #e3e9f0;
+}
+.ops-metrics dt {
+  font-weight: 650;
+  font-size: 14px;
+  color: #465970;
+}
+.ops-metrics dd {
+  font-size: 36px;
+  font-weight: 750;
+  letter-spacing: -0.045em;
+  line-height: 1.4;
+}
+.ops-metrics dd small {
+  margin-left: 5px;
+  font-size: 14px;
+  color: #516277;
+  font-weight: 500;
+}
+.ops-metrics p,
+.ops-metrics button {
+  font-size: 13px;
+  color: #506278;
+  line-height: 22px;
+}
+.ops-metrics button {
+  min-height: 44px;
+  margin: -11px 0;
+  padding-block: 10px;
+  text-align: left;
+  color: #135db6;
+}
+.ops-urgent dd,
+.ops-urgent button {
+  color: #975300;
+}
+.ops-panels {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  margin: 16px 0;
+}
+.ops-workspace .ops-panel {
+  min-width: 0;
+  padding: 22px 24px;
+  border-color: #d6e0eb;
+  border-radius: 16px;
+  box-shadow: 0 2px 8px #182c4606;
+}
+.ops-panel h2 {
+  font-weight: 700;
+  font-size: 20px;
+  letter-spacing: -0.035em;
+  scroll-margin: 20px;
+}
+.ops-panel-head {
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+.ops-panel-head p {
+  margin-top: 3px;
+}
+.ops-total {
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: #edf4fd;
+  font-size: 13px;
+  color: #284d79;
+  white-space: nowrap;
+}
+.ops-total strong {
+  margin-left: 4px;
+}
+.ops-chart {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+  text-align: center;
+}
+.ops-plot {
+  height: 142px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+  border-bottom: 1px solid #cad6e4;
+  background: repeating-linear-gradient(to top, transparent 0 39px, #edf1f6 39px 40px);
+}
+.ops-plot strong {
+  font-size: 13px;
+  color: #455b72;
+}
+.ops-plot span {
+  width: min(46%, 32px);
+  background: #a9c8ed;
+  border-radius: 4px 4px 0 0;
+}
+.ops-today .ops-plot span {
+  background: #1769d4;
+}
+.ops-today time {
+  color: #1258b5;
+  font-weight: 700;
+}
+.ops-chart time {
+  display: block;
+  margin-top: 7px;
+  font-size: 12px;
+}
+.ops-workspace table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  text-align: left;
+}
+.ops-workspace th,
+.ops-workspace td {
+  padding: 11px 10px;
+  border-bottom: 1px solid #e5ebf1;
+}
+.ops-workspace thead th {
+  font-weight: 600;
+  background: #f4f7fa;
+  font-size: 12px;
+  color: #506278;
+}
+.ops-workspace tbody th {
+  font-weight: 600;
+}
+.ops-hub-list th:first-child {
+  width: 48%;
+}
+.ops-hub-list td,
+.ops-hub-list thead th:not(:first-child) {
+  text-align: right;
+  white-space: nowrap;
+}
+.ops-hub-list tbody th {
+  padding: 0 8px;
+}
+.ops-hub-list button {
+  text-align: left;
+  color: #165fb6;
+  min-height: 44px;
+}
+.ops-note {
+  margin-top: 10px;
+}
+.ops-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.ops-toggle {
+  display: inline-flex;
+  border-radius: 9px;
+  background: #edf1f5;
+  padding: 3px;
+  margin-right: auto;
+}
+.ops-toggle button {
+  min-height: 44px;
+  padding: 6px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 7px;
+  color: #526477;
+}
+.ops-toggle button[aria-pressed='true'] {
+  background: white;
+  color: #1258b5;
+  box-shadow: 0 1px 4px #203b5824;
+}
+.ops-filters select,
+.ops-filters input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #cbd6e3;
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: white;
+  font-size: 14px;
+}
+.ops-ended {
+  margin-top: 16px;
+}
+.ops-roster {
+  overflow-x: auto;
+}
+.ops-roster table {
+  min-width: 510px;
+}
+.ops-empty {
+  padding: 28px 8px;
+  text-align: center;
+  font-size: 14px;
+  color: #576679;
+}
+.ops-table-foot {
+  margin-top: 14px;
+}
+@media (max-width: 850px) {
+  .ops-width {
+    width: min(100% - 32px, 1300px);
+  }
+  .ops-panels {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ops-metrics > div {
+    padding: 15px;
+  }
+}
+@media (max-width: 620px) {
+  .ops-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .ops-updated {
+    width: 100%;
+  }
+  .ops-metrics {
+    grid-template-columns: 1fr 1fr;
+  }
+  .ops-metrics > div:nth-child(3) {
+    border-left: 0;
+  }
+  .ops-metrics > div:nth-child(n + 3) {
+    border-top: 1px solid #e3e9f0;
+  }
+  .ops-workspace .ops-panel {
+    padding: 16px;
+  }
+  .ops-filters label {
+    min-width: 0;
+    flex: 1;
+  }
+  .ops-toggle {
+    width: 100%;
+  }
+  .ops-toggle button {
+    flex: 1;
+  }
+  .ops-hub-list th,
+  .ops-hub-list td {
+    padding-inline: 4px;
+  }
+  .ops-body {
+    padding-top: 18px;
+  }
+}

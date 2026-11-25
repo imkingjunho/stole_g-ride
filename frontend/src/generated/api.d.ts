@@ -1094,11 +1094,29 @@ export interface components {
         AdminDashboard: {
             /** Format: date-time */
             asOf: string;
+            /** @description 한국 시각 6일 전 자정부터 기준 시각까지 생성된 요청 중 현재 만료 또는 취소 상태인 요청 수. 두 상태의 합이 0인 거점은 생략. */
+            endedByHub?: {
+                hubName: string;
+                /** Format: int64 */
+                expired: number;
+                /** Format: int64 */
+                cancelled: number;
+            }[];
             waiting: {
                 nickname: string;
                 hubName: string;
                 /** Format: date-time */
                 requestedAt: string;
+                /**
+                 * Format: date-time
+                 * @description 대기 만료 시각
+                 */
+                expiresAt?: string;
+                /**
+                 * @description 본인을 포함한 희망 인원. 미지정 시 null
+                 * @enum {integer|null}
+                 */
+                preferredSize?: 2 | 3 | null;
             }[];
             matched: {
                 nickname: string;
