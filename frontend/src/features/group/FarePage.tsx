@@ -80,6 +80,11 @@ export function FarePage() {
       <p className="text-sm text-slate-600">
         실제 요금은 교통 상황에 따라 달라질 수 있어요. 이 화면은 요금 분담 계산 안내예요.
       </p>
+      {(g.status === 'COMPLETED' || me?.completed) && (
+        <Link className="link w-full bg-brand text-white" to="/request">
+          다음 동승 요청하기
+        </Link>
+      )}
       {['CONFIRMED', 'COMPLETED'].includes(g.status) && (
         <Link className="link w-full" to={`/groups/${g.groupId}/chat`}>
           동승 채팅으로 이동

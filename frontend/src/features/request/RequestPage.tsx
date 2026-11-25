@@ -4,9 +4,9 @@ import { RouteMap } from '@/features/map/RouteMap';
 import { MatchConditions } from './MatchConditions';
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import type { components } from '@/generated/api';
-import { api, isMockMode, showError, unwrap } from '@/shared/api/client';
+import { api, ApiError, showError, unwrap } from '@/shared/api/client';
 import { Button } from '@/shared/ui';
 import { QueryState } from '@/shared/ui/QueryState';
 import { DestinationPicker } from '@/features/map/DestinationPicker';
@@ -20,6 +20,16 @@ import {
 
 type Hub = components['schemas']['Hub'];
 type CreateRideRequest = components['schemas']['CreateRideRequest'];
+type Ride = components['schemas']['RideRequestDetail'];
+
+function blocksNewRequest(ride?: Ride | null) {
+  return (
+    ride?.status === 'MATCHED' ||
+    ride?.status === 'CONFIRMED' ||
+    (ride?.status === 'WAITING' && ride.remainingSeconds > 0)
+  );
+}
+
 type Step = 'origin' | 'destination' | 'conditions' | 'review';
 const stepLabels = {
   origin: '출발 거점',
@@ -76,15 +86,17 @@ export function RequestPage() {
       return (unwrap(response.data, response.error) ?? []).map(resolvePickup);
     },
   });
-  const currentRequestQuery = useQuery({
+  const currentRequestQuery = useQuery<Ride | null>({
     queryKey: ['myRequest'],
-    enabled: !isMockMode,
     retry: false,
-    queryFn: async () => {
-      const response = await api.GET('/api/requests/me');
+    refetchInterval: (query) => (blocksNewRequest(query.state.data) ? 5000 : false),
+    queryFn: async ({ signal }) => {
+      const response = await api.GET('/api/requests/me', { signal });
       return unwrap(response.data, response.error);
     },
   });
+  const current = currentRequestQuery.data;
+  const activeRequest = blocksNewRequest(current) ? current : null;
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -114,10 +126,6 @@ export function RequestPage() {
     }
     setRecentDestinations(parsed.slice(0, MAX_RECENT_DESTINATIONS));
   }, []);
-
-  useEffect(() => {
-    if (!isMockMode && currentRequestQuery.data) navigate('/waiting', { replace: true });
-  }, [currentRequestQuery.data, navigate]);
 
   function handleDestinationChange(next: Destination) {
     setDestination(next);
@@ -188,7 +196,11 @@ export function RequestPage() {
       await queryClient.invalidateQueries({ queryKey: ['myRequest'] });
       navigate('/waiting');
     },
-    onError: showError,
+    onError: (error) => {
+      if (error instanceof ApiError && error.code === 'ALREADY_IN_QUEUE')
+        void queryClient.invalidateQueries({ queryKey: ['myRequest'] });
+      showError(error);
+    },
   });
 
   const selectedHub = hubsQuery.data?.find((hub) => hub.id === hubId);
@@ -196,7 +208,7 @@ export function RequestPage() {
     ? sortHubsByDistance(hubsQuery.data ?? [], currentLocation)
     : (hubsQuery.data ?? []);
 
-  if (hubsQuery.isLoading || (!isMockMode && currentRequestQuery.isLoading)) {
+  if (hubsQuery.isLoading || currentRequestQuery.isLoading) {
     return <QueryState loading />;
   }
   if (hubsQuery.error || currentRequestQuery.error) {
@@ -245,6 +257,31 @@ export function RequestPage() {
     ) : null;
   return (
     <section className="trip-page">
+      {activeRequest && (
+        <aside
+          className="mb-3 rounded-control bg-brand-soft px-4 py-3 text-sm"
+          aria-label="기존 동승 상태"
+        >
+          <strong>
+            {activeRequest.status === 'WAITING'
+              ? '이미 동승자를 찾고 있어요'
+              : '진행 중인 동승이 있어요'}
+          </strong>
+          <p className="mt-1">
+            {activeRequest.status === 'WAITING'
+              ? '다음 경로를 미리 고를 수 있어요. 바로 새로 요청하려면 대기 중인 요청을 먼저 취소해 주세요.'
+              : activeRequest.status === 'MATCHED'
+                ? '다음 경로를 미리 고를 수 있어요. 현재 매칭 상태는 동승 화면에서 확인해 주세요.'
+                : '다음 경로를 미리 고를 수 있어요. 동승자 모두가 탑승 완료를 누르면 새 요청을 보낼 수 있어요.'}
+          </p>
+          <Link
+            className="link px-0"
+            to={activeRequest.groupId ? `/groups/${activeRequest.groupId}` : '/waiting'}
+          >
+            {activeRequest.groupId ? '현재 동승 보기' : '현재 요청 보기'} →
+          </Link>
+        </aside>
+      )}
       <div className="trip-progress">
         {step !== 'origin' && (
           <button aria-label="이전 단계" onClick={back} disabled={createRequest.isPending}>
@@ -421,11 +458,11 @@ export function RequestPage() {
             </div>
             <Button
               fullWidth
-              disabled={preview.isPending || !!preview.error}
+              disabled={preview.isPending || !!preview.error || !!activeRequest}
               loading={createRequest.isPending}
               onClick={() => createRequest.mutate(selectedHub)}
             >
-              동승 요청하기
+              {activeRequest ? '기존 요청 종료 후 접수 가능' : '동승 요청하기'}
             </Button>
           </>
         )}
